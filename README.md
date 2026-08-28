@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🛡️ Sentinel
+#  Sentinel
 
 ### An AI firewall for the bank's own AI
 
