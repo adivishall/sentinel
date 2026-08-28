@@ -1,0 +1,2 @@
+anthropic>=0.40.0    # live mode only; offline mode needs nothing here
+matplotlib>=3.7      # charts
