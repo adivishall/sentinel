@@ -77,15 +77,29 @@ financial LLM agent's irreversible actions. It ships with:
 
 | Metric | Value |
 |---|---|
-| Attack success rate — **no firewall** | **66.7%** |
+| Attack success rate — **no firewall** | **83.3%** |
 | Attack success rate — **with Sentinel** | **0.0%** |
 | False-positive rate on legitimate refunds | **0.0%** |
 
 The false-positive number matters as much as the breach number: a firewall that
 protects the bank by blocking real customers is worthless. Sentinel does neither.
 
-*(See chart1_asr — attack success by class, off vs on. chart2_headline — the
-overall breach rate. chart3_ablation — which layer catches what.)*
+**The ablation is the honest core of the result.** We disable layers and re-measure:
+
+| Configuration | Attack success |
+|---|---|
+| No firewall | 83.3% |
+| Detection only (L1 + L2 + L4) | **6.7%** |
+| Adjudication only (L3) | **0.0%** |
+| Full (L1–L4) | 0.0% |
+
+Detection alone still leaks 6.7% — the adjudication-gaming attacks, which assert a
+false reason with *no injection to detect*. Only checking the claim against the
+bank's own records (Layer 3) closes it. Layer 3 is necessary and, here, sufficient;
+the other layers are defence-in-depth and explainability. We show this rather than
+hide it.
+
+*(chart1_asr — by class, off vs on. chart2_headline — overall. chart3_ablation — the table above.)*
 
 ## Why this fits Mastercard specifically
 
@@ -109,12 +123,15 @@ swapped (deterministic simulator vs. real LLM).
 
 ## Honesty
 
-We document limitations in `docs/LIMITATIONS.md`: the offline agent is a faithful
-*simulation* of the documented failure mode, the corpus is synthetic and partly
-templated, and adjudication-gaming looks weakest offline (a rule-based agent resists
-emotional narrative) — which is exactly the case layer 3 is built to defend in the
-live setting. The trust-boundary architecture and the structured-adjudication
-backstop are the general, framework-agnostic contribution.
+We document limitations in `docs/LIMITATIONS.md`. In brief: the offline agent is a
+faithful *simulation* of the documented failure mode (a naive LLM that obeys
+in-context instructions and believes stated reasons), and — importantly — its
+gullibility is not keyed to the injection detector, so the win comes from Layer 3
+checking the facts, not from a detector matching its own trigger words. The corpus
+is 12 hand-authored seeds × 5 amounts (the taxonomy is the claim, not the count),
+and only the dispute surface is benchmarked; the KYB agent is a demonstrated second
+surface, not a second benchmark. The trust-boundary architecture and the
+structured-adjudication backstop are the general, framework-agnostic contribution.
 
 **Code:** https://github.com/adivishall/sentinel
 

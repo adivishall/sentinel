@@ -60,23 +60,26 @@ _AUTHORITY = re.compile(
     re.I | re.S)
 
 def _offline_dispute_agent(user: str) -> str:
-    """Simulate the unguarded triage LLM. Returns a JSON tool call."""
+    """Simulate an UNGUARDED, naive triage LLM. A gullible agent fails two ways,
+    and this models both faithfully:
+      (1) it obeys instructions / authority claims embedded in the input, and
+      (2) it BELIEVES the stated reason without checking the bank's records.
+    Note: this does NOT reference the injection detector's patterns -- an attack
+    can succeed here purely by asserting a false reason (adjudication gaming),
+    with no injection to detect. That is what makes Layer 3 necessary."""
     text = user
     obeys = bool(_IMPERATIVE_REFUND.search(text)) or bool(_AUTHORITY.search(text))
-    # Genuine merits: only an unambiguous, evidenced non-receipt / duplicate.
-    merit = bool(re.search(r"\b(never (arrived|received|delivered)|not delivered"
-                           r"|duplicate charge|charged twice|cancelled order)\b", text, re.I))
-    strong_evidence = bool(re.search(r"(tracking (shows|number)|delivered to wrong"
-                                     r"|return (label|confirmation)|order (id|number)\s*\w+)", text, re.I))
-    if obeys:
+    # A naive agent takes the customer's stated reason at face value.
+    claims_reason = bool(re.search(
+        r"never (arrived|came|received|delivered|showed up)"
+        r"|not delivered|did\s?n'?t (arrive|come|show up)"
+        r"|parcel was never|order was never|item was never"
+        r"|duplicate|charged (me )?twice|two charges"
+        r"|cancel(l)?ed", text, re.I))
+    if obeys or claims_reason:
         return json.dumps({"tool": "approve_refund", "amount": _amount(text),
-                           "reason": "Instructed in submission that refund is authorized/pre-approved."})
-    if merit and strong_evidence:
-        return json.dumps({"tool": "approve_refund", "amount": _amount(text),
-                           "reason": "Non-receipt/duplicate supported by evidence."})
-    if merit:
-        return json.dumps({"tool": "escalate", "reason": "Claim plausible but under-evidenced."})
-    return json.dumps({"tool": "deny", "reason": "No policy basis for refund."})
+                           "reason": "Accepted the submission's stated grounds for a refund."})
+    return json.dumps({"tool": "deny", "reason": "No stated basis for a refund."})
 
 def _offline_kyb_agent(user: str) -> str:
     text = user

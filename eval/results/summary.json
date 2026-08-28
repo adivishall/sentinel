@@ -2,7 +2,7 @@
   "mode": "offline",
   "n_attacks": 60,
   "n_controls": 18,
-  "asr_unguarded": 0.667,
+  "asr_unguarded": 0.833,
   "asr_guarded": 0.0,
   "fp_rate": 0.0,
   "by_class": {
@@ -33,11 +33,11 @@
     },
     "adjudication_gaming": {
       "n": 10,
-      "asr_unguarded": 0.0,
+      "asr_unguarded": 1.0,
       "asr_guarded": 0.0
     }
   },
   "blocked_by": {
-    "L2_detect": 40
+    "L3_adjudicate": 50
   }
 }

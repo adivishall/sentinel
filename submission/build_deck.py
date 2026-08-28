@@ -147,9 +147,9 @@ txt(s,7.05,5.75,5.4,0.4,"→ the only input to the verdict",13,SOFT,SANS,italic=
 txt(s,0.6,6.6,12,0.5,"Structurally immune to text-level attacks.",18,GOLD,SERIF,italic=True,align=PP_ALIGN.CENTER)
 
 # 8 HEADLINE
-s=slide(); tag(s,"RESULT"); title(s,"66.7% of attacks succeed. With Sentinel, 0%.")
+s=slide(); tag(s,"RESULT"); title(s,"83.3% of attacks succeed. With Sentinel, 0%.")
 s.shapes.add_picture(CH+"chart2_headline.png",I(0.7),I(2.3),height=I(4.05))
-stats=[["66.7%","attack success, no firewall",RED],
+stats=[["83.3%","attack success, no firewall",RED],
        ["0.0%","attack success, with Sentinel",GREEN],
        ["0.0%","legitimate refunds wrongly blocked",GREEN]]
 yy=2.5
@@ -165,7 +165,7 @@ s.shapes.add_picture(CH+"chart1_asr.png",I(1.2),I(2.4),width=I(10.9))
 # 10 ABLATION
 s=slide(); tag(s,"RESULT — ABLATION"); title(s,"Which layer does the work")
 s.shapes.add_picture(CH+"chart3_ablation.png",I(0.7),I(2.4),height=I(4.4))
-txt(s,7.4,3.2,5.3,2.6,"Detection (L2) stops the loud attacks. But L3 is the backstop that holds when detection misses — including attacks with nothing to detect.",16,INK,SANS)
+txt(s,7.4,3.2,5.3,2.6,"Detection alone still leaks 6.7% — the false-claim attacks with no injection to catch. Layer 3, deciding on verified bank facts, closes it. Necessary and sufficient; the rest is defence-in-depth.",16,INK,SANS)
 
 # 11 MASTERCARD
 s=slide(); tag(s,"WHY MASTERCARD"); title(s,"The missing half of agentic-commerce trust")

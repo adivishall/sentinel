@@ -1,0 +1,18 @@
+{
+  "no_firewall": {
+    "asr": 0.833,
+    "fp": 0.25
+  },
+  "detection_only": {
+    "asr": 0.067,
+    "fp": 0.25
+  },
+  "adjudication_only": {
+    "asr": 0.0,
+    "fp": 0.0
+  },
+  "full": {
+    "asr": 0.0,
+    "fp": 0.0
+  }
+}

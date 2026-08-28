@@ -18,7 +18,7 @@ agent's irreversible actions.
 
 | Metric | Value |
 |---|---|
-| Attack success — **no firewall** | **66.7%** |
+| Attack success — **no firewall** | **83.3%** |
 | Attack success — **with Sentinel** | **0.0%** |
 | False positives on legitimate refunds | **0.0%** |
 

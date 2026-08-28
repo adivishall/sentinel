@@ -48,18 +48,23 @@ def chart_headline(s, path="eval/results/chart2_headline.png"):
     fig.tight_layout(); fig.savefig(path, dpi=140, bbox_inches="tight"); plt.close(fig); return path
 
 def chart_ablation(s, path="eval/results/chart3_ablation.png"):
-    bb = s.get("blocked_by", {})
-    labels = {"L2_detect":"L2 Injection\ndetection","L3_adjudicate":"L3 Structured\nadjudication",
-              "L4_limits":"L4 Capability\nlimits"}
-    keys = [k for k in labels if k in bb] or list(bb)
-    vals = [bb[k] for k in keys]
-    fig, ax = plt.subplots(figsize=(6.4, 4.4))
-    ax.bar([labels.get(k, k) for k in keys], vals, color=BLUE, width=0.5)
-    for i, v in enumerate(vals):
-        ax.text(i, v+0.5, str(v), ha="center", fontweight="bold")
-    ax.set_ylabel("Attacks first stopped at this layer")
-    ax.set_title("Which layer catches what (ablation)", fontweight="bold")
+    import json as _j
+    ab = _j.load(open("eval/results/ablation.json"))
+    order = ["no_firewall", "detection_only", "adjudication_only", "full"]
+    labels = {"no_firewall":"No\nfirewall","detection_only":"Detection\nonly (L1+L2+L4)",
+              "adjudication_only":"Adjudication\nonly (L3)","full":"Full\n(L1\u2013L4)"}
+    asr = [ab[k]["asr"]*100 for k in order]
+    cols = [RED, "#d98b3a", BLUE, BLUE]
+    fig, ax = plt.subplots(figsize=(7.4, 4.6))
+    bars = ax.bar([labels[k] for k in order], asr, color=cols, width=0.6)
+    for i, v in enumerate(asr):
+        ax.text(i, v+1.5, f"{v:.1f}%", ha="center", fontweight="bold", fontsize=11)
+    ax.set_ylabel("Attack success rate (%)"); ax.set_ylim(0, 100)
+    ax.set_title("Which layer does the work (real ablation)", fontweight="bold")
     ax.grid(axis="y", color=GRID); ax.set_axisbelow(True)
+    ax.annotate("detection alone still\nlets false-claim attacks through",
+                xy=(1, asr[1]), xytext=(1.15, 34), fontsize=9, color="#b5671f",
+                arrowprops=dict(arrowstyle="->", color="#b5671f"))
     fig.tight_layout(); fig.savefig(path, dpi=140); plt.close(fig); return path
 
 def main():

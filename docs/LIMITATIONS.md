@@ -12,15 +12,26 @@ We would rather state these than have them found.
    built from hand-authored seeds instantiated across amounts/merchants. Real
    attacker text is more varied. The taxonomy, not the corpus size, is the claim.
 
-3. **Adjudication gaming looks weakest offline.** A rule-based agent isn't swayed
-   by an emotional narrative, so that class shows low unguarded success offline.
-   That *understates* the threat — a real LLM is susceptible — and it is the exact
-   case layer 3 is built for. Don't read the offline 0% as "not a problem".
+3. **The offline agent is a naive narrative-truster.** It fails two ways a real
+   LLM does: it obeys embedded instructions/authority, and it believes a stated
+   reason without checking records. Crucially, its gullibility is NOT keyed to the
+   injection detector's patterns — an adjudication-gaming attack (a false claim
+   with no injection) succeeds against it purely by asserting a false reason. That
+   is why the win comes from layer 3 (facts), not from a detector matching its own
+   trigger words. See the ablation: detection-only still leaks 6.7%.
 
 4. **The injection detector is lexical.** Transparent and fully explainable, but
-   evadable by obfuscation/paraphrase. In production, layer 2 would be an LLM/ML
-   classifier; layers 1, 3, 4 do not depend on catching every injection — layer 3
-   is the backstop that holds even when detection misses.
+   evadable by obfuscation/paraphrase. The ablation shows why this is acceptable:
+   layers 1, 3, 4 do not depend on catching every injection — layer 3 decides on
+   verified facts and is the backstop that holds even when detection misses.
+
+7. **Only the dispute surface is benchmarked.** The KYB/onboarding agent is built
+   and runs through the same firewall, but the numbers here are dispute-triage
+   only. KYB is a demonstrated second surface, not a second benchmark.
+
+8. **"60 attacks" = 12 hand-authored seeds x 5 transaction amounts.** The taxonomy
+   (six classes), not the count, is the claim. The live generator (`red/generate.py`)
+   adds non-templated variants when an API key is present.
 
 5. **The ledger is assumed trustworthy.** We defend the decision layer, not the
    integrity of the bank's own records. Poisoning the ledger is a different threat.
