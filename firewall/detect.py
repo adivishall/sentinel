@@ -7,6 +7,8 @@ is explainable (we can point at the exact trigger). Returns (score, hits)."""
 from __future__ import annotations
 import re
 
+from firewall.normalize import normalize
+
 SIGNALS = [
     ("instruction_override", 0.9,
      re.compile(r"(ignore|disregard|override|forget).{0,40}"
@@ -43,5 +45,6 @@ def score(untrusted_text: str) -> tuple[float, list[dict]]:
 
 THRESHOLD = 0.6
 def is_injection(untrusted_text: str) -> tuple[bool, float, list[dict]]:
-    s, hits = score(untrusted_text)
+    # Normalise first so homoglyph / zero-width evasion is defeated before scoring.
+    s, hits = score(normalize(untrusted_text))
     return s >= THRESHOLD, s, hits

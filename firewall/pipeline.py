@@ -17,9 +17,12 @@ detection-only defences.
 from __future__ import annotations
 from dataclasses import dataclass, field
 from firewall import provenance, detect, adjudicate, limits
+from firewall.normalize import validate, InvalidSubmission
+from firewall.logging_config import get_logger
 from agents.tools import Effect
 
 ALL = ("L1", "L2", "L3", "L4")
+_log = get_logger("firewall.pipeline")
 
 @dataclass
 class Decision:
@@ -31,6 +34,16 @@ class Decision:
 def run_guarded(agent_run, submission: str, ledger: dict, layers=ALL) -> Decision:
     layers = set(layers)
     d = Decision(effect=Effect("pending"))
+
+    # Fail safe: unusable input never silently approves -- it escalates to a human.
+    try:
+        validate(submission)
+    except InvalidSubmission as e:
+        _log.warning("invalid submission", extra={"detail": str(e)})
+        d.effect = Effect("escalate", 0, f"Invalid submission: {e}")
+        d.blocked_by = "L0_validate"
+        d.log("L0_validate", {"error": str(e)})
+        return d
 
     # L1 provenance
     if "L1" in layers:
@@ -68,6 +81,9 @@ def run_guarded(agent_run, submission: str, ledger: dict, layers=ALL) -> Decisio
         decided = agent_effect  # no L3, no injection caught -> agent's word stands
 
     d.effect = decided
+
+    _log.info("decision", extra={"detail": {"action": d.effect.action,
+              "blocked_by": d.blocked_by, "layers": sorted(layers)}})
 
     # L4 capability limits
     if "L4" in layers:
