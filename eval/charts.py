@@ -67,10 +67,29 @@ def chart_ablation(s, path="eval/results/chart3_ablation.png"):
                 arrowprops=dict(arrowstyle="->", color="#b5671f"))
     fig.tight_layout(); fig.savefig(path, dpi=140); plt.close(fig); return path
 
+def chart_baselines(s=None, path="eval/results/chart4_baselines.png"):
+    import json as _j
+    b = _j.load(open("eval/results/baselines.json"))
+    order = ["no_defence", "hardened_prompt", "sentinel"]
+    labels = ["No defence", "Hardened prompt\n(the obvious fix)", "Sentinel\n(structural)"]
+    vals = [b[k]*100 for k in order]
+    cols = [RED, "#d98b3a", BLUE]
+    fig, ax = plt.subplots(figsize=(7.2, 4.6))
+    ax.bar(labels, vals, color=cols, width=0.58)
+    for i, v in enumerate(vals):
+        ax.text(i, v+1.5, f"{v:.1f}%", ha="center", fontweight="bold", fontsize=12)
+    ax.set_ylabel("Attack success rate (%)"); ax.set_ylim(0, 100)
+    ax.set_title("We beat the obvious defence", fontweight="bold")
+    ax.grid(axis="y", color=GRID); ax.set_axisbelow(True)
+    ax.annotate("prompt-hardening still fails 100%\non false-claim attacks",
+                xy=(1, vals[1]), xytext=(0.75, 45), fontsize=9, color="#b5671f",
+                arrowprops=dict(arrowstyle="->", color="#b5671f"))
+    fig.tight_layout(); fig.savefig(path, dpi=140); plt.close(fig); return path
+
 def main():
     s = _load()
-    p1 = chart_asr(s); p2 = chart_headline(s); p3 = chart_ablation(s)
-    print("charts:", p1, p2, p3)
+    p1 = chart_asr(s); p2 = chart_headline(s); p3 = chart_ablation(s); p4 = chart_baselines()
+    print("charts:", p1, p2, p3, p4)
 
 if __name__ == "__main__":
     main()

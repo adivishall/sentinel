@@ -62,6 +62,19 @@ defence-in-depth and explainability.
 </tr>
 </table>
 
+### We beat the obvious defence
+
+The first question any technical judge asks: *"why not just harden the system prompt
+to ignore injected instructions?"* We built exactly that and measured it.
+
+![Baselines](eval/results/chart4_baselines.png)
+
+Prompt-hardening cuts attacks from 83.3% to **16.7%** — but it **fails 100% on
+adjudication gaming**, because a customer *lying about the facts* is not an injection,
+and "ignore instructions" says nothing about a lie. Sentinel's fact-based Layer 3
+takes it to **0%**. That is the difference between a prompt band-aid and a structural
+control.
+
 ## How it works
 
 ```mermaid

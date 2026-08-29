@@ -167,6 +167,14 @@ s=slide(); tag(s,"RESULT — ABLATION"); title(s,"Which layer does the work")
 s.shapes.add_picture(CH+"chart3_ablation.png",I(0.7),I(2.4),height=I(4.4))
 txt(s,7.4,3.2,5.3,2.6,"Detection alone still leaks 6.7% — the false-claim attacks with no injection to catch. Layer 3, deciding on verified bank facts, closes it. Necessary and sufficient; the rest is defence-in-depth.",16,INK,SANS)
 
+# --- Slide: beat the obvious defence ---
+s=slide(); tag(s,"RIGOR"); title(s,"We beat the obvious defence")
+try:
+    s.shapes.add_picture("chart4_baselines.png", Inches(0.6), Inches(1.7), width=Inches(6.4))
+except Exception: pass
+txt(s,7.4,1.9,5.3,0.9,"\u201cWhy not just harden the system prompt?\u201d We built that baseline and measured it.",16,INK,SANS)
+txt(s,7.4,3.0,5.3,2.6,"Prompt-hardening cuts attacks 83.3% \u2192 16.7% \u2014 but fails 100% on adjudication gaming. A customer lying about the facts is not an injection. Only checking the bank's records (Layer 3) reaches 0%. Structural control, not a prompt band-aid.",15,INK,SANS)
+
 # 11 MASTERCARD
 s=slide(); tag(s,"WHY MASTERCARD"); title(s,"The missing half of agentic-commerce trust")
 mc=[["Verifiable Intent","Secures AUTHORIZATION — proof a human approved the agent's action.",False],

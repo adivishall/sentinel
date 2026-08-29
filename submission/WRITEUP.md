@@ -99,7 +99,21 @@ bank's own records (Layer 3) closes it. Layer 3 is necessary and, here, sufficie
 the other layers are defence-in-depth and explainability. We show this rather than
 hide it.
 
-*(chart1_asr — by class, off vs on. chart2_headline — overall. chart3_ablation — the table above.)*
+**We beat the obvious defence.** The first objection to any guardrail is "just harden
+the system prompt." We implemented that baseline and measured it:
+
+| Defence | Attack success |
+|---|---|
+| None | 83.3% |
+| Hardened system prompt (the obvious fix) | 16.7% |
+| **Sentinel** | **0.0%** |
+
+Prompt-hardening neutralises the overt injections but **fails 100% on adjudication
+gaming** — a false factual claim is not an injection. Only checking the claim against
+the bank's records closes it. This is why Sentinel is a structural control, not a
+prompt band-aid.
+
+*(chart1_asr — by class. chart2_headline — overall. chart3_ablation — layer ablation. chart4_baselines — vs the obvious defence.)*
 
 ## Why this fits Mastercard specifically
 
