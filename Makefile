@@ -26,5 +26,16 @@ offline:          ## force offline mode end-to-end
 demo:             ## open the standalone demo console
 	python3 -c "import webbrowser,os;webbrowser.open('file://'+os.path.abspath('console/index.html'))"
 
+test:             ## run the pytest suite (offline)
+	SENTINEL_FORCE_OFFLINE=1 python3 -m pytest tests/ -q
+
+lint:             ## ruff + black --check + mypy
+	python3 -m ruff check .
+	python3 -m black --check .
+	python3 -m mypy
+
+bench:            ## firewall latency / throughput benchmark
+	SENTINEL_FORCE_OFFLINE=1 python3 eval/bench.py
+
 clean:
 	rm -f eval/results/*.png eval/results/*.json red/attacks/corpus.json

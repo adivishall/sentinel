@@ -8,9 +8,14 @@ Instead we extract STRUCTURED FACTS from verified sources (the bank's own DB,
 plus claims from the narrative clearly labelled as unverified), and a second
 adjudicator decides using only those facts. The attacker's prose never reaches
 the decision maker. This layer is structurally immune to text-level attacks."""
+
 from __future__ import annotations
-import json, re
+
+import json
+import re
+
 from llm import complete
+
 
 def extract_facts(narrative: str, ledger: dict) -> dict:
     """Build the structured fact sheet. `ledger` = verified account/txn facts
@@ -31,11 +36,13 @@ def extract_facts(narrative: str, ledger: dict) -> dict:
     }
     return facts
 
+
 def adjudicate(narrative: str, ledger: dict) -> dict:
     facts = extract_facts(narrative, ledger)
     verdict = json.loads(complete("", json.dumps(facts), role="adjudicator"))
     verdict["facts"] = facts
     return verdict
+
 
 def _claim_type(text: str) -> str:
     t = text.lower()
@@ -45,10 +52,14 @@ def _claim_type(text: str) -> str:
         return "duplicate"
     if re.search(r"cancel(l)?ed?.{0,20}order|order.{0,20}cancel|cancelled.{0,20}(it|within)", t):
         return "cancellation"
-    if re.search(r"fraud|didn'?t (make|authorize)|unauthori[sz]ed|don'?t recognis|"
-                 r"not mine|card with me|never (made|authori)", t):
+    if re.search(
+        r"fraud|didn'?t (make|authorize)|unauthori[sz]ed|don'?t recognis|"
+        r"not mine|card with me|never (made|authori)",
+        t,
+    ):
         return "unauthorized"
     return "unspecified"
+
 
 def _supported(claim: str, ledger: dict) -> bool:
     """Is the claim backed by the bank's OWN trusted records?"""

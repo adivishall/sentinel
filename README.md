@@ -12,6 +12,11 @@
 ![No API key](https://img.shields.io/badge/Runs_offline-no_API_key-2e8b57?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
+[![CI](https://github.com/adivishall/sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/adivishall/sentinel/actions/workflows/ci.yml)
+![Tests](https://img.shields.io/badge/tests-26_passing-2e8b57)
+![Ruff](https://img.shields.io/badge/lint-ruff-purple)
+![mypy](https://img.shields.io/badge/types-mypy-blue)
+
 **Mastercard Innovation Challenge @ GFF 2026 · AI Defence Lab for Payment Security**
 
 </div>
@@ -151,6 +156,26 @@ keyed to the injection detector — so the win comes from Layer 3 checking facts
 matching its own words. The corpus is 12 hand-authored seeds × 5 amounts (the taxonomy is the
 claim, not the count), and only the dispute surface is benchmarked. The trust-boundary
 architecture and the structured-adjudication backstop are the general contribution.
+
+## Engineering
+
+Built to be run and inspected, not just demoed:
+
+```bash
+make test      # 26 pytest cases (offline, no key) — layers, adjudicator, edge cases
+make lint      # ruff + black --check + mypy, all clean
+make bench     # firewall latency / throughput
+```
+
+- **Tested:** 26 tests incl. homoglyph evasion, malformed/empty input fail-safe, and a
+  regression test that locks in 0% attack success / 0% false positives.
+- **CI:** GitHub Actions runs lint + type-check + tests on every push and PR.
+- **Hardened input:** NFKC + homoglyph folding + zero-width stripping defeat detector
+  evasion; unusable input escalates to a human instead of crashing.
+- **Fast:** ~0.074 ms firewall overhead, ~13.5k decisions/sec — see
+  [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) for the complexity analysis.
+- **Observable:** JSON structured logs per layer (`SENTINEL_LOG=INFO`) and an
+  append-only audit trail on every decision.
 
 ## License
 
