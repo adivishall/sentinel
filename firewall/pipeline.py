@@ -14,23 +14,43 @@ own decision stands unless L2 caught an injection -- which is exactly how an
 adjudication-gaming attack (a false claim with no injection) slips through
 detection-only defences.
 """
+
 from __future__ import annotations
+
 from dataclasses import dataclass, field
-from firewall import provenance, detect, adjudicate, limits
+
 from agents.tools import Effect
+from firewall import adjudicate, detect, limits, provenance
+from firewall.logging_config import get_logger
+from firewall.normalize import InvalidSubmission, validate
 
 ALL = ("L1", "L2", "L3", "L4")
+_log = get_logger("firewall.pipeline")
+
 
 @dataclass
 class Decision:
     effect: Effect
     blocked_by: str | None = None
     trail: list = field(default_factory=list)
-    def log(self, layer, detail): self.trail.append({"layer": layer, "detail": detail})
+
+    def log(self, layer, detail):
+        self.trail.append({"layer": layer, "detail": detail})
+
 
 def run_guarded(agent_run, submission: str, ledger: dict, layers=ALL) -> Decision:
     layers = set(layers)
     d = Decision(effect=Effect("pending"))
+
+    # Fail safe: unusable input never silently approves -- it escalates to a human.
+    try:
+        validate(submission)
+    except InvalidSubmission as e:
+        _log.warning("invalid submission", extra={"detail": str(e)})
+        d.effect = Effect("escalate", 0, f"Invalid submission: {e}")
+        d.blocked_by = "L0_validate"
+        d.log("L0_validate", {"error": str(e)})
+        return d
 
     # L1 provenance
     if "L1" in layers:
@@ -53,12 +73,18 @@ def run_guarded(agent_run, submission: str, ledger: dict, layers=ALL) -> Decisio
     # decision
     if "L3" in layers:
         verdict = adjudicate.adjudicate(submission, ledger)
-        d.log("L3_adjudicate", {"verdict": verdict["verdict"], "why": verdict["why"],
-                                "facts": verdict["facts"]})
+        d.log(
+            "L3_adjudicate",
+            {"verdict": verdict["verdict"], "why": verdict["why"], "facts": verdict["facts"]},
+        )
         vmap = {"approve": "approve_refund", "deny": "deny", "escalate": "escalate"}
         amt = verdict["facts"]["amount"]
-        decided = Effect(vmap[verdict["verdict"]], amt if verdict["verdict"] == "approve" else 0,
-                         verdict["why"], irreversible=(verdict["verdict"] == "approve"))
+        decided = Effect(
+            vmap[verdict["verdict"]],
+            amt if verdict["verdict"] == "approve" else 0,
+            verdict["why"],
+            irreversible=(verdict["verdict"] == "approve"),
+        )
         if agent_effect.action != decided.action:
             d.blocked_by = "L3_adjudicate"
     elif l2_blocked:
@@ -69,6 +95,17 @@ def run_guarded(agent_run, submission: str, ledger: dict, layers=ALL) -> Decisio
 
     d.effect = decided
 
+    _log.info(
+        "decision",
+        extra={
+            "detail": {
+                "action": d.effect.action,
+                "blocked_by": d.blocked_by,
+                "layers": sorted(layers),
+            }
+        },
+    )
+
     # L4 capability limits
     if "L4" in layers:
         d.effect, cap = limits.enforce(d.effect, ledger)
@@ -77,6 +114,7 @@ def run_guarded(agent_run, submission: str, ledger: dict, layers=ALL) -> Decisio
             d.blocked_by = d.blocked_by or "L4_limits"
 
     return d
+
 
 def run_unguarded(agent_run, submission: str, ledger: dict) -> Decision:
     """Baseline: agent acts directly on raw attacker text."""
