@@ -12,10 +12,13 @@ eval:             ## run all cases: unguarded vs firewall -> results/
 ablation:         ## real layer ablation -> results/ablation.json
 	python3 eval/ablation.py
 
+baselines:        ## beat-the-obvious-defence comparison -> results/baselines.json
+	python3 eval/baselines.py
+
 charts:           ## render the three submission charts
 	python3 eval/charts.py
 
-all: corpus eval ablation charts   ## full pipeline
+all: corpus eval ablation baselines charts   ## full pipeline
 
 offline:          ## force offline mode end-to-end
 	SENTINEL_FORCE_OFFLINE=1 $(MAKE) all

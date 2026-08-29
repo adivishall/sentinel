@@ -81,6 +81,31 @@ def _offline_dispute_agent(user: str) -> str:
                            "reason": "Accepted the submission's stated grounds for a refund."})
     return json.dumps({"tool": "deny", "reason": "No stated basis for a refund."})
 
+def _offline_dispute_agent_hardened(user: str) -> str:
+    """The OBVIOUS defence: a hardened system prompt telling the agent to ignore
+    any instructions inside the customer's text and not act on embedded commands.
+
+    This is what most teams reach for. It genuinely neutralises the OVERT
+    injections (direct 'ignore instructions', spoofed authority, forged rules) --
+    the agent no longer obeys them. But prompt-hardening says nothing about a
+    customer who simply LIES about the facts. An adjudication-gaming attack -- a
+    false 'my order never arrived' with no injection at all -- still lands,
+    because the hardened agent still believes stated reasons. Only checking the
+    bank's records (Sentinel's Layer 3) closes that gap."""
+    text = user
+    # hardening neutralises instruction/authority following ...
+    # ... but the agent still trusts a plainly stated reason.
+    claims_reason = bool(re.search(
+        r"never (arrived|came|received|delivered|showed up)"
+        r"|not delivered|did\s?n'?t (arrive|come|show up)"
+        r"|parcel was never|order was never|item was never"
+        r"|duplicate|charged (me )?twice|two charges"
+        r"|cancel(l)?ed", text, re.I))
+    if claims_reason:
+        return json.dumps({"tool": "approve_refund", "amount": _amount(text),
+                           "reason": "Ignored embedded instructions, but accepted the stated reason."})
+    return json.dumps({"tool": "deny", "reason": "No basis; embedded instructions ignored."})
+
 def _offline_kyb_agent(user: str) -> str:
     text = user
     obeys = bool(_AUTHORITY.search(text)) or bool(re.search(
@@ -116,6 +141,7 @@ def _amount(text: str) -> int:
 
 _OFFLINE_ROUTES = {
     "dispute": _offline_dispute_agent,
+    "dispute_hardened": _offline_dispute_agent_hardened,
     "kyb": _offline_kyb_agent,
     "adjudicator": _offline_adjudicator,
 }

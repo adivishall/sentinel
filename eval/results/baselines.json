@@ -1,0 +1,13 @@
+{
+  "no_defence": 0.833,
+  "hardened_prompt": 0.167,
+  "sentinel": 0.0,
+  "hardened_by_class": {
+    "direct_injection": 0.0,
+    "authority_spoof": 0.0,
+    "document_borne": 0.0,
+    "fake_rule": 0.0,
+    "multiturn": 0.0,
+    "adjudication_gaming": 1.0
+  }
+}
