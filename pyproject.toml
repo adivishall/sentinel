@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sentinel-firewall"
+version = "0.2.0"
+description = "An AI firewall for back-office LLM pipelines (dispute triage, KYC/KYB, AML)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "adivishall" }]
+keywords = ["ai-security", "prompt-injection", "llm-security", "payment-security", "guardrails"]
+dependencies = []  # offline core has zero runtime deps
+
+[project.optional-dependencies]
+live = ["anthropic==0.40.0"]
+charts = ["matplotlib==3.9.2"]
+dev = ["pytest==8.3.3", "ruff==0.16.5", "black==26.5.1", "mypy==2.3.1"]
+
+[project.scripts]
+sentinel-eval = "eval.harness:run"
+sentinel-ablation = "eval.ablation:main"
+
+[tool.setuptools]
+py-modules = ["llm"]
+packages = ["agents", "red", "firewall", "eval"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]  # line length handled by black
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = false
+files = ["firewall"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
