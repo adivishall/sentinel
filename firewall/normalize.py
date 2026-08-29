@@ -9,7 +9,9 @@ Cyrillic 'і', or pads text with zero-width joiners. Before any detection runs w
 
 This is defence-in-depth for Layer 2 and the first line of edge-case handling.
 """
+
 from __future__ import annotations
+
 import re
 import unicodedata
 
@@ -17,9 +19,24 @@ MAX_LEN = 20_000  # a dispute narrative longer than this is not a real submissio
 
 # Common confusable homoglyphs -> ASCII. Not exhaustive; covers the cheap attacks.
 _HOMOGLYPHS = {
-    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "х": "x", "у": "y",  # Cyrillic
-    " і": "i", "ѕ": "s", "һ": "h", "ԁ": "d", "ן": "l", "Ι": "I", "ο": "o",  # Greek/other
-    "𝗂": "i", "ｇ": "g", "ⅼ": "l", "ǃ": "!",
+    "а": "a",
+    "е": "e",
+    "о": "o",
+    "р": "p",
+    "с": "c",
+    "х": "x",
+    "у": "y",  # Cyrillic
+    " і": "i",
+    "ѕ": "s",
+    "һ": "h",
+    "ԁ": "d",
+    "ן": "l",
+    "Ι": "I",
+    "ο": "o",  # Greek/other
+    "𝗂": "i",
+    "ｇ": "g",
+    "ⅼ": "l",
+    "ǃ": "!",
 }
 _ZERO_WIDTH = re.compile(r"[​-‏‪-‮⁠﻿]")
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")

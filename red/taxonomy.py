@@ -27,7 +27,7 @@ CLASSES = {
     "adjudication_gaming": {
         "name": "Adjudication gaming",
         "desc": "No injection at all -- a narrative engineered to exploit the "
-                "model's decision heuristics. The honest hard case.",
+        "model's decision heuristics. The honest hard case.",
     },
 }
 ORDER = list(CLASSES)

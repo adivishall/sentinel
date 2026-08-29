@@ -29,6 +29,7 @@ packages = ["agents", "red", "firewall", "eval"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+exclude = ["submission", "notebooks", "data"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 ignore = ["E501"]  # line length handled by black
@@ -41,6 +42,7 @@ target-version = ["py311"]
 python_version = "3.11"
 ignore_missing_imports = true
 warn_unused_ignores = false
+follow_imports = "silent"
 files = ["firewall"]
 
 [tool.pytest.ini_options]
