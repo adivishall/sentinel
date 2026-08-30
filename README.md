@@ -13,7 +13,7 @@
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
 [![CI](https://github.com/adivishall/sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/adivishall/sentinel/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-26_passing-2e8b57)
+![Tests](https://img.shields.io/badge/tests-27_passing-2e8b57)
 ![Ruff](https://img.shields.io/badge/lint-ruff-purple)
 ![mypy](https://img.shields.io/badge/types-mypy-blue)
 

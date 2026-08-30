@@ -19,7 +19,7 @@ class Effect:
 
 # Dispute-triage tool surface
 DISPUTE_TOOLS = {
-    "approve_refund": lambda amount=0, reason="": Effect(
+    "approve_refund": lambda amount=0, reason="", **_: Effect(
         "approve_refund", amount, reason, irreversible=True
     ),
     "deny": lambda reason="", **_: Effect("deny", 0, reason),

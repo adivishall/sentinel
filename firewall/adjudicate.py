@@ -37,17 +37,46 @@ def extract_facts(narrative: str, ledger: dict) -> dict:
     return facts
 
 
+ADJUDICATOR_SYSTEM = (
+    "You are a payments dispute adjudicator. You receive ONLY a JSON object of "
+    "structured, verified facts -- never customer prose. Decide strictly from "
+    "these facts. Reply with a single JSON object and nothing else: "
+    '{"verdict": "approve" | "deny" | "escalate", "why": "<one sentence>"}. '
+    "Approve only when evidence_supports_claim is true and the amount is within "
+    "policy_auto_limit; escalate when supported but over limit; otherwise deny."
+)
+
+_VALID_VERDICTS = ("approve", "deny", "escalate")
+
+
+def _parse_verdict(raw: str) -> dict:
+    """Fail-safe parse of adjudicator output. Any malformed or unexpected
+    response escalates to a human -- the decisive layer never crashes or
+    silently approves on bad output (mirrors the input fail-safe in pipeline)."""
+    a, b = raw.find("{"), raw.rfind("}")
+    if a >= 0 and b > a:
+        try:
+            v = json.loads(raw[a : b + 1])
+            if isinstance(v, dict) and v.get("verdict") in _VALID_VERDICTS:
+                return {"verdict": v["verdict"], "why": str(v.get("why", ""))[:300]}
+        except json.JSONDecodeError:
+            pass
+    return {"verdict": "escalate", "why": "Adjudicator output unparseable; escalated for safety."}
+
+
 def adjudicate(narrative: str, ledger: dict) -> dict:
     facts = extract_facts(narrative, ledger)
-    verdict = json.loads(complete("", json.dumps(facts), role="adjudicator"))
+    verdict = _parse_verdict(complete(ADJUDICATOR_SYSTEM, json.dumps(facts), role="adjudicator"))
     verdict["facts"] = facts
     return verdict
 
 
 def _claim_type(text: str) -> str:
     t = text.lower()
-    if re.search(r"never (arrived|received|delivered)|not delivered|non[- ]receipt|in transit", t):
+    if re.search(r"never (arrived|received|delivered)|not delivered|non[- ]receipt", t):
         return "non_receipt"
+    if re.search(r"in transit|still (on the way|coming)|not (yet )?arrived", t):
+        return "in_transit"
     if re.search(r"duplicate|charged twice|two charges|charged.{0,10}twice", t):
         return "duplicate"
     if re.search(r"cancel(l)?ed?.{0,20}order|order.{0,20}cancel|cancelled.{0,20}(it|within)", t):
