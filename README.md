@@ -136,14 +136,22 @@ make offline      # full pipeline, NO API key: corpus → eval → ablation → 
 make demo         # open the interactive one-toggle console
 ```
 
-Live mode (real Claude agents + adjudicator instead of the deterministic simulator):
+### Live mode — real Claude agents
+
+Swap the deterministic simulator for real Claude agents + adjudicator. The
+**firewall code is identical** in both modes; only the agent's cognition changes.
 
 ```bash
-cp .env.example .env && export ANTHROPIC_API_KEY=sk-ant-...
-make all
+export ANTHROPIC_API_KEY=sk-ant-...     # or use an `ant auth login` profile
+make live-check                          # 1 call — verify key + model work
+make live                                # cheap SAMPLE run, live vs offline table
+make live-full                           # whole corpus (costlier)
 ```
 
-The **firewall code is identical in both modes** — only the agent's cognition is swapped.
+`make live` prints a side-by-side table so you can see the **real LLM shows the same
+vulnerability and the firewall blocks the same attacks** as the offline model. Default
+model is `claude-opus-5`; set `SENTINEL_MODEL=claude-haiku-4-5` for a cheaper/faster
+loop.
 
 ## Repository layout
 
