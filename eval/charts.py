@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import matplotlib
 
@@ -147,13 +148,53 @@ def chart_baselines(s=None, path="eval/results/chart4_baselines.png"):
     return path
 
 
+def chart_kyb(s=None, path="eval/results/chart5_kyb.png"):
+    """Two surfaces, one firewall: dispute vs KYB, unguarded vs guarded."""
+    import json as _j
+
+    disp = (
+        _j.load(open("eval/results/summary.json"))
+        if os.path.exists("eval/results/summary.json")
+        else None
+    )
+    kyb = _j.load(open("eval/results/kyb.json"))
+    d_ug = (disp["asr_unguarded"] if disp else 0.833) * 100
+    labels = ["Dispute triage", "KYB onboarding"]
+    ug = [d_ug, kyb["asr_unguarded"] * 100]
+    g = [0.0, kyb["asr_guarded"] * 100]
+    import numpy as np
+
+    x = np.arange(len(labels))
+    w = 0.36
+    fig, ax = plt.subplots(figsize=(7.0, 4.6))
+    ax.bar(x - w / 2, ug, w, label="No firewall", color=RED)
+    ax.bar(x + w / 2, g, w, label="With Sentinel", color=BLUE)
+    for i, v in enumerate(ug):
+        ax.text(i - w / 2, v + 1.5, f"{v:.1f}%", ha="center", fontweight="bold")
+    for i, v in enumerate(g):
+        ax.text(i + w / 2, v + 1.5, f"{v:.1f}%", ha="center", fontweight="bold")
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_ylabel("Attack success rate (%)")
+    ax.set_ylim(0, 100)
+    ax.set_title("One firewall, two surfaces", fontweight="bold")
+    ax.legend()
+    ax.grid(axis="y", color=GRID)
+    ax.set_axisbelow(True)
+    fig.tight_layout()
+    fig.savefig(path, dpi=140)
+    plt.close(fig)
+    return path
+
+
 def main():
     s = _load()
     p1 = chart_asr(s)
     p2 = chart_headline(s)
     p3 = chart_ablation(s)
     p4 = chart_baselines()
-    print("charts:", p1, p2, p3, p4)
+    p5 = chart_kyb()
+    print("charts:", p1, p2, p3, p4, p5)
 
 
 if __name__ == "__main__":

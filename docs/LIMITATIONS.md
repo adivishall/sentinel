@@ -25,9 +25,10 @@ We would rather state these than have them found.
    layers 1, 3, 4 do not depend on catching every injection — layer 3 decides on
    verified facts and is the backstop that holds even when detection misses.
 
-7. **Only the dispute surface is benchmarked.** The KYB/onboarding agent is built
-   and runs through the same firewall, but the numbers here are dispute-triage
-   only. KYB is a demonstrated second surface, not a second benchmark.
+7. **Two surfaces are benchmarked (dispute + KYB).** The same firewall defends
+   merchant onboarding (KYB) as well as dispute triage — 87.5% -> 0% with 0% false
+   positives, via a KYB adjudicator that decides on verified acquirer records. AML
+   narration remains a described-but-unbuilt third surface.
 
 8. **"60 attacks" = 12 hand-authored seeds x 5 transaction amounts.** The taxonomy
    (six classes), not the count, is the claim. The live generator (`red/generate.py`)
