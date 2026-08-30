@@ -95,6 +95,14 @@ def run_guarded(agent_run, submission: str, ledger: dict, layers=ALL) -> Decisio
 
     d.effect = decided
 
+    # L4 capability limits
+    if "L4" in layers:
+        d.effect, cap = limits.enforce(d.effect, ledger)
+        if cap:
+            d.log("L4_limits", cap)
+            d.blocked_by = d.blocked_by or "L4_limits"
+
+    # Log the FINAL decision, after every layer (incl. L4) has run.
     _log.info(
         "decision",
         extra={
@@ -105,14 +113,6 @@ def run_guarded(agent_run, submission: str, ledger: dict, layers=ALL) -> Decisio
             }
         },
     )
-
-    # L4 capability limits
-    if "L4" in layers:
-        d.effect, cap = limits.enforce(d.effect, ledger)
-        if cap:
-            d.log("L4_limits", cap)
-            d.blocked_by = d.blocked_by or "L4_limits"
-
     return d
 
 
