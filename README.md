@@ -132,13 +132,22 @@ The **firewall code is identical in both modes** — only the agent's cognition 
 ## Repository layout
 
 ```
-llm.py              dual-mode client (live Claude | deterministic offline)
-agents/             the VICTIMS — dispute_triage, kyb_review, tools
-red/                taxonomy + corpus (60 attacks, 18 legitimate controls) + live generator
-firewall/           the four layers + pipeline  ← the contribution
-eval/               harness, real ablation, charts → eval/results/
-console/index.html  the interactive demo (also the live site)
-docs/               ARCHITECTURE.md · LIMITATIONS.md
+llm.py                 dual-mode client (live Claude | deterministic offline)
+agents/                the VICTIMS — dispute_triage, kyb_review, tools
+red/                   taxonomy + corpus (60 attacks, 18 legitimate controls) + live generator
+firewall/              the four layers + pipeline  ← the contribution
+  ├── provenance.py    L1 · tag untrusted spans
+  ├── detect.py        L2 · injection detection
+  ├── adjudicate.py    L3 · structured-facts adjudication (the core)
+  ├── limits.py        L4 · capability limits
+  ├── normalize.py     input validation + unicode/homoglyph hardening
+  └── logging_config.py structured JSON logs
+eval/                  harness · ablation · baselines · bench · charts → eval/results/
+tests/                 26 pytest cases (run: make test)
+console/index.html     the interactive demo (also the live site)
+docs/                  ARCHITECTURE.md · LIMITATIONS.md · PERFORMANCE.md
+.github/workflows/     CI: ruff + black + mypy + pytest on every push/PR
+CONTRIBUTING.md        two-person PR workflow
 ```
 
 ## Why this fits Mastercard
