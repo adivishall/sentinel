@@ -15,10 +15,13 @@ ablation:         ## real layer ablation -> results/ablation.json
 baselines:        ## beat-the-obvious-defence comparison -> results/baselines.json
 	python3 eval/baselines.py
 
+kyb:              ## KYB second-surface benchmark -> results/kyb.json
+	SENTINEL_FORCE_OFFLINE=1 python3 eval/kyb_harness.py
+
 charts:           ## render the three submission charts
 	python3 eval/charts.py
 
-all: corpus eval ablation baselines charts   ## full pipeline
+all: corpus eval ablation baselines kyb charts   ## full pipeline
 
 offline:          ## force offline mode end-to-end
 	SENTINEL_FORCE_OFFLINE=1 $(MAKE) all

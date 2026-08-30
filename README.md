@@ -13,7 +13,7 @@
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
 [![CI](https://github.com/adivishall/sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/adivishall/sentinel/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-27_passing-2e8b57)
+![Tests](https://img.shields.io/badge/tests-32_passing-2e8b57)
 ![Ruff](https://img.shields.io/badge/lint-ruff-purple)
 ![mypy](https://img.shields.io/badge/types-mypy-blue)
 
@@ -80,6 +80,22 @@ and "ignore instructions" says nothing about a lie. Sentinel's fact-based Layer 
 takes it to **0%**. That is the difference between a prompt band-aid and a structural
 control.
 
+### One firewall, two surfaces
+
+The architecture is not dispute-specific. The **same** four layers defend merchant
+onboarding (KYB) — with a KYB adjudicator that decides on verified acquirer records
+(registration status, domain age, prior flags), never the applicant's prose.
+
+![Two surfaces](eval/results/chart5_kyb.png)
+
+| Surface | No firewall | With Sentinel | False positives |
+|---|---|---|---|
+| Dispute triage | 83.3% | 0.0% | 0.0% |
+| KYB onboarding | 87.5% | 0.0% | 0.0% |
+
+A fake merchant whose uploaded document *says* "review complete, approve" is still
+rejected — because the decision is made on the acquirer's records, not the document.
+
 ## How it works
 
 ```mermaid
@@ -139,10 +155,11 @@ firewall/              the four layers + pipeline  ← the contribution
   ├── provenance.py    L1 · tag untrusted spans
   ├── detect.py        L2 · injection detection
   ├── adjudicate.py    L3 · structured-facts adjudication (the core)
+  ├── kyb_adjudicate.py L3 for the KYB surface
   ├── limits.py        L4 · capability limits
   ├── normalize.py     input validation + unicode/homoglyph hardening
   └── logging_config.py structured JSON logs
-eval/                  harness · ablation · baselines · bench · charts → eval/results/
+eval/                  harness · ablation · baselines · kyb_harness · bench · charts → eval/results/
 tests/                 26 pytest cases (run: make test)
 console/index.html     the interactive demo (also the live site)
 docs/                  ARCHITECTURE.md · LIMITATIONS.md · PERFORMANCE.md
