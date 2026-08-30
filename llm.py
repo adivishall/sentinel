@@ -179,6 +179,14 @@ def _offline_adjudicator(user: str) -> str:
     facts = json.loads(user)
     supported = facts.get("evidence_supports_claim", False)
     within = facts.get("amount", 0) <= facts.get("policy_auto_limit", 0)
+    # A parcel still in transit is a premature dispute -> hold for a human, don't deny.
+    if facts.get("claimed_reason") == "in_transit":
+        return json.dumps(
+            {
+                "verdict": "escalate",
+                "why": "Item still in transit; premature dispute, held for review.",
+            }
+        )
     if supported and within:
         return json.dumps(
             {
