@@ -27,6 +27,18 @@ from firewall.normalize import InvalidSubmission, validate
 ALL = ("L1", "L2", "L3", "L4")
 _log = get_logger("firewall.pipeline")
 
+# verdict (approve/deny/escalate) -> (effect action, irreversible) per surface.
+DISPUTE_EFFECT_MAP = {
+    "approve": ("approve_refund", True),
+    "deny": ("deny", False),
+    "escalate": ("escalate", False),
+}
+KYB_EFFECT_MAP = {
+    "approve": ("approve_merchant", True),
+    "deny": ("reject_merchant", False),
+    "escalate": ("manual_review", False),
+}
+
 
 @dataclass
 class Decision:
@@ -38,7 +50,15 @@ class Decision:
         self.trail.append({"layer": layer, "detail": detail})
 
 
-def run_guarded(agent_run, submission: str, ledger: dict, layers=ALL) -> Decision:
+def run_guarded(
+    agent_run,
+    submission: str,
+    ledger: dict,
+    layers=ALL,
+    *,
+    adjudicator=adjudicate.adjudicate,
+    effect_map=DISPUTE_EFFECT_MAP,
+) -> Decision:
     layers = set(layers)
     d = Decision(effect=Effect("pending"))
 
@@ -72,18 +92,18 @@ def run_guarded(agent_run, submission: str, ledger: dict, layers=ALL) -> Decisio
 
     # decision
     if "L3" in layers:
-        verdict = adjudicate.adjudicate(submission, ledger)
+        verdict = adjudicator(submission, ledger)
         d.log(
             "L3_adjudicate",
             {"verdict": verdict["verdict"], "why": verdict["why"], "facts": verdict["facts"]},
         )
-        vmap = {"approve": "approve_refund", "deny": "deny", "escalate": "escalate"}
-        amt = verdict["facts"]["amount"]
+        action, irreversible = effect_map[verdict["verdict"]]
+        amt = verdict["facts"].get("amount", 0)
         decided = Effect(
-            vmap[verdict["verdict"]],
+            action,
             amt if verdict["verdict"] == "approve" else 0,
             verdict["why"],
-            irreversible=(verdict["verdict"] == "approve"),
+            irreversible=irreversible,
         )
         if agent_effect.action != decided.action:
             d.blocked_by = "L3_adjudicate"

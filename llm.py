@@ -214,6 +214,7 @@ _OFFLINE_ROUTES = {
     "dispute_hardened": _offline_dispute_agent_hardened,
     "kyb": _offline_kyb_agent,
     "adjudicator": _offline_adjudicator,
+    "kyb_adjudicator": _offline_adjudicator,
 }
 
 
