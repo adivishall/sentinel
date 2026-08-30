@@ -17,7 +17,9 @@ import json
 import os
 import re
 
-MODEL = os.environ.get("SENTINEL_MODEL", "claude-sonnet-4-5-20250929")
+# Default to the latest flagship; override with SENTINEL_MODEL for a cheaper/faster
+# eval loop (e.g. "claude-haiku-4-5" or "claude-sonnet-5").
+MODEL = os.environ.get("SENTINEL_MODEL", "claude-opus-5")
 
 
 def have_key() -> bool:
@@ -37,11 +39,19 @@ _client = None
 
 
 def _live_complete(system: str, user: str, max_tokens: int = 1024) -> str:
+    """One Claude call. Deliberately minimal (no temperature/thinking params --
+    those are rejected on current models) so it works across SDK versions. The
+    SDK retries 429/5xx automatically; callers add fail-safe parsing on top."""
     global _client
     if _client is None:
-        import anthropic
-
-        _client = anthropic.Anthropic()
+        try:
+            import anthropic
+        except ImportError as e:  # pragma: no cover
+            raise RuntimeError(
+                "Live mode needs the Anthropic SDK: pip install 'anthropic' "
+                "(or: pip install -e '.[live]')."
+            ) from e
+        _client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY / ant profile
     resp = _client.messages.create(
         model=MODEL,
         max_tokens=max_tokens,

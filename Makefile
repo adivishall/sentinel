@@ -40,5 +40,14 @@ lint:             ## ruff + black --check + mypy
 bench:            ## firewall latency / throughput benchmark
 	SENTINEL_FORCE_OFFLINE=1 python3 eval/bench.py
 
+live-check:       ## preflight: one Claude call to verify key + model
+	python3 scripts/live_check.py
+
+live:             ## live sample run (cheap) vs offline
+	python3 scripts/live_run.py
+
+live-full:        ## live run over the whole corpus (costlier)
+	python3 scripts/live_run.py --full
+
 clean:
 	rm -f eval/results/*.png eval/results/*.json red/attacks/corpus.json
