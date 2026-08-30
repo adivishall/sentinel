@@ -1,0 +1,7 @@
+{
+  "attacks": 8,
+  "controls": 5,
+  "asr_unguarded": 0.875,
+  "asr_guarded": 0.0,
+  "fp_rate": 0.0
+}
