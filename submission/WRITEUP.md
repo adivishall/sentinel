@@ -84,6 +84,10 @@ financial LLM agent's irreversible actions. It ships with:
 The false-positive number matters as much as the breach number: a firewall that
 protects the bank by blocking real customers is worthless. Sentinel does neither.
 
+**The same firewall defends a second surface** — KYB merchant onboarding: 87.5% →
+0.0%, 0% false positives, via a KYB adjudicator that decides on verified acquirer
+records, not the applicant's document.
+
 **The ablation is the honest core of the result.** We disable layers and re-measure:
 
 | Configuration | Attack success |
@@ -142,9 +146,10 @@ faithful *simulation* of the documented failure mode (a naive LLM that obeys
 in-context instructions and believes stated reasons), and — importantly — its
 gullibility is not keyed to the injection detector, so the win comes from Layer 3
 checking the facts, not from a detector matching its own trigger words. The corpus
-is 12 hand-authored seeds × 5 amounts (the taxonomy is the claim, not the count),
-and only the dispute surface is benchmarked; the KYB agent is a demonstrated second
-surface, not a second benchmark. The trust-boundary architecture and the
+is 12 hand-authored seeds × 5 amounts (the taxonomy is the claim, not the count).
+Two surfaces are benchmarked — dispute triage (83.3%→0%) and KYB onboarding
+(87.5%→0%), both at 0% false positives — proving the architecture is not
+dispute-specific. The trust-boundary architecture and the
 structured-adjudication backstop are the general, framework-agnostic contribution.
 
 **Code:** https://github.com/adivishall/sentinel
