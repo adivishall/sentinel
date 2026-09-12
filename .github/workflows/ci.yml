@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "feat/**"]
+    branches: [main, "feat/**", "release/**"]
   pull_request:
     branches: [main]
 
@@ -22,7 +22,18 @@ jobs:
         run: python -m black --check .
       - name: Type check (mypy)
         run: python -m mypy
-      - name: Tests (pytest)
+      - name: Tests + coverage (pytest)
         env:
           SENTINEL_FORCE_OFFLINE: "1"
-        run: python -m pytest tests/ -q
+        run: >-
+          python -m pytest tests/ -q
+          --cov=firewall --cov=agents --cov=sentinel_api
+          --cov-report=term-missing --cov-fail-under=85
+
+      - name: Offline evaluation smoke test
+        env:
+          SENTINEL_FORCE_OFFLINE: "1"
+        run: |
+          python eval/harness.py
+          python eval/ablation.py
+          python eval/heldout.py

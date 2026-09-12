@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sentinel-firewall"
-version = "0.2.0"
+version = "1.0.0"
 description = "An AI firewall for back-office LLM pipelines (dispute triage, KYC/KYB, AML)."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,14 +16,14 @@ dependencies = []  # offline core has zero runtime deps
 [project.optional-dependencies]
 live = ["anthropic==0.40.0"]
 charts = ["matplotlib==3.9.2"]
-dev = ["pytest==8.3.3", "ruff==0.16.5", "black==26.5.1", "mypy==2.3.1"]
+dev = ["pytest==8.3.3", "pytest-cov==5.0.0", "ruff==0.16.5", "black==26.5.1", "mypy==2.3.1"]
 
 [project.scripts]
 sentinel-eval = "eval.harness:run"
 sentinel-ablation = "eval.ablation:main"
 
 [tool.setuptools]
-py-modules = ["llm"]
+py-modules = ["llm", "sentinel_api"]
 packages = ["agents", "red", "firewall", "eval"]
 
 [tool.ruff]
@@ -43,8 +43,18 @@ python_version = "3.11"
 ignore_missing_imports = true
 warn_unused_ignores = false
 follow_imports = "silent"
-files = ["firewall"]
+files = ["firewall", "sentinel_api.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.coverage.run]
+source = ["firewall", "agents", "sentinel_api"]
+omit = ["*/__pycache__/*"]
+
+[tool.coverage.report]
+# Security-critical modules are held to a high bar; the API's serve() loop and
+# unreachable defensive branches keep the aggregate a touch lower.
+fail_under = 85
+show_missing = true

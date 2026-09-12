@@ -6,16 +6,20 @@ cognition excluded), measured by `python3 eval/bench.py` on the 78-case corpus.
 
 ## Measured overhead
 
+Representative run (numbers are machine-dependent; reproduce with `make bench`):
+
 | Metric | Value |
 |---|---|
 | Decisions measured | 1,560 |
-| Mean latency | **0.074 ms** |
-| p50 / p95 / p99 | 0.072 / 0.097 / 0.104 ms |
-| Throughput (single core) | **~13,500 decisions/sec** |
+| Mean latency | **~0.08 ms** |
+| p50 / p95 / p99 | ~0.08 / ~0.11 / ~0.11 ms |
+| Throughput (single core) | **~12,000 decisions/sec** |
 
-Context: a real back-office LLM call is 300–2000 ms. The firewall adds well under
-0.1 ms — **~4–5 orders of magnitude smaller than the decision it protects.** It is
-never the bottleneck.
+Context: a real back-office LLM call is 300–2000 ms. The firewall adds ~0.1 ms —
+**~4 orders of magnitude smaller than the decision it protects.** It is never the
+bottleneck. (This is *firewall* overhead only, with agent/LLM cognition excluded —
+we never mix model latency into this figure. Live-mode latency is dominated by the
+Claude call and is reported separately by `make live`.)
 
 ## Complexity
 

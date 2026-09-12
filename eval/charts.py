@@ -187,6 +187,52 @@ def chart_kyb(s=None, path="eval/results/chart5_kyb.png"):
     return path
 
 
+def chart_heldout(s=None, path="eval/results/chart6_heldout.png"):
+    """Dev corpus vs independently authored held-out set (anti-circularity)."""
+    import json as _j
+
+    if not os.path.exists("eval/results/heldout.json"):
+        return None
+    ho = _j.load(open("eval/results/heldout.json"))
+    summ = _j.load(open("eval/results/summary.json"))
+    import numpy as np
+
+    labels = ["Development\ncorpus", "Held-out\n(unseen wording)"]
+    ug = [summ["asr_unguarded"] * 100, ho["asr_unguarded"] * 100]
+    g = [summ["asr_guarded"] * 100, ho["asr_guarded"] * 100]
+    x = np.arange(len(labels))
+    w = 0.36
+    fig, ax = plt.subplots(figsize=(7.0, 4.6))
+    ax.bar(x - w / 2, ug, w, label="No firewall", color=RED)
+    ax.bar(x + w / 2, g, w, label="With Sentinel", color=BLUE)
+    for i, v in enumerate(ug):
+        ax.text(i - w / 2, v + 1.5, f"{v:.1f}%", ha="center", fontweight="bold")
+    for i, v in enumerate(g):
+        ax.text(i + w / 2, v + 1.5, f"{v:.1f}%", ha="center", fontweight="bold")
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_ylabel("Attack success rate (%)")
+    ax.set_ylim(0, 100)
+    ax.set_title("Generalisation: dev vs held-out (0% both, 0% FP)", fontweight="bold")
+    ax.legend()
+    ax.grid(axis="y", color=GRID)
+    ax.set_axisbelow(True)
+    ax.text(
+        0.5,
+        -0.2,
+        f"Held-out L2 lexical recall {ho['l2_detection_recall'] * 100:.0f}% — "
+        f"L3 (facts) is the backstop. FP {ho['fp_rate'] * 100:.0f}%.",
+        transform=ax.transAxes,
+        ha="center",
+        fontsize=9,
+        color=INK,
+    )
+    fig.tight_layout()
+    fig.savefig(path, dpi=140, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
 def main():
     s = _load()
     p1 = chart_asr(s)
@@ -194,7 +240,8 @@ def main():
     p3 = chart_ablation(s)
     p4 = chart_baselines()
     p5 = chart_kyb()
-    print("charts:", p1, p2, p3, p4, p5)
+    p6 = chart_heldout()
+    print("charts:", p1, p2, p3, p4, p5, p6)
 
 
 if __name__ == "__main__":
