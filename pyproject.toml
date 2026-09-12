@@ -16,7 +16,7 @@ dependencies = []  # offline core has zero runtime deps
 [project.optional-dependencies]
 live = ["anthropic==0.40.0"]
 charts = ["matplotlib==3.9.2"]
-dev = ["pytest==8.3.3", "ruff==0.16.5", "black==26.5.1", "mypy==2.3.1"]
+dev = ["pytest==8.3.3", "pytest-cov==5.0.0", "ruff==0.16.5", "black==26.5.1", "mypy==2.3.1"]
 
 [project.scripts]
 sentinel-eval = "eval.harness:run"
@@ -48,3 +48,13 @@ files = ["firewall", "sentinel_api.py"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.coverage.run]
+source = ["firewall", "agents", "sentinel_api"]
+omit = ["*/__pycache__/*"]
+
+[tool.coverage.report]
+# Security-critical modules are held to a high bar; the API's serve() loop and
+# unreachable defensive branches keep the aggregate a touch lower.
+fail_under = 85
+show_missing = true
