@@ -76,7 +76,7 @@ curl -s -X POST localhost:8000/api/evaluate -H 'Content-Type: application/json' 
 
 ## 4:40 — Engineering (20s)
 
-> "73 tests at ~91% coverage, ruff/black/mypy clean, CI with a security smoke test,
+> "82 tests at ~91% coverage, ruff/black/mypy clean, CI with a security smoke test,
 > a zero-dependency HTTP API, Docker, and a live-Claude mode that runs the
 > *identical* firewall."
 
@@ -93,5 +93,5 @@ curl -s -X POST localhost:8000/api/evaluate -H 'Content-Type: application/json' 
 ```bash
 make offline     # prints ASR 83.3% -> 0%, ablation, baselines, KYB, held-out; writes charts
 make demo        # opens the console locally (file://)
-make test        # 73 tests
+make test        # 82 tests
 ```
