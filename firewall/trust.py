@@ -79,11 +79,22 @@ class UntrustedText:
         message also mentions 'in transit' tracking (matches the original
         adjudicator's precedence)."""
         t = self.text.lower()
-        if re.search(r"never (arrived|received|delivered)|not delivered|non[- ]receipt", t):
+        if re.search(
+            r"never (arrived|received|delivered|reached|came|turned up|showed up)"
+            r"|not delivered|non[- ]?receipt"
+            r"|(has ?n'?t|have ?n'?t|had ?n'?t|did ?n'?t|has not|have not|still (has|had) not)"
+            r".{0,15}(arriv|reach|deliver|came|come|turn(ed)? up|show(ed)? up)",
+            t,
+        ):
             return ClaimType.NON_RECEIPT
         if re.search(r"in transit|still (on the way|coming)|not (yet )?arrived", t):
             return ClaimType.IN_TRANSIT
-        if re.search(r"duplicate|charged twice|two charges|charged.{0,10}twice", t):
+        if re.search(
+            r"duplicate|charged (me )?twice|billed .{0,15}(twice|two times)"
+            r"|(two|2|double|multiple) .{0,12}(charges|times|entries|debits)"
+            r"|charged .{0,12}(twice|two times|multiple times)",
+            t,
+        ):
             return ClaimType.DUPLICATE
         if re.search(
             r"cancel(l)?ed?.{0,20}order|order.{0,20}cancel|cancelled.{0,20}(it|within)", t
