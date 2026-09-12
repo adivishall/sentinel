@@ -1,4 +1,4 @@
-.PHONY: setup corpus eval charts all demo offline clean
+.PHONY: setup corpus eval heldout charts all demo offline clean test lint bench live-check live live-full ablation baselines kyb
 
 setup:            ## install deps (only needed for live mode + charts)
 	pip install -r requirements.txt
@@ -18,10 +18,13 @@ baselines:        ## beat-the-obvious-defence comparison -> results/baselines.js
 kyb:              ## KYB second-surface benchmark -> results/kyb.json
 	SENTINEL_FORCE_OFFLINE=1 python3 eval/kyb_harness.py
 
-charts:           ## render the three submission charts
+heldout:          ## held-out (anti-circularity) evaluation -> results/heldout.json
+	SENTINEL_FORCE_OFFLINE=1 python3 eval/heldout.py
+
+charts:           ## render the submission charts
 	python3 eval/charts.py
 
-all: corpus eval ablation baselines kyb charts   ## full pipeline
+all: corpus eval ablation baselines kyb heldout charts   ## full pipeline
 
 offline:          ## force offline mode end-to-end
 	SENTINEL_FORCE_OFFLINE=1 $(MAKE) all
