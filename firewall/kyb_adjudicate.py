@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 
 from firewall.adjudicate import _parse_verdict
+from firewall.trust import KYBFacts
 from llm import complete
 
 KYB_ADJUDICATOR_SYSTEM = (
@@ -30,14 +31,9 @@ MIN_BUSINESS_AGE = 90
 
 
 def extract_facts(application: str, records: dict) -> dict:
-    """Verified onboarding facts. Application prose is deliberately ignored."""
-    return {
-        "registration_status": records.get("registration_status", "unverified"),
-        "domain_age_days": records.get("domain_age_days", 0),
-        "business_age_days": records.get("business_age_days", 0),
-        "prior_flags": records.get("prior_flags", 0),
-        "mcc_risk": records.get("mcc_risk", "unknown"),
-    }
+    """Verified onboarding facts. Application prose is deliberately ignored --
+    only the acquirer's own records (typed as ``KYBFacts``) reach the decision."""
+    return KYBFacts.from_records(records).as_adjudicator_input()
 
 
 def _decide_offline(f: dict) -> dict:
