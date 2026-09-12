@@ -4,11 +4,20 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 
-import matplotlib
+try:
+    import matplotlib
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+except ImportError:  # charts are optional polish; metrics (JSON) never depend on them
+    print(
+        "charts: matplotlib not installed — skipping PNG generation "
+        "(all metrics/JSON are already written). Install with: pip install matplotlib",
+        file=sys.stderr,
+    )
+    sys.exit(0)
 
 RED, BLUE, INK, GRID = "#c0392b", "#2e6da4", "#1c2230", "#dcd8d0"
 plt.rcParams.update(

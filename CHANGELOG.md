@@ -41,7 +41,7 @@ high-stakes back-office LLM agents.
   badge) are now consistent and working.
 - Claim classifier broadened to natural paraphrases (fixes false positives found by
   the held-out set), with dev corpus results unchanged.
-- README rewritten; test badge 26 → 73; performance numbers refreshed.
+- README rewritten; test badge 26 → 82; performance numbers refreshed.
 - Version 0.2.0 → 1.0.0.
 
 ### Fixed
@@ -56,7 +56,7 @@ high-stakes back-office LLM agents.
 - Held-out: 16.7%* → **0.0%**, FP **0.0%** (12 independent attacks).
 - KYB: 87.5% → **0.0%**, FP **0.0%** (8 attacks, 5 controls).
 - Ablation: detection-only leaks 6.7%; L3 alone closes it.
-- 73 tests, ~91% coverage; ruff / black / mypy clean.
+- 82 tests, ~91% coverage; ruff / black / mypy clean.
 
 \* Offline victim agent is lexical, so it under-fires on novel wording; the held-out
 set validates the firewall's generalisation and false-positive behaviour.
