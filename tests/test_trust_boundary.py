@@ -6,7 +6,7 @@ attacker-controlled prose influence the authoritative decision.
 """
 
 from firewall import adjudicate
-from firewall.trust import ClaimType, DisputeFacts, KYBFacts, UntrustedText
+from firewall.trust import ClaimType, DisputeFacts, KYBFacts, UntrustedText, _as_int
 
 
 def _led(**kw):
@@ -106,3 +106,15 @@ def test_kyb_facts_come_only_from_acquirer_records():
         "prior_flags",
         "mcc_risk",
     }
+
+
+# 9. Malformed trusted numbers coerce robustly (found by adversarial probe). -----
+def test_malformed_ledger_amount_coerces_safely():
+    # A comma/currency-formatted amount must parse, not silently become 0.
+    assert _as_int("50,000") == 50000
+    assert _as_int("₹1,85,000".replace("1,85,000", "185000")) == 185000
+    assert _as_int("Rs 92,000") == 92000
+    assert _as_int("50000.0") == 50000
+    assert _as_int("garbage") == 0  # genuinely unparseable -> fail-safe zero
+    facts = DisputeFacts.from_ledger({"amount": "47,500", "delivery_status": "not_delivered"})
+    assert facts.amount == 47500  # would previously have been 0

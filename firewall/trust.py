@@ -32,16 +32,29 @@ from enum import StrEnum
 
 
 def _as_int(value: object, default: int = 0) -> int:
-    """Coerce a ledger value to int, falling back safely on bad/missing data."""
+    """Coerce a ledger value to int, falling back safely on bad/missing data.
+
+    Handles the shapes a real ledger might carry: plain ints, floats, and numeric
+    strings with commas or currency symbols ("₹50,000", "50,000.0"). Anything
+    genuinely unparseable falls back to ``default`` rather than crashing -- and a
+    zero amount is fail-safe (it can never exceed a policy limit)."""
     if isinstance(value, bool):  # bool is an int subclass; treat as not-a-number
         return default
     if isinstance(value, int):
         return value
+    if isinstance(value, float):
+        return int(value)
     if isinstance(value, str):
-        try:
-            return int(value.strip() or default)
-        except ValueError:
+        cleaned = re.sub(r"(?i)^\s*(rs\.?|inr|₹|\$)\s*", "", value.strip()).replace(",", "")
+        if not cleaned:
             return default
+        try:
+            return int(cleaned)
+        except ValueError:
+            try:
+                return int(float(cleaned))  # "50000.0" -> 50000
+            except ValueError:
+                return default
     return default
 
 
