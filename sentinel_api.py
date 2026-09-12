@@ -82,6 +82,17 @@ def evaluate(payload: dict) -> dict:
     if document is not None and not isinstance(document, str):
         raise ApiError(400, "document must be a string")
 
+    # Stateless multi-turn: a "messages" list is joined into one transcript so a
+    # payload split across turns is still evaluated as a whole (see firewall/session.py).
+    messages = payload.get("messages")
+    if messages is not None:
+        if not isinstance(messages, list) or not all(isinstance(m, str) for m in messages):
+            raise ApiError(400, "messages must be a list of strings")
+        payload = dict(payload)
+        payload.setdefault(
+            "submission", "\n".join(f"Turn {i + 1}: {m}" for i, m in enumerate(messages))
+        )
+
     if surface == "dispute":
         text = str(_require(payload, "submission", "application"))
         facts = _require(payload, "ledger", "records")

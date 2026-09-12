@@ -74,6 +74,7 @@ class Decision:
     trail: list = field(default_factory=list)
     # --- structured decision record -------------------------------------------
     request_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    session_id: str | None = None
     surface: str = "dispute"
     input_hash: str = ""
     threat_level: str = "none"
@@ -99,6 +100,7 @@ class Decision:
     def to_dict(self) -> dict:
         return {
             "request_id": self.request_id,
+            "session_id": self.session_id,
             "audit_id": self.audit_id,
             "timestamp": self.timestamp,
             "surface": self.surface,
