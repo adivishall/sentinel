@@ -161,6 +161,9 @@ cd sentinel
 make offline      # full pipeline, NO API key: corpus → eval → ablation → baselines → kyb → heldout → charts
 make demo         # open the interactive pipeline console
 make test         # 82 tests (offline, no key)
+# `make offline` prints every metric with zero dependencies. Chart PNGs are the one
+# extra: they need matplotlib (pip install matplotlib) — if it's missing, the run
+# still succeeds and just skips the images.
 ```
 
 ### API — evaluate over HTTP (zero dependencies)
