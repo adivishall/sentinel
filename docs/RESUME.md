@@ -26,7 +26,7 @@ no claim of production deployment, real customers, or universal security.
   false-claim attacks.
 - **Shipped it as a real, inspectable system:** deterministic offline mode (no API
   key) *and* a live-Claude mode running the identical firewall, a zero-dependency
-  HTTP API, Docker deployment, an interactive web console, 82 tests at ~91%
+  HTTP API, Docker deployment, an interactive web console, 83 tests at ~91%
   coverage, and CI (ruff/black/mypy/pytest + a security smoke test).
 
 ## Interview explanation (~60 seconds)

@@ -125,7 +125,7 @@ generalise to all LLMs.
 
 ```bash
 make offline                 # all offline metrics + charts
-make test                    # 82 tests
+make test                    # 83 tests
 make bench                   # latency / throughput
 python3 eval/heldout.py      # just the held-out set
 ```

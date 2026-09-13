@@ -13,7 +13,7 @@
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
 [![CI](https://github.com/adivishall/sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/adivishall/sentinel/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-82_passing-2e8b57)
+![Tests](https://img.shields.io/badge/tests-83_passing-2e8b57)
 ![Coverage](https://img.shields.io/badge/coverage-~91%25-2e8b57)
 ![Ruff](https://img.shields.io/badge/lint-ruff-purple)
 ![mypy](https://img.shields.io/badge/types-mypy-blue)
@@ -160,7 +160,7 @@ git clone https://github.com/adivishall/sentinel.git
 cd sentinel
 make offline      # full pipeline, NO API key: corpus → eval → ablation → baselines → kyb → heldout → charts
 make demo         # open the interactive pipeline console
-make test         # 82 tests (offline, no key)
+make test         # 83 tests (offline, no key)
 # `make offline` prints every metric with zero dependencies. Chart PNGs are the one
 # extra: they need matplotlib (pip install matplotlib) — if it's missing, the run
 # still succeeds and just skips the images.
@@ -217,7 +217,7 @@ firewall/              the four layers + pipeline  ← the contribution
   ├── normalize.py     validation + unicode/homoglyph hardening
   └── logging_config.py structured JSON logs
 eval/                  harness · ablation · baselines · kyb · heldout · bench · charts → eval/results/
-tests/                 82 pytest cases (run: make test)
+tests/                 83 pytest cases (run: make test)
 console/index.html     the interactive demo (also the live site)
 Dockerfile             offline-by-default container; .dockerignore
 docs/                  ARCHITECTURE · THREAT_MODEL · EVALUATION · TECHNICAL_REPORT · API ·
@@ -237,12 +237,12 @@ layers of the same agentic-commerce trust stack.
 Built to be run and inspected, not just demoed:
 
 ```bash
-make test      # 82 pytest cases (offline, no key) — layers, trust boundary, sessions, API, edge cases
+make test      # 83 pytest cases (offline, no key) — layers, trust boundary, sessions, API, edge cases
 make lint      # ruff + black --check + mypy, all clean
 make bench     # firewall latency / throughput
 ```
 
-- **Tested:** 82 tests at ~91% coverage (security-critical modules 90–100%), incl.
+- **Tested:** 83 tests at ~91% coverage (security-critical modules 90–100%), incl.
   trust-boundary proofs, held-out generalisation, multi-turn attacks, API, homoglyph
   evasion, malformed/empty input fail-safe, and a regression test locking in 0%
   attack success / 0% false positives.
