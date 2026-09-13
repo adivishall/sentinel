@@ -1,6 +1,6 @@
 # Testing
 
-Sentinel ships **82 tests** at **~91% coverage** (security-critical firewall modules
+Sentinel ships **83 tests** at **~91% coverage** (security-critical firewall modules
 90–100%). Tests are the contract that protects the important behaviour — the trust
 boundary, the 0%/0% result, and the fail-safe.
 
