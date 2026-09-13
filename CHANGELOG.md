@@ -84,3 +84,17 @@ Pre-release hackathon build: L1–L4 firewall, dispute + KYB surfaces, offline a
 live modes, attack taxonomy, ablation, baselines, benchmarks, structured logging,
 unicode/homoglyph normalisation, CI (ruff/black/mypy/pytest), and the GitHub Pages
 demo. See git history before the `release/resume-ready-v1` branch.
+
+## [Unreleased]
+
+### Removed
+- `docs/RESUME.md`, `social/`, `submission/build_deck.py` and the generated deck —
+  presentation material that did not belong in an engineering repository.
+- `docs/FINAL_RELEASE_AUDIT.md`, `docs/FINAL_VALIDATION.md` — self-graded release
+  report cards, superseded by CI and `docs/TESTING.md`.
+
+### Changed
+- README now scopes the headline evaluation explicitly: the numbers are produced
+  against a *simulated* agent in offline mode, `n` is small, and no live-LLM
+  results are published. Also records that Layer 3 blocks all 50 successful
+  attacks while L1/L2/L4 block none.
