@@ -14,7 +14,7 @@
 
 [![CI](https://github.com/adivishall/sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/adivishall/sentinel/actions/workflows/ci.yml)
 ![Tests](https://img.shields.io/badge/tests-83_passing-2e8b57)
-![Coverage](https://img.shields.io/badge/coverage-~91%25-2e8b57)
+![Coverage](https://img.shields.io/badge/coverage-91%25_(firewall%2Fapi)-2e8b57)
 ![Ruff](https://img.shields.io/badge/lint-ruff-purple)
 ![mypy](https://img.shields.io/badge/types-mypy-blue)
 
@@ -51,6 +51,41 @@ own AI is simply *persuaded*.
 independently authored held-out set. Reproduce with `make offline` — no API key.*
 
 </div>
+
+> ### What these numbers are, and what they are not
+>
+> **Read this before quoting the table.** These results come from Sentinel's
+> *offline* mode (`"mode": "offline"` in `eval/results/summary.json`). The
+> firewall under test is real code, but **the attacked agent is a deterministic
+> rule-based simulation of a gullible LLM** (`llm.py`), not a live model.
+>
+> That makes the numbers **reproducible but not empirical**. Specifically:
+>
+> - The **83.3% unguarded baseline** measures how many corpus attacks trip the
+>   simulated agent's approve-rule. It is a property of a simulation the same
+>   author wrote — not a measurement of any real model's susceptibility.
+> - The **0% guarded result** is close to tautological *by design*: once the
+>   verdict is a pure function of ledger fields (`DisputeFacts.supports()`), no
+>   amount of text can move it. That is the architectural point, but it means the
+>   0% demonstrates **that the design does what it claims**, not that it survived
+>   a determined human attacker.
+> - **n is small.** 60 dev attacks and 12 held-out attacks carry wide confidence
+>   intervals; treat one-decimal precision as noise.
+> - On the held-out set only **2 of 12** attacks succeed unguarded (16.7%), so
+>   "held at 0%" there is a weaker result than it sounds.
+>
+> **What the evaluation does support:** the trust boundary is enforced
+> structurally and is type-checked; the layer ablation is real; and Layer 3 is
+> load-bearing while the other layers are not. A live-LLM path exists
+> (`make live-full`) but **has not been run at corpus scale, and no live results
+> are published in this repo.** Until it is, the security claim is scoped to:
+> *this architecture is immune to text-level attacks by construction.*
+
+> **One measured finding worth naming:** across all 60 attacks, the blocking
+> layer is `{"L3_adjudicate": 50}` — **L1, L2 and L4 block nothing the ablation
+> can detect.** Four layers ship; one carries the result. The others are
+> defence-in-depth and explainability, and the honest reading is that this system
+> is a one-idea system with three supporting layers, not a four-layer defence.
 
 ## Why the obvious defence isn't enough
 
@@ -221,7 +256,7 @@ tests/                 83 pytest cases (run: make test)
 console/index.html     the interactive demo (also the live site)
 Dockerfile             offline-by-default container; .dockerignore
 docs/                  ARCHITECTURE · THREAT_MODEL · EVALUATION · TECHNICAL_REPORT · API ·
-                       DEPLOYMENT · DECISIONS · TESTING · LIMITATIONS · PERFORMANCE · RESUME · DEMO
+                       DEPLOYMENT · DECISIONS · TESTING · LIMITATIONS · PERFORMANCE · DEMO
 .github/workflows/     CI: ruff + black + mypy + pytest + coverage + offline smoke test
 ```
 
