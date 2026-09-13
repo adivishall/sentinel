@@ -7,7 +7,7 @@ Last run: final resume-ready pass (branch `release/final-resume-ready`).
 
 | # | Check | Command | Result | Evidence |
 |---|---|---|---|---|
-| 1 | Unit + integration tests | `make test` | ✅ PASS | 82 passed |
+| 1 | Unit + integration tests | `make test` | ✅ PASS | 83 passed |
 | 2 | Coverage gate (≥85%) | `pytest --cov ... --cov-fail-under=85` | ✅ PASS | 91.26% total (firewall/agents/api) |
 | 3 | Lint — ruff | `python3 -m ruff check .` | ✅ PASS | All checks passed |
 | 4 | Format — black | `python3 -m black --check .` | ✅ PASS | 50 files unchanged |
@@ -24,7 +24,7 @@ Last run: final resume-ready pass (branch `release/final-resume-ready`).
 | 15 | API — production startup smoke | `python3 sentinel_api.py` + curl | ✅ PASS | GET /health → 200, POST /api/evaluate → 200 |
 | 16 | Interactive console | `make demo` | ✅ PASS | all 6 attacks BREACH off / denied on; 2 legit approved (verified in browser) |
 | 17 | Fresh clone from GitHub → offline | `git clone <repo> --branch release/final-resume-ready && make offline` | ✅ PASS | clean checkout reproduced all metrics + charts |
-| 18 | Fresh clone → tests / bench / lint | in clean checkout | ✅ PASS | 82 passed; bench ~0.087 ms; mypy clean |
+| 18 | Fresh clone → tests / bench / lint | in clean checkout | ✅ PASS | 83 passed; bench ~0.087 ms; mypy clean |
 | 19 | Charts without matplotlib | simulated ImportError | ✅ PASS | `make offline` still succeeds, prints skip message, exit 0 |
 | 20 | Live Claude mode | `make live-check` / `make live` | ⚠️ NOT AVAILABLE | no `ANTHROPIC_API_KEY` here; code + preflight present, not run |
 | 21 | Docker build | `make docker-build` | ⚠️ NOT AVAILABLE | Docker not installed here; `Dockerfile` + `.dockerignore` written, not built |
