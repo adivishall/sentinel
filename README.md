@@ -39,6 +39,16 @@ own AI is simply *persuaded*.
 
 > **Nobody in the room is defending the defender's AI. That is Sentinel.**
 
+![Sentinel console — a direct-injection dispute with the firewall ON: the L1–L4 pipeline, the victim agent would approve_refund, but L3 decides on verified facts only and returns DENY](docs/images/console-defended.png)
+
+<sub>The interactive console — `make demo`, also the [live site](https://adivishall.github.io/sentinel/). A faithful browser mirror of the Python firewall in `firewall/`; no API key.</sub>
+
+**The hardest case, before → after: adjudication *gaming* — a false claim with no injection to detect.** The injection layer (L2) correctly finds nothing; only the fact-check (L3) stops it — which is exactly why prompt-hardening alone is not enough.
+
+| 🔴 Firewall **OFF** — the unguarded agent is persuaded | 🟢 Firewall **ON** — denied on the bank's own records |
+|---|---|
+| ![Adjudication gaming with the firewall off: BREACH — money released on attacker text, approve_refund on a ₹18,000 claim, threat level none](docs/images/console-gaming-unguarded.png) | ![Adjudication gaming with the firewall on: L2 injection detection OK (no signature), but L3 decides on verified facts — evidence_supports_claim=false — and returns DENY](docs/images/console-gaming-guarded.png) |
+
 ## The result
 
 <div align="center">
