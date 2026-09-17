@@ -256,7 +256,8 @@ tests/                 83 pytest cases (run: make test)
 console/index.html     the interactive demo (also the live site)
 Dockerfile             offline-by-default container; .dockerignore
 docs/                  ARCHITECTURE · THREAT_MODEL · EVALUATION · TECHNICAL_REPORT · API ·
-                       DEPLOYMENT · DECISIONS · TESTING · LIMITATIONS · PERFORMANCE · DEMO
+                       DEPLOYMENT · DECISIONS · TESTING · LIMITATIONS · PERFORMANCE · DEMO ·
+                       INTERVIEW (30s/60s/3-min + Q&A) · RESUME (bullets, each with its command)
 .github/workflows/     CI: ruff + black + mypy + pytest + coverage + offline smoke test
 ```
 
