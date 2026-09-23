@@ -23,7 +23,7 @@ from sentinel.agents.providers.base import Completion
 
 # ---- what a naive instruction-follower reacts to ------------------------------
 _IMPERATIVE = re.compile(
-    r"(ignore|disregard|override|bypass).{0,40}(previous|prior|above|instruction|check)"
+    r"(ignore|disregard|override|bypass).{0,40}(previous|prior|above|instruction|check|rule|guideline|policy)"
     r"|(issue|process|approve|grant|authorli?[sz]e|release|push through).{0,30}(the )?(full |immediate )?(refund|reimbursement|amount|funds)"
     r"|auto[- ]?(resolve|approve).{0,20}(favou?r|customer|refund|merchant)"
     r"|resolve.{0,20}in (the )?(customer|cardholder)'?s? favou?r"

@@ -7,7 +7,7 @@ only ever recommendations -- the agent has no authority; that is the point."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sentinel.agents.providers import LLMProvider, get_provider
 from sentinel.agents.tools import interpret, parse_tool_call
@@ -22,6 +22,9 @@ class AgentSpec:
     system_prompt: str
     tool_surface: frozenset[Capability]
     fallback_tool: str
+    # Per-agent overrides of tool name -> capability (e.g. an account agent's
+    # "allow" allows a login; a transaction agent's "allow" is APPROVE_TRANSACTION).
+    tool_capabilities: dict[str, Capability | None] = field(default_factory=dict)
 
 
 class Agent:
@@ -42,5 +45,10 @@ class Agent:
         c = p.complete(self.spec.system_prompt, prompt, role=role or self.spec.role)
         call = parse_tool_call(c.text, self.spec.fallback_tool)
         return interpret(
-            call, agent=self.spec.name, provider=c.provider, model=c.model, latency_ms=c.latency_ms
+            call,
+            agent=self.spec.name,
+            provider=c.provider,
+            model=c.model,
+            latency_ms=c.latency_ms,
+            overrides=self.spec.tool_capabilities,
         )

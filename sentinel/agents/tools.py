@@ -77,8 +77,10 @@ def interpret(
     provider: str,
     model: str,
     latency_ms: float,
+    overrides: dict[str, Capability | None] | None = None,
 ) -> AIRecommendation:
-    cap = TOOL_CAPABILITY.get(call.tool, Capability.RECOMMEND_ACTION)
+    table = {**TOOL_CAPABILITY, **(overrides or {})}
+    cap = table.get(call.tool, Capability.RECOMMEND_ACTION)
     return AIRecommendation(
         agent=agent,
         recommended_action=call.tool,

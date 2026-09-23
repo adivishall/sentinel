@@ -86,6 +86,7 @@ Respond with ONE JSON object: {"tool":"allow"|"step_up"|"review"|"block","reason
         }
     ),
     fallback_tool="review",
+    tool_capabilities={"allow": None, "step_up": None, "review": None, "block": None},
 )
 
 AML_AGENT = AgentSpec(
