@@ -1,0 +1,8 @@
+{
+  "attacks": 10,
+  "controls": 5,
+  "asr_unguarded": 1.0,
+  "asr_guarded": 0.0,
+  "fp_rate": 0.0,
+  "borderline_to_review": 1.0
+}

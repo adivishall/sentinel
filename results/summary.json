@@ -1,0 +1,72 @@
+{
+  "generated_at": "2026-09-23T23:11:42",
+  "seconds": 2.8,
+  "security": {
+    "n_attacks": 120,
+    "n_controls": 21,
+    "asr_unguarded": 0.833,
+    "asr_guarded": 0.0,
+    "detection_recall": 0.833,
+    "fp_rate": 0.0,
+    "capability_escalation_rate_unguarded": 0.208,
+    "capability_escalation_executed_guarded": 0.0
+  },
+  "heldout": {
+    "n_attacks": 16,
+    "n_deserved_controls": 4,
+    "asr_unguarded": 0.375,
+    "asr_guarded": 0.0,
+    "detection_recall": 0.562,
+    "fp_rate": 0.0
+  },
+  "kyb": {
+    "attacks": 10,
+    "controls": 5,
+    "asr_unguarded": 1.0,
+    "asr_guarded": 0.0,
+    "fp_rate": 0.0,
+    "borderline_to_review": 1.0
+  },
+  "baselines": {
+    "no_defence": 0.833,
+    "hardened_prompt": 0.167,
+    "sentinel": 0.0
+  },
+  "ablation": {
+    "no_controls": 0.833,
+    "prompt_hardening": 0.167,
+    "detection_only": 0.458,
+    "risk_only": 0.833,
+    "policy_only": 0.333,
+    "adjudication_only": 0.0,
+    "adjudication_policy": 0.0,
+    "full": 0.0
+  },
+  "financial": {
+    "precision": 0.737,
+    "recall": 0.269,
+    "false_positive_rate": 0.0016,
+    "false_negative_rate": 0.731,
+    "prevalence": 0.0163,
+    "transactions": 3183
+  },
+  "integrity": {
+    "text_influence_permissive_protected": 0.0,
+    "model_influence_protected": 0.0,
+    "legit_plus_injection_loosened": 0.0,
+    "text_influence_permissive_unguarded": 0.779
+  },
+  "performance": {
+    "normalize": 0.0187,
+    "gateway_inspect": 0.1858,
+    "claim_classify": 0.0214,
+    "evidence_reconcile": 0.0245,
+    "risk_score_transaction": 0.0131,
+    "graph_linked_accounts": 0.0043,
+    "graph_neighborhood_d2": 0.1707,
+    "policy_evaluate": 0.008,
+    "decision_compose": 0.0342,
+    "audit_append": 0.0113,
+    "e2e_dispute_pipeline": 0.5501
+  }
+}

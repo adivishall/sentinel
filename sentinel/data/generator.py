@@ -569,7 +569,7 @@ class _Gen:
         hi = [m for m in self.ds.merchants if m.mcc_risk == "high"] or self.ds.merchants[:2]
         for m in r.sample(hi, min(2, len(hi))):
             ids = []
-            for _ in range(30):
+            for _ in range(60):
                 aid = r.choice(accounts)
                 t = self._txn(
                     aid,
@@ -578,7 +578,7 @@ class _Gen:
                     label="exposure:merchant_abuse",
                 )
                 ids.append(t.transaction_id)
-                if r.random() < 0.2:
+                if r.random() < 0.3:
                     did = self.nid("DSP")
                     self.ds.disputes.append(
                         Dispute(
@@ -637,6 +637,8 @@ class _Gen:
             )
         )
 
+        used.update(d.account_id for d in self.ds.disputes if d.label == "fraud:dispute_fraud")
+
         # F: AI manipulation -- injected documents / narratives on delivered orders
         for t in r.sample(delivered, min(6, len(delivered))):
             did = self.nid("DSP")
@@ -668,6 +670,8 @@ class _Gen:
                 "A malicious document tries to make the AI approve a refund the ledger contradicts.",
             )
         )
+
+        used.update(d.account_id for d in self.ds.disputes if d.label == "fraud:ai_manipulation")
 
         # G: legitimate high value
         premium = pick(
@@ -894,7 +898,7 @@ def generate(
     customers: int = 200,
     merchants: int = 40,
     transactions: int = 5000,
-    days: int = 120,
+    days: int = 240,
 ) -> Dataset:
     g = _Gen(seed, customers, merchants, transactions, days)
     g.merchants()

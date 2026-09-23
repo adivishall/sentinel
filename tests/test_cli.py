@@ -185,15 +185,22 @@ def test_case_policy_audit_replay_scenario(db, capsys, tmp_path):
     assert exp.exists() and "exported" in out
     code, out = _run(capsys, "--db", db, "audit", "list", "--limit", "3")
     assert "#" in out
-    from sentinel.app import SentinelApp
-
-    app = SentinelApp.open(db)
-    dec = next(
-        d
-        for d in app.store.decisions(workflow="dispute", limit=100)
-        if d["final_action"] == "ALLOW" and "policy" in d["controls"]
+    legit = tmp_path / "legit.json"
+    legit.write_text(
+        json.dumps(
+            {
+                "narrative": "My order never arrived after three weeks.",
+                "ledger": {
+                    "amount": 18000,
+                    "delivery_status": "not_delivered",
+                    "policy_auto_limit": 50000,
+                },
+            }
+        )
     )
-    app.store.close()
+    code, out = _run(capsys, "--db", db, "--json", "dispute", "evaluate", str(legit))
+    dec = json.loads(out)
+    assert dec["final_action"] == "ALLOW"
     code, out = _run(
         capsys,
         "--db",

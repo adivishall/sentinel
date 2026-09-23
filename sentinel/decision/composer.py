@@ -164,8 +164,8 @@ def _final_action(
         return FinalAction.REQUIRE_HUMAN_REVIEW, "human review required: " + (
             auth.reason if auth.status is AuthorizationStatus.PENDING_HUMAN else "policy"
         )
-    if policy.outcome is PolicyOutcome.STEP_UP:
-        return FinalAction.STEP_UP, "step-up authentication under policy"
+    if policy.outcome is PolicyOutcome.STEP_UP and auth.status is AuthorizationStatus.GRANTED:
+        return FinalAction.STEP_UP, "step-up authentication under policy; proceeds once satisfied"
     if auth.status is AuthorizationStatus.GRANTED:
         return FinalAction.ALLOW, "allowed: evidence supported, policy ALLOW, authorization granted"
     return FinalAction.DENY, f"denied: authorization {auth.status.value} ({auth.reason})"
@@ -186,6 +186,17 @@ def _decide(
                 ("fail-safe",),
                 (f"policy could not be evaluated: {e}",),
             )
+    elif DETECTION in v.controls and (
+        v.security.severity.rank >= Severity.HIGH.rank or v.security.capability_escalation
+    ):
+        # A detector-only system holds what it detects; it has no policy of its own.
+        pol = PolicyDecision(
+            v.policy.policy_id,
+            v.policy.version,
+            PolicyOutcome.REQUIRE_HUMAN_REVIEW,
+            ("detection-only-hold",),
+            ("policy control disabled; detection held the request for a human",),
+        )
     else:
         pol = PolicyDecision(
             v.policy.policy_id,

@@ -1,0 +1,14 @@
+{
+  "n_attacks": 136,
+  "n_legit": 14,
+  "text_influence_permissive_protected": 0.0,
+  "text_influence_any_change_protected": 0.434,
+  "legit_plus_injection_loosened": 0.0,
+  "legit_plus_injection_tightened": 1.0,
+  "legit_plus_injection_n": 84,
+  "model_influence_protected": 0.0,
+  "model_influence_n": 360,
+  "text_influence_permissive_unguarded": 0.779,
+  "note": "protected-path rates are structural expectations of 0; 'any change' counts outcomes that tightened (e.g. DENY -> BLOCK) and is reported for honesty.",
+  "seconds": 0.2
+}

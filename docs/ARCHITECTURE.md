@@ -1,97 +1,212 @@
 # Architecture
 
-```
-             cardholder submission (UNTRUSTED)
-                        │
-        ┌───────────────▼────────────────┐
-        │  L1  Provenance tagging         │  wrap + label as data
-        └───────────────┬────────────────┘
-        ┌───────────────▼────────────────┐
-        │  L2  Injection detection        │  score untrusted span;
-        └───────────────┬────────────────┘  block early, name the trigger
-                        │
-        ┌───────────────▼────────────────┐
-        │      back-office LLM agent       │  runs on the SANITISED prompt
-        │   (dispute_triage / kyb_review)  │
-        └───────────────┬────────────────┘
-        ┌───────────────▼────────────────┐
-        │  L3  Structured adjudication ★  │  decide on VERIFIED facts only;
-        └───────────────┬────────────────┘  attacker prose never reaches here
-        ┌───────────────▼────────────────┐
-        │  L4  Capability limits          │  hard-gate irreversible / high value
-        └───────────────┬────────────────┘
-                        ▼
-                final effect + full audit trail
+Sentinel is a **modular monolith**: one Python package, one process, one SQLite
+file, one decision engine. Every surface (CLI, HTTP API, console, evaluation)
+calls the same application layer. There is no second implementation of any
+decision anywhere in the repository (tested by `tests/test_invariants.py::test_invariant_10_*`).
+
+## The principle
+
+```text
+AI may recommend. Trusted evidence, deterministic risk controls and explicit policy authorize.
+
+AUTHORITATIVE_DECISION = f(TRUSTED_FACTS, VERIFIED_EVIDENCE, RISK_STATE, POLICY, AUTHORIZATION)
+AUTHORITATIVE_DECISION ≠ f(ATTACKER_CONTROLLED_TEXT)
+AUTHORITATIVE_DECISION ≠ f(MODEL_OUTPUT)
 ```
 
-## Why layer 3 is the core idea
+## The pipeline
 
-Layers 1–2 fight *injection*. But the honest threat is **adjudication gaming**: a
-narrative with no injection at all, written purely to exploit the decision model's
-heuristics (loyalty, urgency, sympathy). No detector catches that, because there
-is nothing anomalous in the text.
+```text
+                         SENTINEL
 
-Sentinel defeats it by construction. The authoritative decision is never made over
-the narrative. We extract **structured facts from the bank's own trusted records**
-(`delivery_status`, `duplicate_confirmed`, `amount`, `policy_auto_limit`, …) and a
-second adjudicator decides using only those. The claim must be backed by verified
-evidence. The attacker can write anything; it changes no fact the adjudicator sees.
+              ┌──────────────────────────┐
+              │   Financial Event Layer  │  transactions · disputes · merchant
+              │                          │  applications · login sessions ·
+              │                          │  AI-agent inputs and outputs
+              └─────────────┬────────────┘
+                            ▼
+              ┌──────────────────────────┐
+              │  Provenance + Ingestion  │  every span typed by TrustClass;
+              │  sentinel/security       │  validation; unicode normalisation
+              └─────────────┬────────────┘
+             ┌──────────────┴──────────────┐
+             ▼                             ▼
+   ┌──────────────────┐         ┌────────────────────┐
+   │ Financial Risk   │         │ AI Security Gateway │
+   │ sentinel/risk    │         │ sentinel/security   │
+   │ transaction      │         │ injection · document│
+   │ behavioural      │         │ context poisoning   │
+   │ entity · graph   │         │ tool manipulation   │
+   │ monitoring       │         │ model-output checks │
+   └─────────┬────────┘         └─────────┬──────────┘
+             └─────────────┬──────────────┘
+                           ▼
+                ┌───────────────────────┐
+                │ Evidence + Adjudication│  claims vs verified facts;
+                │ sentinel/evidence      │  contradiction engine; the model's
+                │                        │  recommendation recorded as a claim
+                └──────────┬────────────┘
+                           ▼
+                ┌───────────────────────┐
+                │ Policy / Capability   │  versioned policy-as-code
+                │ sentinel/policy       │  (JSON, schema-validated) and the
+                │ sentinel/security/    │  capability registry (who may make
+                │   capabilities.py     │  what happen, under what authorization)
+                └──────────┬────────────┘
+                           ▼
+                ┌───────────────────────┐
+                │  Decision Composer    │  the ONE place an outcome is computed
+                │  sentinel/decision    │  from a _TrustedView that has no
+                └──────────┬────────────┘  model-recommendation field
+               ┌───────────┴───────────┐
+               ▼                       ▼
+        ┌─────────────┐        ┌────────────────┐
+        │ Auto Action │        │ Human Review   │  cases; human-only resolution
+        └──────┬──────┘        └───────┬────────┘
+               └────────────┬──────────┘
+                            ▼
+                    ┌───────────────┐
+                    │ Audit / Case  │  SHA-256 hash chain; replay from
+                    │ / Replay      │  stored input snapshots
+                    └───────────────┘
+```
 
-## Trust boundary
+## Primitives
 
-- **Trusted:** system prompt, bank ledger facts.
-- **Untrusted:** cardholder narrative, uploaded documents, merchant-supplied copy.
+Everything composes ten typed, immutable primitives (`sentinel/domain`):
 
-The whole design is an enforcement of that one boundary. `Observation` given to the
-adjudicator carries facts, not prose — so the boundary is structural, not a matter
-of the model "being careful".
+| Primitive | Module | Notes |
+|---|---|---|
+| Entity | `domain/entities.py` | Customer, Account, Merchant, Device, PaymentInstrument, Transaction, Dispute, KYBApplication, LoginSession |
+| Event | `domain/events.py` | in-process typed bus (TransactionRiskAssessed, SecurityThreatDetected, PolicyEvaluated, CaseCreated, DecisionFinalized, AuditRecorded…) |
+| Evidence | `domain/evidence.py` | `Evidence` with `TrustClass` + `EvidenceStatus`; **untrusted sources can never be VERIFIED** (enforced in `__post_init__`) |
+| RiskAssessment | `domain/risk.py` | score, level, named factors with points and evidence ids, feature snapshot for replay |
+| SecurityEvent | `domain/security.py` | severity, threat classes, hashed findings, the capability the model asked for |
+| Capability | `domain/enums.py` + `security/capabilities.py` | READ_* … APPROVE_REFUND, CHANGE_PAYOUT, RELEASE_FUNDS, CLOSE_CASE, ALTER_RISK, SKIP_REVIEW |
+| Policy | `policy/models.py` | versioned rules over a declared field catalog |
+| Decision | `domain/decisions.py` | the canonical record; carries the AI recommendation but is not computed from it |
+| Case | `domain/cases.py` | investigation with a guarded lifecycle and human-only resolution |
+| AuditEvent | `audit/chain.py` | hash-chained; stores hashes of untrusted content, never prose |
 
-## Dual mode
+## Trust classes
 
-`llm.py` routes completions. Live: Claude. Offline: a deterministic simulator that
-models the failure mode faithfully (obeys in-context imperatives / authority claims).
-The **firewall is identical in both modes** — only the agent's cognition is swapped.
+```text
+TRUSTED_INTERNAL      our ledger / records / policies          may authorize
+VERIFIED_EXTERNAL     acquirer / network records we verified   may authorize
+USER_CONTROLLED       cardholder text, chat turns, forms       never
+MERCHANT_CONTROLLED   applications, descriptors, site copy     never
+DOCUMENT_CONTROLLED   uploaded invoices, receipts, PDFs        never
+MODEL_GENERATED       anything an LLM produced                 never
+UNKNOWN               unlabelled third-party content           never
+```
 
-## The trust boundary as types (`firewall/trust.py`)
+`TrustClass.is_trusted` is the only predicate the platform uses, and it is true
+for exactly the first two. `UntrustedContent`, `UntrustedText`, `Claim` and
+`AIRecommendation` all refuse to be constructed with a trusted class.
 
-The boundary above is not just a convention — it is a type contract mypy checks:
+## The trust boundary as types (`security/trust_boundary.py`)
 
-- `UntrustedText` — attacker-controllable text. Opaque: it yields only a coarse
-  `ClaimType` and a content hash. It has **no** accessor that returns evidence.
-- `TrustedFacts` → `DisputeFacts` / `KYBFacts` — immutable records built only from
-  the bank/acquirer data. `supports(ClaimType) -> bool` is the sole evidence check
-  and is a pure function of the trusted facts; the `ClaimType` only selects *which*
-  field to read, it never supplies evidence.
+- `UntrustedText` is opaque: it yields a coarse `ClaimType` (a selector for
+  *which* trusted field to check) and a hash. It has no accessor that returns
+  evidence.
+- `TrustedFacts` (`DisputeFacts`, `KYBFacts`) is built only from records and
+  renders itself as VERIFIED `Evidence`. `supports(ClaimType)` is a pure function
+  of the facts.
+- The reconciliation engine (`evidence/reconcile.py`) compares claims to facts
+  and produces a typed verdict: SUPPORTED, UNSUPPORTED, CONTRADICTED or
+  INSUFFICIENT (fail-safe to a human). The contradiction engine
+  (`evidence/contradiction.py`) is a compatibility table per field.
 
-So you cannot pass a narrative where evidence is expected. `tests/test_trust_boundary.py`
-proves prose cannot flip a verdict and never reaches the adjudicator's input.
+## The composer (`decision/composer.py`)
 
-## The canonical Decision + audit (`firewall/pipeline.py`, `audit.py`)
+`compose(DecisionInputs) -> Decision` builds a `_TrustedView` -- a dataclass
+that has **no field for the model recommendation** -- and computes policy
+outcome, authorization and final action from it. The model's wish is recorded
+on the `Decision` (`ai_recommendation`, `ai_agreed`, `blocked_by`) for
+explainability and measurement only. The only model-derived signal that
+reaches policy is the gateway's structural check on the model's *output*
+(did it request a capability outside its surface), and that can only tighten
+an outcome.
 
-Every evaluation produces one serialisable `Decision` (request_id, session_id,
-surface, input_hash, threat_level, detection, agent_result, adjudication,
-capability_decision, final_action, reason, model metadata, timestamp, audit_id,
-full trail). The **same object** drives the CLI, the HTTP API response, the audit
-trail and test assertions — no parallel representations. `audit.py` appends one
-JSON-lines event per decision (opt-in), storing a **hash** of the raw submission,
-never the prose.
+Final-action mapping (in order): policy BLOCK → BLOCK (if a security finding
+caused it) or DENY; evidence INSUFFICIENT → REQUIRE_HUMAN_REVIEW; evidence not
+supported → DENY; TEMPORARY_HOLD; REQUIRE_HUMAN_REVIEW (policy or pending
+authorization); STEP_UP; authorization GRANTED → ALLOW (the candidate
+capability executes); otherwise DENY.
 
-## Layer 4 as a policy engine (`firewall/limits.py`)
+`controls` exists for the ablation study only. Switching a control off
+reproduces the behaviour of a system that lacks it; the protected path is
+always `FULL`.
 
-Capability limits are a small data-driven policy engine with explainable outcomes
-— `ALLOW` / `REQUIRE_HUMAN_REVIEW` / `BLOCK` — considering action type, amount,
-reversibility and risk. The first matching non-ALLOW rule transforms the effect
-and records a human-readable reason (e.g. "Auto-refund ₹X exceeds ₹Y auto-limit").
+## Capability security (`security/capabilities.py`)
 
-## Multi-turn sessions (`firewall/session.py`)
+Each capability declares risk, reversibility, monetary impact, required
+authorization level, allowed actors and a human-review amount threshold
+(Sentinel demo values, not industry standards). `ActorKind.AI_AGENT` is not in
+the allowed-actor set of any consequential capability; `SKIP_REVIEW` has no
+allowed actor at all. `authorize()` is deterministic and is called with the
+capability the *workflow* is considering, never the one the model asked for.
 
-A `Session` accumulates untrusted turns and re-evaluates the **whole transcript**
-against the fixed trusted ledger each turn, tracking a cumulative risk level. A
-payload split across turns is visible at the transcript level, and L3 still decides
-on facts — so security never depends on the attack being in the latest message.
+## Policy-as-code (`policy/`)
 
-## Application surface (`sentinel_api.py`)
+Policies are JSON documents (YAML accepted when PyYAML is present) validated
+against a field catalog (`policy/models.py::FIELD_CATALOG`) -- unknown fields,
+operators, outcomes and type mismatches are rejected at load time. Evaluation
+is deterministic and order-independent: all rules are evaluated, the most
+severe outcome wins, every match is explained, and a missing required field
+raises (the composer turns that into a fail-safe human review). Shipped
+policies: `dispute-refund` v1/v2, `transaction-authorization` v1/v2,
+`merchant-onboarding`, `account-security`, `investigation`.
 
-A zero-dependency stdlib HTTP API wraps the same pipeline: `POST /api/evaluate`
-(dispute + KYB, optional untrusted `document`, optional multi-turn `messages`),
-`GET /health`, `GET /version`, `GET /api/audit/<id>`. See [API.md](API.md).
+## Risk (`risk/`)
+
+Deterministic, versioned weight tables (`risk/scoring.py`) over feature
+snapshots. Transaction risk reads behavioural baselines, device and geography
+history, merchant and linked-entity profiles; account-security risk reads the
+session record; the monitoring engine recognises structuring-like transfers,
+rapid movement, velocity, geography shifts, high-risk exposure, circular
+transfers, dormant activation and graph-linked rings. Entity profiles are
+computed in a fixed order (device → merchant → account → customer) so nothing
+is circular. Feature snapshots are stored with each decision so replay can
+re-score under another model version without touching source systems.
+
+## Workflows (`decision/workflows.py`)
+
+`run_dispute`, `run_transaction`, `run_kyb`, `run_account_security`,
+`run_investigation`, `run_ai_security`. Each: validates and inspects untrusted
+input, computes risk from trusted records, lets the (deliberately naive) agent
+recommend, reconciles evidence, evaluates the versioned policy, authorizes,
+opens a case when a deterministic rule fires, appends an audit event, emits
+domain events, and returns a `DecisionBundle`. Invalid input never approves --
+it goes to a human.
+
+## Storage (`data/store.py`)
+
+SQLite via the standard library. Entity tables plus `risk_assessments`,
+`risk_factors`, `evidence`, `security_events`, `decisions` (with the replayable
+input snapshot), `policy_decisions`, `ai_recommendations`, `cases`,
+`audit_events`, `replays`, `policy_versions`. All SQL lives in this module;
+repository adapters (`SqliteAuditBackend`, `SqliteCaseRepository`) keep the
+audit chain and case service storage-agnostic.
+
+## Application layer and surfaces
+
+`sentinel/app.py::SentinelApp` owns the store, the runtime (policies,
+gateway, cases, audit chain, event bus, provider) and the entity graph. The
+CLI (`sentinel/cli`), the API (`sentinel/api`) and the console (`ui/`) only
+call it. The evaluation suites call the workflows directly with `persist=False`.
+
+## Dependency direction
+
+```text
+domain ← security ← risk ← evidence ← policy ← decision ← cases/audit ← data ← replay ← app ← api/cli/evaluation
+```
+
+Nothing imports upward. `mypy` runs over the whole package in CI.
+
+## What is deliberately not here
+
+No Kafka, Redis, Neo4j, microservices, Kubernetes or Terraform. The in-process
+event bus, the dict-backed graph and SQLite are honest choices for a portfolio
+system; `docs/INTERVIEW.md` covers where each would change at scale.

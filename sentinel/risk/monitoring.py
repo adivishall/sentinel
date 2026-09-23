@@ -67,9 +67,15 @@ def extract_features(
             rapid_ids = [inb.transaction_id] + [u.transaction_id for u in out]
             break
 
-    # velocity vs baseline
+    # velocity vs baseline (30-day average) and the densest 24h burst in the window
     daily = len(window) / max(1, ctx.window_days)
     velocity_x = daily / ctx.baseline.daily_count if ctx.baseline.daily_count else 0.0
+    burst_24h = 0
+    for i, t in enumerate(window):
+        t0 = parse_ts(t.timestamp)
+        n24 = sum(1 for u in window[i:] if parse_ts(u.timestamp) - t0 <= timedelta(hours=24))
+        burst_24h = max(burst_24h, n24)
+    baseline_daily = ctx.baseline.daily_count
 
     # geography shift: >=3 countries in any 7-day span
     geo_shift = False
@@ -113,6 +119,8 @@ def extract_features(
         "structuring_ids": structuring_ids,
         "rapid_ids": rapid_ids,
         "velocity_x": round(velocity_x, 2),
+        "burst_24h": burst_24h,
+        "baseline_daily": round(baseline_daily, 4),
         "geo_shift": geo_shift,
         "countries": dict(Counter(t.country for t in window)),
         "high_risk_exposure": round(exposure, 3),
@@ -148,6 +156,16 @@ RULES: tuple[Rule, ...] = (
         ),
     ),
     ("velocity", "Unusual transaction velocity", lambda f, m: f"{float(f.get('velocity_x', 0) or 0):.1f}x baseline daily count" if float(f.get("velocity_x", 0) or 0) >= 3 else None),  # type: ignore[arg-type]
+    (
+        "velocity_burst_24h",
+        "Burst of activity within 24 hours",
+        lambda f, m: (
+            f"{int(float(str(f.get('burst_24h', 0) or 0)))} transactions within 24h"
+            if float(str(f.get("burst_24h", 0) or 0))
+            >= max(6.0, 4 * float(str(f.get("baseline_daily", 0) or 0)))
+            else None
+        ),
+    ),
     (
         "geo_shift",
         "Sudden geography shifts",

@@ -1,94 +1,119 @@
 # Design decisions
 
-Short architecture-decision records. Each states the decision, why, and the
-trade-off — the kind of thing an interviewer will probe.
+Short architecture-decision records: the decision, why, and the trade-off.
 
-## D1 — The authoritative decision is never computed from attacker prose
+## D1 — The authoritative decision is never computed from attacker prose or model output
 
-**Decision.** L3 decides using only structured facts extracted from the bank's own
-records; the narrative contributes at most a coarse `ClaimType`.
-**Why.** Even a perfect injection detector misses *adjudication gaming* — a false
-claim with no injection. If the decision reads the prose, prose can move it.
+**Decision.** `compose()` builds a `_TrustedView` with no field for the model's
+recommendation and no prose; final action, policy outcome and authorization
+are computed from it. Untrusted text contributes at most a `ClaimType`
+selector and a *security signal that can only tighten*.
+**Why.** Even a perfect injection detector misses adjudication gaming (a lie
+with no injection) and a model can simply be wrong. If the decision reads
+prose or opinion, prose or opinion can move it.
 **Trade-off.** We can only adjudicate claims we can map to a verified fact; an
-unrecognised claim degrades to `escalate`/`deny` (fail-safe), which can be a false
-positive on unusual legitimate phrasing. The held-out set exists to catch these.
+unrecognised claim degrades to a human review, which is a false positive on
+unusual legitimate phrasing. The held-out set exists to find those.
 
-## D2 — Make the trust boundary a *type*, not a comment
+## D2 — Trust is a type, and only two classes can authorize
 
-**Decision.** `UntrustedText` (opaque) vs `TrustedFacts` (`DisputeFacts`/`KYBFacts`),
-with `TrustedFacts.supports(ClaimType)` as the only evidence check.
-**Why.** Comments rot; types are checked. mypy now rejects passing a narrative
-where evidence is expected, and a test proves the narrative never reaches the
-adjudicator input. This is the single strongest guard against silently
-reintroducing the vulnerability.
-**Trade-off.** A little more ceremony than passing dicts around.
+**Decision.** Seven `TrustClass` values; `is_trusted` is true for exactly
+`TRUSTED_INTERNAL` and `VERIFIED_EXTERNAL`. `Evidence`, `UntrustedContent`,
+`Claim` and `AIRecommendation` enforce it in their constructors.
+**Why.** Comments rot; constructors don't. A `MODEL_GENERATED` value cannot
+become `VERIFIED` evidence by any code path.
+**Trade-off.** A little ceremony around construction.
 
-## D3 — Detection (L2) is defence-in-depth, not the backstop
+## D3 — Model output is untrusted, full stop
 
-**Decision.** Ship a transparent lexical detector, but do not let the security
-case depend on it.
-**Why.** Lexical detection is explainable (it names the trigger) but evadable. The
-ablation shows detection-only still leaks 6.7%; L3 is what closes it. Honest
-engineering puts the load on the layer that can carry it.
-**Trade-off.** L2's held-out recall is low (~25%); we accept that and say so.
+**Decision.** The agent's tool call is *interpreted* into an
+`AIRecommendation` (trust `MODEL_GENERATED`) and recorded as claim-status
+evidence; it is never executed. The gateway inspects it for off-surface
+capability requests.
+**Why.** "Our" AI reads hostile input; its output is the attacker's output
+one hop later.
+**Trade-off.** The model cannot short-cut anything, even when it is right;
+the ablation quantifies what that costs (nothing on this corpus).
 
-## D4 — Offline is a deterministic *simulation* of the failure mode
+## D4 — Capabilities are a registry with actors, not a limit table
 
-**Decision.** Offline, the "agent" is a rule-based instruction-follower, not an
-LLM. Its gullibility is deliberately **not** keyed to the detector's patterns.
-**Why.** Reproducibility with no key/network, and a fair test: the win must come
-from L3 checking facts, not from a detector matching its own words.
-**Trade-off.** It is not proof a specific production LLM fails identically —
-`make live` runs the identical firewall behind real Claude to narrow that gap.
+**Decision.** Each capability declares risk, reversibility, monetary impact,
+required authorization, allowed actors and a human-review threshold.
+`AI_AGENT` is allowed on no consequential capability; `SKIP_REVIEW` on none.
+**Why.** "Who may make this happen" is a security property; an amount
+threshold alone cannot express "a model may never unfreeze an account".
+**Trade-off.** Values are demo policy, not industry standards, and are
+labelled as such.
 
-## D5 — One canonical `Decision` object
+## D5 — Policy is versioned, schema-validated data
 
-**Decision.** A single serialisable `Decision` drives CLI output, the API
-response, the audit trail and test assertions.
-**Why.** Parallel representations drift. One `to_dict()` means the console, the
-JSON API and an auditor all see the same shape.
-**Trade-off.** The object carries fields not every consumer needs.
+**Decision.** JSON policies validated against a field catalog; all rules
+evaluated, most severe wins, all matches explained; missing required fields
+raise (→ fail-safe human review).
+**Why.** Deterministic, testable, replayable, diff-able; misconfiguration is
+caught at load time rather than at 3 a.m.
+**Trade-off.** Expressiveness is limited to AND-ed conditions over declared
+fields. That is a feature.
 
-## D6 — Audit stores hashes, not prose; opt-in persistence
+## D6 — Risk is a versioned weight table over a stored feature snapshot
 
-**Decision.** Each decision can emit an append-only JSONL audit event that stores a
-**hash** of the raw submission, never the text. Persistence is opt-in
-(`persist_audit`) so the 1,560-decision benchmark isn't slowed.
-**Why.** Reconstructability without hoarding sensitive customer text; performance.
-**Trade-off.** You cannot read the original submission back from the audit log (by
-design).
+**Decision.** Deterministic rules, capped 0–100, factor-level explanation,
+feature snapshot stored with each decision.
+**Why.** Explainability and replay: re-score under `txn-1.1` without touching
+source systems. No ML claim is made.
+**Trade-off.** A rule model is coarser than a trained one; the financial
+evaluation reports exactly how coarse, per scenario and per level.
 
-## D7 — Zero-dependency stdlib API instead of a framework
+## D7 — Entity risk is computed in a fixed order
 
-**Decision.** `http.server`, not FastAPI/Flask.
-**Why.** The offline core has zero runtime deps; keeping the API dep-free means
-`git clone && python3 sentinel_api.py` works with nothing installed, and the
-container stays tiny.
-**Trade-off.** No batteries (async, schema UI). `evaluate()` is a pure function so
-swapping in a framework later is trivial.
+**Decision.** device → merchant → account → customer; a transaction's
+linked-entity risk reads precomputed profiles.
+**Why.** Avoids circular definitions and keeps every score explainable.
+**Trade-off.** No iterative graph propagation; the graph is one hop of
+signal, which is what the scenarios need.
 
-## D8 — Evaluate the whole transcript for multi-turn
+## D8 — SQLite, an in-process event bus, a dict-backed graph
 
-**Decision.** A `Session` re-evaluates the full conversation on each turn.
-**Why.** Multi-turn escalation hides the payload in earlier turns or splits it;
-inspecting only the latest message is blind to that.
-**Trade-off.** Cost grows with transcript length; fine at these sizes, would need
-windowing at scale.
+**Decision.** No Kafka, Redis, Neo4j, microservices.
+**Why.** A portfolio system should be runnable from a clean checkout in one
+command and every architectural choice should be explainable. The
+abstractions (repository protocol, `EventBus`, `EntityGraph`) are the seams
+where real infrastructure would attach.
+**Trade-off.** Not horizontally scalable as-is; `docs/INTERVIEW.md` covers
+what changes.
 
-## D9 — Held-out set is authored by hand, kept disjoint, never fed back
+## D9 — Hash-chained audit that stores hashes, not prose
 
-**Decision.** A separate, independently worded corpus (`red/heldout.py`); a test
-asserts it is disjoint from the dev corpus; its examples never become detector
-rules.
-**Why.** It is the only honest defence against "you pattern-matched your own test
-set." When it found a false-positive bug, we fixed the *general* behaviour, not
-the specific strings.
-**Trade-off.** It is still hand-authored and small; real attacker text is more
-varied.
+**Decision.** `hash_n = SHA256(event_n ‖ hash_(n-1))`; defensive redaction of
+any raw-text field; `sentinel audit verify` names the first bad record.
+**Why.** Tamper evidence and privacy at once.
+**Trade-off.** The original submission cannot be read back from the audit
+log (by design); the dataset stores narratives where a real system would.
 
-## D10 — Repository named `sentinel`
+## D10 — Cases are opened by deterministic rules; only humans resolve them
 
-**Decision.** Renamed from `TheScouts` to `sentinel` so the product name is
-consistent everywhere (repo, Pages URL, badges, clone command).
-**Why.** A recruiter clicking a "Live Demo" badge that 404s is worse than any
-missing feature.
+**Decision.** Five opening rules over the decision; a guarded status
+lifecycle; `record_human_decision` is the only path to RESOLVED.
+**Why.** "The model closed its own case" is a real failure mode; the
+investigation corpus includes it as an attack.
+**Trade-off.** More cases than a tuned production queue would open.
+
+## D11 — Offline is a deterministic simulation of the naive agent
+
+**Decision.** `OfflineProvider` models the documented failure mode (obeys
+in-context instructions, believes stated reasons, calls any tool it knows);
+its gullibility is not keyed to the detector.
+**Why.** Reproducible, key-free evaluation; a fair test where the win must
+come from evidence and policy, not from a detector matching its own words.
+**Trade-off.** Not proof about a specific production LLM. `sentinel eval run
+--suite models` runs the identical suite live when a key is present and
+records `not_run` otherwise; nothing is fabricated.
+
+## D12 — One engine, three surfaces, a static snapshot for hosting
+
+**Decision.** CLI, API and console call `SentinelApp`; the console contains
+no scoring or policy logic (asserted by a test). GitHub Pages serves a
+snapshot the engine computed.
+**Why.** The v1 console re-implemented the firewall in JavaScript -- a second
+decision engine that could drift. Never again.
+**Trade-off.** The static demo is read-only; custom attacks need `make ui`.

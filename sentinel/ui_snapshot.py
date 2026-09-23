@@ -23,7 +23,7 @@ def build_snapshot(app: Any, out: str = "ui/snapshot.json") -> str:
         _texts,
     )
 
-    tx_rows = app.store.transactions(limit=120)
+    tx_rows = app.store.transactions(limit=100)
     latest = {d["subject_id"]: d for d in app.store.decisions(workflow="transaction", limit=2000)}
     transactions = [
         {
@@ -39,7 +39,7 @@ def build_snapshot(app: Any, out: str = "ui/snapshot.json") -> str:
         }
         for t in tx_rows
     ]
-    tx_views = {t.transaction_id: app.transaction_view(t.transaction_id) for t in tx_rows[:40]}
+    tx_views = {t.transaction_id: app.transaction_view(t.transaction_id) for t in tx_rows[:24]}
     cases = [to_dict(c) for c in app.cases(limit=100)]
     attacks = {k: app.simulate_attack(k) for k in ATTACKS}
     scenarios = {k: app.run_scenario(k) for k in SCENARIOS}
@@ -95,7 +95,7 @@ def build_snapshot(app: Any, out: str = "ui/snapshot.json") -> str:
         "decisions": {"decisions": app.store.decisions(limit=200)},
         "decision_views": {
             d["decision_id"]: _decision_view(app, d["decision_id"])
-            for d in app.store.decisions(limit=60)
+            for d in app.store.decisions(limit=40)
         },
         "replays": {"replays": app.store.replays(50)},
         "attacks": {"attacks": [to_dict(a) for a in ATTACKS.values()]},

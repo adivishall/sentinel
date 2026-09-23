@@ -822,6 +822,14 @@ class SentinelStore:
             "dispute_exposure": count(
                 "SELECT COALESCE(SUM(amount),0) FROM decisions WHERE workflow = 'dispute' AND final_action IN ('REQUIRE_HUMAN_REVIEW','TEMPORARY_HOLD')"
             ),
+            "refunds_prevented": count(
+                "SELECT COALESCE(SUM(d.amount),0) FROM decisions d JOIN ai_recommendations a ON a.decision_id = d.decision_id "
+                "WHERE d.workflow = 'dispute' AND d.final_action IN ('DENY','BLOCK') AND a.requested_capability IS NOT NULL"
+            ),
+            "ai_overruled": count(
+                "SELECT COUNT(*) FROM decisions d JOIN ai_recommendations a ON a.decision_id = d.decision_id "
+                "WHERE a.requested_capability IS NOT NULL AND d.final_action != 'ALLOW'"
+            ),
             "merchants_high_risk": count(
                 "SELECT COUNT(*) FROM risk_assessments WHERE entity_type = 'merchant' AND level IN ('HIGH','CRITICAL')"
             ),

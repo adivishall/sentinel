@@ -287,11 +287,7 @@ def authorize(
             actor,
             "consequential capability requires verified evidence supporting it",
         )
-    if policy_outcome in (
-        PolicyOutcome.REQUIRE_HUMAN_REVIEW,
-        PolicyOutcome.TEMPORARY_HOLD,
-        PolicyOutcome.STEP_UP,
-    ):
+    if policy_outcome in (PolicyOutcome.REQUIRE_HUMAN_REVIEW, PolicyOutcome.TEMPORARY_HOLD):
         return Authorization(
             AuthorizationStatus.PENDING_HUMAN,
             capability,
@@ -321,5 +317,12 @@ def authorize(
             actor,
             f"amount {amount:,} exceeds human-review threshold {s.human_review_threshold:,}",
             requires_human=True,
+        )
+    if policy_outcome is PolicyOutcome.STEP_UP:
+        return Authorization(
+            AuthorizationStatus.GRANTED,
+            capability,
+            actor,
+            "authorized subject to step-up authentication",
         )
     return Authorization(AuthorizationStatus.GRANTED, capability, actor, "authorized under policy")

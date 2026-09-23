@@ -7,6 +7,12 @@
       "runtimeArgs": ["-m", "sentinel", "--db", ":memory:", "serve", "--port", "8765", "--analyze"],
       "port": 8765,
       "env": {"SENTINEL_FORCE_OFFLINE": "1"}
+    },
+    {
+      "name": "sentinel-static",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8766", "--directory", "."],
+      "port": 8766
     }
   ]
 }

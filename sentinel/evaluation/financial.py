@@ -117,10 +117,13 @@ def run(
         acc_band[ra.level.value][1] += 1
         acc_band[ra.level.value][0] += int(fraud)
 
-    # ---- merchant level: abused merchants should profile HIGH+ ------------------------------
+    # ---- merchant level: bad merchants (abused, shell or repeatedly flagged) should profile HIGH+
     abused = {
         s["entity_ids"][0] for s in app.store.scenarios() if s["scenario"] == "merchant_abuse"
     }
+    for merchant in app.store.merchants():
+        if merchant.registration_status == "shell" or merchant.prior_flags >= 2:
+            abused.add(merchant.merchant_id)
     mtp = mfp = mfn = mtn = 0
     for merchant in app.store.merchants():
         prof = app.world.engine.merchant_risk(merchant.merchant_id)
@@ -173,7 +176,11 @@ def run(
                 for k, v in acc_band.items()
             },
         },
-        "merchant_level": {**_prf(mtp, mfp, mfn, mtn), "abused_merchants": len(abused)},
+        "merchant_level": {
+            **_prf(mtp, mfp, mfn, mtn),
+            "bad_merchants": len(abused),
+            "definition": "abused (scenario) or shell registration or >= 2 prior flags",
+        },
         **_prf(tp, fp, fn, tn),
         "prevalence": round((tp + fn) / max(1, n), 4),
         "recall_by_scenario": {

@@ -171,7 +171,7 @@ VIEWS.overview = async () => {
   const k = (v, l, s = "") => `<div class="card kpi"><div class="v">${v}</div><div class="l">${l}</div><div class="s">${s}</div></div>`;
   return `<div class="grid c4">
     ${k(o.transactions_analyzed, "Transactions analyzed", `of ${o.transactions} in the dataset`)}${k(o.high_risk_transactions, "High-risk transactions", "HIGH + CRITICAL")}${k(o.blocked_capabilities, "Blocked capabilities", "policy BLOCK on trusted inputs")}${k(o.cases_requiring_review, "Cases requiring review", `${o.open_investigations} open investigations`)}
-    ${k(o.ai_security_events, "AI security events", Object.entries(o.security_severity || {}).map(([a, b]) => `${a} ${b}`).join(" · ") || "none")}${k(inr(o.dispute_exposure), "Dispute exposure", "held for human review")}${k(o.merchants_high_risk, "Merchants at high risk", "entity risk HIGH+")}${k(o.audit_events, "Audit events", o.audit_chain.ok ? "chain verified ✓" : "CHAIN BROKEN")}
+    ${k(o.ai_security_events, "AI security events", Object.entries(o.security_severity || {}).map(([a, b]) => `${a} ${b}`).join(" · ") || "none")}${k(inr(o.refunds_prevented), "Unsupported refunds prevented", `AI recommended paying · ${o.ai_overruled} model recommendations overruled`)}${k(inr(o.dispute_exposure), "Dispute exposure", `held for human review · ${o.merchants_high_risk} merchants HIGH+`)}${k(o.audit_events, "Audit events", o.audit_chain.ok ? "chain verified ✓" : "CHAIN BROKEN")}
   </div>
   <div class="grid c3">
     ${card("Risk distribution (transaction decisions)", `<div class="chart">${barChart(o.risk_distribution, {order: ["LOW","MEDIUM","HIGH","CRITICAL"]})}</div>`)}

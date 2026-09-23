@@ -37,7 +37,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .grid.c2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid.c3{grid-template-columns:repeat(3,minmax(0,1fr))}.grid.c4{grid-template-columns:repeat(4,minmax(0,1fr))}
 @media(max-width:1100px){.grid.c4{grid-template-columns:repeat(2,1fr)}.grid.c3{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:800px){#app{grid-template-columns:1fr}.nav{position:relative;height:auto}.grid.c2,.grid.c3,.grid.c4{grid-template-columns:1fr}.principle{display:none}}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0;overflow-x:auto}
 .card h3{margin:0 0 10px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;display:flex;justify-content:space-between;align-items:center}
 .kpi{display:flex;flex-direction:column;gap:2px}
 .kpi .v{font-size:26px;font-weight:700;letter-spacing:-.01em;font-family:var(--mono)}
@@ -45,7 +45,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 .kpi .s{font-size:11px;color:var(--ink2)}
 table{width:100%;border-collapse:collapse;font-size:12.5px}
 th{text-align:left;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line);font-weight:600;white-space:nowrap}
-td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top;white-space:nowrap}
+td.small,td.wrap{white-space:normal;min-width:180px;max-width:420px}
 tr.row:hover td{background:var(--panel2);cursor:pointer}
 td.num,th.num{text-align:right;font-family:var(--mono)}
 .chip{display:inline-block;padding:1px 7px;border-radius:5px;font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.02em}

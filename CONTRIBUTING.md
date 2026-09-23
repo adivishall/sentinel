@@ -1,47 +1,32 @@
 # Contributing
 
-Two-person team workflow. Keep `main` green; do all work on branches via PRs.
+## Workflow
 
-## One-time setup (do this on your own machine)
+1. Branch from `main` (`feat/...`, `fix/...`, `docs/...`).
+2. `make test && make lint` must pass locally; CI runs the same plus the
+   invariants, an evaluation smoke test, a CLI + audit-chain smoke and a
+   Docker build.
+3. Open a PR. Security-relevant changes (anything under `sentinel/security`,
+   `sentinel/evidence`, `sentinel/policy`, `sentinel/decision`,
+   `sentinel/audit`) need a second reviewer.
 
-```bash
-git clone https://github.com/adivishall/sentinel.git
-cd sentinel
-git config user.name  "Your Name"
-git config user.email "your-github-email@example.com"   # the email on YOUR GitHub account
-pip install -r requirements-dev.txt
-```
+## Rules that keep the architecture honest
 
-Using the email tied to *your* GitHub account is what makes your commits show up
-under *your* profile. This matters — it's how we each show what we built.
+- **No decision logic outside `sentinel/decision`.** The API, CLI, console
+  and evaluation call `SentinelApp` / the workflows. A test enforces this.
+- **Untrusted never becomes trusted.** Do not add a code path that turns
+  prose, documents or model output into VERIFIED evidence or into a policy
+  context field. Extend the field catalog only with trusted fields.
+- **Policies are data.** Add a new version file (`policy-id.vN.json`) rather
+  than editing a shipped version in place; decisions record the version they
+  used.
+- **Never tune the detector to the held-out set.** If the held-out set finds
+  a false positive, fix the general behaviour and add a dev-corpus case.
+- **No fabricated numbers.** Every metric in the docs must come from
+  `sentinel eval run` and say which corpus produced it.
+- **Audit stores hashes, not prose.** Keep `redact()` in the write path.
 
-## The loop
+## Layout
 
-```bash
-git checkout main && git pull                 # start fresh
-git checkout -b feat/<short-name>             # your own branch
-# ... make changes ...
-make lint                                     # ruff + black + mypy must pass
-make test                                     # 26+ tests must pass
-git commit -m "type: what changed"            # small, meaningful commits
-git push -u origin feat/<short-name>
-gh pr create --base main                      # open a PR; the other reviews + merges
-```
-
-CI (GitHub Actions) runs lint + type-check + tests on every push and PR. A red
-check blocks the merge.
-
-## Commit message style
-
-`type: summary` — types: `feat`, `fix`, `test`, `docs`, `chore`, `ci`.
-Examples: `feat(kyb): structured adjudicator for onboarding`, `test: homoglyph cases`.
-
-## Ground rules
-
-- Never commit secrets. `ANTHROPIC_API_KEY` goes in `.env` (git-ignored).
-- Tests must pass offline (no API key): `SENTINEL_FORCE_OFFLINE=1`.
-- The firewall's decision must stay fact-based — never let untrusted prose reach L3.
-
-## Open tasks
-
-See the [issues](https://github.com/adivishall/sentinel/issues).
+See `docs/ARCHITECTURE.md`. Tests are grouped by concern in `tests/`;
+`tests/test_invariants.py` is the security regression suite.

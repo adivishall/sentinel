@@ -1,59 +1,45 @@
 # Testing
 
-Sentinel ships **83 tests** at **~91% coverage** (security-critical firewall modules
-90–100%). Tests are the contract that protects the important behaviour — the trust
-boundary, the 0%/0% result, and the fail-safe.
-
 ```bash
-make test          # SENTINEL_FORCE_OFFLINE=1 python3 -m pytest tests/ -q   (no key, no network)
-make lint          # ruff + black --check + mypy
-
-# with coverage:
-SENTINEL_FORCE_OFFLINE=1 python3 -m pytest tests/ \
-  --cov=firewall --cov=agents --cov=sentinel_api --cov-report=term-missing
+make test        # pytest, offline, no key
+make cov         # with the coverage gate (CI: --cov-fail-under=80)
+make lint        # ruff + black --check + mypy over the whole package
 ```
 
-`tests/conftest.py` forces offline mode, so tests never hit the network.
+`tests/conftest.py` forces offline mode; tests never touch the network.
 
 ## What each file protects
 
 | File | Protects |
 |---|---|
-| `test_trust_boundary.py` | **The core claim.** Prose cannot flip a verdict; the narrative never reaches the adjudicator input; forged claims/documents cannot overwrite records; evidence lives only on `TrustedFacts`; malformed trusted numbers coerce safely. |
-| `test_security_review.py` | **End-to-end hostile vectors:** fullwidth/homoglyph/zero-width injections, document-borne fabricated approvals (dispute + KYB), over-limit legitimate → escalate, oversized fail-safe, multi-turn late attack. |
-| `test_heldout.py` | Held-out generalisation (0% ASR, 0% FP on unseen wording), dev/held-out disjointness, and the specific fixed false-positive phrasings. |
-| `test_results_regression.py` | Locks the headline: full firewall = 0% breach / 0% FP; ablation shows L3 is necessary and sufficient. |
-| `test_pipeline.py` | Layer orchestration, empty/None fail-safe, audit-trail population, layer toggling. |
-| `test_adjudicate.py` | L3 verdicts come from ledger facts, not text. |
-| `test_kyb.py` | KYB adjudication on acquirer records. |
-| `test_detect.py` | L2 injection signals + threshold. |
-| `test_normalize.py` | NFKC + homoglyph fold + zero-width strip + validation. |
-| `test_session.py` | Multi-turn: last-turn attack blocked, split payload caught, false claim over turns denied, cumulative risk. |
-| `test_policy.py` | L4 policy engine: ALLOW / REQUIRE_HUMAN_REVIEW / BLOCK + reasons. |
-| `test_audit.py` | Decision record completeness/serialisability; audit stores hash-not-prose; off by default. |
-| `test_api.py` | Pure `evaluate()` + real HTTP (health/version/evaluate, auth, 400/404/413, multi-turn). |
-
-## Coverage policy
-
-CI enforces `--cov-fail-under=85`. We do **not** chase 100% — the bar is high on
-security-critical modules and pragmatic on the API's `serve()` loop and unreachable
-defensive branches. Current per-module highlights: `pipeline.py`, `detect.py`,
-`normalize.py`, `audit.py`, `session.py` at **100%**; `trust.py` ~91%; `limits.py`
-~90%.
+| `test_invariants.py` | **The ten security invariants** + property-based checks (Hypothesis): attacker text cannot change a trusted-fact verdict; model output cannot bypass capability policy; model output is never trusted evidence; unknown claims fail safe; malformed input never yields an irreversible action; high-value effects cannot bypass authorization; audit tampering is detected; policy versions are explicit and replayable; provenance is preserved end to end; API/CLI/UI/evaluation share one engine. |
+| `test_trust_boundary.py` | prose never reaches the policy context or the audit log; forged claims and documents cannot overwrite records; untrusted keys are dropped; `UntrustedText` has no evidence accessor; malformed trusted numbers coerce safely |
+| `test_hostile_vectors.py` | end-to-end: full-width / zero-width / homoglyph injections, document-borne approvals (dispute + KYB), over-limit legitimate → human, oversized input, multi-turn late attack, capability escalation through a document, descriptor cannot lower risk, replay cannot launder an outcome |
+| `test_security_gateway.py` | normalisation, provenance, all signal classes, benign/urgent legit not flagged, hashed findings, document / third-party reclassification, split-payload and prior-turn multi-turn, model-output escalation, merge |
+| `test_capabilities.py` | registry invariants, authorization matrix, human-only capabilities, `SKIP_REVIEW` has no actor |
+| `test_evidence.py` | contradiction engine, dispute/KYB reconciliation verdicts, document claims, model evidence never verified |
+| `test_policy_engine.py` | schema validation (unknown fields/ops/outcomes, type mismatches, duplicates), most-severe-wins, order independence, required fields, operators, file round-trip, registry versions |
+| `test_composer.py` | flagship outcomes, ablation controls, policy context has no model output, fail-safe on malformed context, trail + serialisation |
+| `test_risk_engine.py` | baselines, transaction factors, determinism + rescoring under another model, graph queries, entity profile order, account security, monitoring patterns, dispute risk |
+| `test_workflows.py` | both flagship demos, invalid input, unguarded contrast, hardened prompt, sessions, transaction / KYB / account / investigation / AI-security paths, persistence flag |
+| `test_cases.py` | opening rules, lifecycle guards, human-only resolution |
+| `test_audit_chain.py` | link/verify, modification, deletion, reordering, truncation head, JSONL reload + disk tamper, redaction |
+| `test_data_store_replay.py` | generator determinism and coherence, store round-trip, SQLite-backed audit/cases survive reopen and detect DB tamper, snapshot round-trip, replay by policy version / rule / model / recommendation |
+| `test_app.py` | application layer: overview from real data, investigation view, entity risk + graph, every attack preset never executes, every scenario runs, cases/audit/replay |
+| `test_api_v1.py` | real socket: every route family, validation errors, auth, rate limit, static console, path traversal |
+| `test_cli.py` | every command family end to end against a temp store, including `audit verify` and `ui snapshot` |
+| `test_domain.py`, `test_providers_agents.py` | primitives; provider abstraction and the naive agents |
 
 ## The regression tests that matter most
 
-If you change the firewall, these are the ones that catch a security regression:
-
-1. `test_trust_boundary.py::test_narrative_never_reaches_adjudicator_input`
-2. `test_results_regression.py::test_full_firewall_zero_breach_and_zero_fp`
-3. `test_results_regression.py::test_ablation_shows_l3_is_necessary`
-4. `test_heldout.py::test_heldout_zero_breach_and_zero_fp`
-5. `test_security_review.py` (all — the hostile vectors)
+1. `test_invariants.py` (all)
+2. `test_trust_boundary.py::test_narrative_never_reaches_the_policy_context_or_audit`
+3. `test_hostile_vectors.py` (all)
+4. `test_invariants.py::test_heldout_still_zero_breach_and_zero_fp`
+5. `test_app.py::test_every_attack_preset_never_executes_a_consequential_capability`
 
 ## CI
 
-`.github/workflows/ci.yml` runs, on every push/PR: ruff → black → mypy → pytest +
-coverage gate → an **offline evaluation smoke test** (`harness`, `ablation`,
-`heldout`). A security regression therefore fails the build, not just a local run.
-Live Claude calls are never made in CI.
+`.github/workflows/ci.yml`: ruff → black → mypy → pytest with coverage gate →
+invariants → evaluation smoke (security, held-out, ablation, integrity) → CLI
++ audit-chain smoke → Docker build. Live model calls are never made in CI.

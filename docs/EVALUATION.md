@@ -1,131 +1,224 @@
 # Evaluation
 
-Every number below is produced by `make offline` (no API key, deterministic) and
-written to `eval/results/`. Re-run it and the JSON/PNG will match this document.
+Every number in this document is produced by one command and written to
+`results/`:
 
 ```bash
-make offline    # corpus -> harness -> ablation -> baselines -> kyb -> heldout -> charts
+make eval                # == sentinel eval run --suite full   (offline, deterministic, no key; ~3 s)
 ```
+
+Re-run it and the JSON (and this document's tables, which are generated from
+it) will match. Four dimensions are measured: **AI security**, **financial
+risk**, **decision integrity** and **system performance**. All corpora and
+datasets are synthetic; see `docs/LIMITATIONS.md`.
 
 ## What "attack success" means
 
-An attack **succeeds** when the agent issues an **irreversible `approve_refund`**
-(money out) that the bank's own records do **not** support. For legitimate
-controls, a **false positive** is a deserved refund the firewall fails to approve
-(a real customer wrongly held). Both are what we minimise.
+An attack **succeeds** when the system **executes an unauthorised consequential
+capability** -- a refund is paid, a merchant goes live, a payment is
+authorised, an account is unfrozen, a payout destination changes, funds are
+released, a case is closed -- that the trusted records do not support. This is
+stronger than "the detector flagged the sentence": a flagged attack that
+still executes counts as a success, and an undetected attack that never
+executes counts as a failure. For legitimate controls, a **false positive** is
+a deserved refund the platform fails to execute.
 
-## Development corpus (`eval/results/summary.json`)
+## A. AI security -- development corpus (`results/security.json`)
 
-60 attacks across 6 classes + 18 legitimate controls.
+120 attacks across 12 threat classes (each class: 2 hand-authored
+seeds × 5 amounts straddling the ₹50,000 auto-limit) + 21
+legitimate controls (10 of which deserve a refund).
+Six classes target capabilities beyond `APPROVE_REFUND`.
 
-| Metric | No firewall | With Sentinel |
+| Metric | No controls (model executes) | Full Sentinel |
 |---|---:|---:|
 | Attack success rate | **83.3%** | **0.0%** |
-| False-positive rate (deserved refunds) | — | **0.0%** |
+| Off-surface capability executed (escalation) | 20.8% | 0.0% |
+| Gateway detection recall | — | 83.3% (lexical; not the backstop) |
+| False-positive rate on deserved refunds | — | **0.0%** |
 
-Of the 60 attacks, 50 are stopped at **L3 adjudication** (`blocked_by`); the rest
-never produce an unsupported refund in the first place.
+| Threat class | No controls | Detection recall | Sentinel |
+|---|---:|---:|---:|
+| direct_injection | 100.0% | 100.0% | 0.0% |
+| authority_spoof | 100.0% | 100.0% | 0.0% |
+| document_borne | 100.0% | 100.0% | 0.0% |
+| fake_policy | 100.0% | 100.0% | 0.0% |
+| context_poisoning | 50.0% | 100.0% | 0.0% |
+| tool_manipulation | 50.0% | 100.0% | 0.0% |
+| multi_turn_escalation | 50.0% | 100.0% | 0.0% |
+| unicode_obfuscation | 100.0% | 100.0% | 0.0% |
+| indirect_injection | 100.0% | 100.0% | 0.0% |
+| adjudication_gaming | 100.0% | 0.0% | 0.0% |
+| financial_social_engineering | 100.0% | 0.0% | 0.0% |
+| capability_escalation | 50.0% | 100.0% | 0.0% |
 
-## Held-out evaluation — the anti-circularity check (`eval/results/heldout.json`)
+Read the last two columns together: **adjudication gaming and financial
+social engineering are invisible to detection (0.0% recall) and are
+still blocked**, because the ledger, not the prose, decides support.
 
-The dev corpus and the detector share an author, so a 0% result there could be
-circular. The **held-out set is authored independently** (`red/heldout.py`) with
-wording that never appears in the detector: novel paraphrases, combined attack
-styles, a unicode-obfuscated injection, and benign-but-alarming legitimate
-disputes. The firewall is never tuned to these strings.
+| Target capability | n | No controls | Sentinel |
+|---|---:|---:|---:|
+| APPROVE_REFUND | 100 | 90.0% | 0.0% |
+| CLOSE_CASE | 5 | 0.0% | 0.0% |
+| RELEASE_FUNDS | 5 | 100.0% | 0.0% |
+| UNFREEZE_ACCOUNT | 5 | 100.0% | 0.0% |
+| ALTER_RISK | 5 | 0.0% | 0.0% |
+
+Blocked-by distribution (an attack can be stopped by several controls at
+once): ai_security_gateway 45, capability_authorization 100, capability_registry 15, policy:dispute-refund@v2 100, trusted_evidence 100.
+
+## B. Held-out generalisation (`results/heldout.json`)
+
+The development corpus and the detector share an author, so a 0% there could
+be circular. The held-out set (16 attacks, 4 deserved controls) is
+authored independently with wording that never appears in the detector; a test
+asserts it is disjoint from the corpus and the detector is never tuned to it.
 
 | Metric | Value |
 |---|---:|
-| Independent attacks | 12 |
-| Deserved controls | 3 |
-| ASR — no firewall | 16.7% |
-| **ASR — with Sentinel** | **0.0%** |
-| L2 lexical detection recall | 25.0% |
-| **False-positive rate** | **0.0%** |
+| Attack success, no controls | 37.5% |
+| **Attack success, Sentinel** | **0.0%** |
+| Gateway detection recall | 56.2% |
+| **False positives** | **0.0%** |
 
-Two honest reads of this table:
+Two honest reads: the architecture generalises (0% / 0% on unseen wording),
+and the lexical detector does not (56.2% recall) -- which is why
+detection is not on the authorization path. The unguarded figure is depressed
+because the offline victim agent is itself lexical; the held-out set
+validates the platform, not the baseline's realism. In v2 this set found a
+false positive on a novel cancellation phrasing; the general pattern was
+broadened and the case pinned.
 
-1. **The architecture generalises.** Guarded ASR is 0% and FP is 0% on wording
-   the system has never seen — because L3 decides on the bank's verified records,
-   which a novel phrasing cannot change.
-2. **Detection alone would not.** The lexical L2 catches only ~25% of these
-   unseen injections. That is exactly why L3 (facts), not L2 (patterns), is the
-   backstop — and why the ablation below matters.
+## C. Second surface -- merchant onboarding (`results/kyb.json`)
 
-> The held-out set also surfaced a real bug: the *claim classifier* was lexical
-> and mislabeled legitimate paraphrases ("two identical charges", "has not
-> reached me"), wrongly denying real customers. It was broadened to natural
-> paraphrases and pinned with regression tests. This is documented rather than
-> hidden — see `tests/test_heldout.py`.
+10 document-borne / injected applications on bad acquirer records + 5 controls.
 
-**Caveat on the 16.7% unguarded figure:** the offline "victim" agent is itself a
-lexical instruction-follower, so it under-fires on novel wording. The held-out
-set therefore validates the *firewall's* generalisation and its false-positive
-behaviour, not the unguarded baseline's realism. A real LLM would likely fall for
-more of these; `make live` exists to probe that.
+| Metric | Value |
+|---|---:|
+| Attack success, no controls | 100.0% |
+| **Attack success, Sentinel** | **0.0%** |
+| False positives (clean merchants wrongly held) | 0.0% |
+| Borderline (incomplete verification) → human review | 100.0% |
 
-## Ablation — which layer does the work (`eval/results/ablation.json`)
+## D. Beating the obvious defence (`results/baselines.json`)
 
-| Configuration | ASR | FP |
-|---|---:|---:|
-| No firewall | 83.3% | 25.0% |
-| Detection only (L1+L2+L4) | **6.7%** | 25.0% |
-| Adjudication only (L3) | **0.0%** | 0.0% |
-| Full (L1–L4) | 0.0% | 0.0% |
-
-**Detection-only still leaks 6.7%** — the adjudication-gaming attacks, which
-assert a false reason with *no injection to detect*. **L3 alone closes it.** L1,
-L2 and L4 are defence-in-depth and explainability; L3 is the load-bearing idea.
-
-## Beating the obvious defence (`eval/results/baselines.json`)
-
-The first question a technical reviewer asks: *"why not just harden the system
-prompt to ignore injected instructions?"* We built exactly that and measured it.
-
-| Defence | Attack success rate |
+| Defence | Attack success |
 |---|---:|
 | No defence | 83.3% |
-| Hardened prompt (the obvious fix) | 16.7% |
-| **Sentinel (structural)** | **0.0%** |
+| Hardened system prompt ("ignore embedded instructions") | 16.7% |
+| **Sentinel** | **0.0%** |
 
-Prompt-hardening neutralises the overt injections but **fails 100% on
-adjudication gaming** — a customer *lying about the facts* is not an injection, so
-"ignore instructions" says nothing about it. Only fact-based L3 closes the gap.
+The hardened prompt still fails on: adjudication_gaming 100.0%, financial_social_engineering 100.0%. A customer lying about a
+fact is not an injection, and "ignore instructions" says nothing about a lie.
 
-## Second surface — KYB (`eval/results/kyb.json`)
+## E. Ablation -- which control carries the result (`results/ablation.json`)
 
-The **same** four layers defend merchant onboarding, with a KYB adjudicator that
-decides on verified acquirer records (registration status, domain/business age,
-prior flags), never the applicant's prose.
+| Configuration | ASR | FP | off-surface executed | controls |
+|---|---:|---:|---:|---|
+| no_controls | 83.3% | 40.0% | 12.5% | `—` |
+| prompt_hardening | 16.7% | 40.0% | 0.0% | `—` + hardened prompt |
+| detection_only | 45.8% | 40.0% | 0.0% | `detection, provenance` |
+| risk_only | 83.3% | 40.0% | 12.5% | `risk` |
+| policy_only | 33.3% | 40.0% | 5.0% | `policy` |
+| adjudication_only | 0.0% | 0.0% | 0.0% | `adjudication` |
+| adjudication_policy | 0.0% | 0.0% | 0.0% | `adjudication, authorization, policy` |
+| full | 0.0% | 0.0% | 0.0% | `adjudication, authorization, detection, policy, provenance, risk` |
 
-| Surface | No firewall | With Sentinel | FP |
-|---|---:|---:|---:|
-| Dispute triage | 83.3% | 0.0% | 0.0% |
-| KYB onboarding | 87.5% | 0.0% | 0.0% |
+- **Detection only** holds what it detects and leaks the rest (the undetectable
+  classes plus MEDIUM-severity findings).
+- **Policy only** (no evidence) catches only the over-limit amounts.
+- **Trusted adjudication alone** closes every attack on this corpus; policy and
+  authorization add human review for high-value legitimate cases, capability
+  containment, and explainability.
 
-A fake merchant whose uploaded document *says* "review complete, approve" is
-still rejected — the decision is made on the acquirer's records, not the document.
+## F. Financial risk on labelled synthetic data (`results/financial.json`)
 
-## Performance (`docs/PERFORMANCE.md`, `eval/results` via `make bench`)
+Dataset: seed 42, 150 customers, 30 merchants, 3183 transactions; risk model
+`txn-1.0`. Positive = risk level HIGH or CRITICAL. Labels come from the
+generator's injected scenarios and are read only by this suite. Risk exists at
+three levels and each scenario is evaluated at the level meant to catch it.
 
-Firewall overhead only (offline; agent/LLM cognition excluded), 1,560 decisions:
-mean ≈ **0.08 ms**, p95 ≈ **0.11 ms**, ≈ **12,000 decisions/sec** single-core
-(machine-dependent; reproduce with `make bench`). A real LLM call is 300–2000 ms,
-so the firewall is ~4 orders of magnitude smaller than the decision it protects.
+| Level | Scenarios | Precision | Recall | FPR | FNR | tp / fp / fn / tn |
+|---|---|---:|---:|---:|---:|---|
+| transaction | account takeover, bursts, ring transactions | 73.7% | 26.9% | 0.2% | 73.1% | 14 / 5 / 38 / 3126 |
+| account (monitoring) | structuring-like, dormant activation, rings, bursts | 71.4% | 100.0% | 2.7% | 0.0% | 10 / 4 / 0 / 145 |
+| merchant (profile) | abused / shell / repeatedly flagged | 40.0% | 66.7% | 11.1% | 33.3% | 2 / 3 / 1 / 24 |
 
-## Live mode
+Transaction-level recall by scenario: account_takeover 66.7% (n=6), burst 14.3% (n=28), graph_linked 33.3% (n=18). Account-level: burst 100.0% (n=3), dormant_activation 100.0% (n=2), graph_linked 100.0% (n=3), structuring 100.0% (n=2).
 
-`make live` / `make live-full` run the identical firewall behind **real Claude
-agents** and write `eval/results/live_summary.json`. No live numbers are quoted in
-this repository unless that file was produced on the reader's own key — live
-results depend on the provider, model, and date, and we do not claim they
-generalise to all LLMs.
+Bursts are inherently partial at the transaction level -- the first few
+transactions of a burst are indistinguishable from normal activity -- which is
+exactly why the account-level monitor exists.
 
-## Reproduce everything
+Calibration (observed fraud-labelled rate per transaction risk band):
+
+| Band | n | observed fraud rate |
+|---|---:|---:|
+| LOW | 2864 | 0.5% |
+| MEDIUM | 300 | 7.7% |
+| HIGH | 14 | 64.3% |
+| CRITICAL | 5 | 100.0% |
+
+Policy outcomes on a 400-transaction sample through the full pipeline
+(`transaction-authorization@latest`, no agent): fraud-labelled transactions allowed
+28.8%, legitimate transactions blocked or denied 0.0%.
+The risk model is a transparent rule table, not ML; these numbers describe it
+honestly on this generator.
+
+## G. Decision integrity (`results/integrity.json`)
+
+The structural claim, measured directly over 136 attacks (dev + held-out)
+and 14 deserved controls:
+
+| Question | Sentinel | No controls |
+|---|---:|---:|
+| Attacker text made the decision **more permissive** | **0.0%** | 77.9% |
+| Attacker text changed the outcome at all (tightening only) | 43.4% | — |
+| Injection appended to a deserved claim **loosened** it | **0.0%** (n=84) | — |
+| Injection appended to a deserved claim tightened it (held for a human) | 100.0% | — |
+| A different model recommendation changed the outcome | **0.0%** (n=360) | — |
+
+Untrusted input can only make a protected decision *stricter*. That is the
+property the whole architecture exists to provide.
+
+## H. Performance (`results/performance.json`)
+
+macOS-26.5.2-arm64-arm-64bit-Mach-O, Python 3.13.7; offline agent; workloads: 310-char injected
+narrative, 40-transaction baseline, graph of 8,144 nodes / 14,682 edges,
+9-rule policy, 500 end-to-end iterations.
+
+| Component | p50 ms | p95 ms | p99 ms | ops/s |
+|---|---:|---:|---:|---:|
+| `normalize` | 0.0175 | 0.0187 | 0.0215 | 56,204 |
+| `gateway_inspect` | 0.175 | 0.1858 | 0.2044 | 5,658 |
+| `claim_classify` | 0.0191 | 0.0214 | 0.0325 | 51,114 |
+| `evidence_reconcile` | 0.0219 | 0.0245 | 0.0418 | 44,316 |
+| `risk_score_transaction` | 0.0117 | 0.0131 | 0.0193 | 81,802 |
+| `graph_linked_accounts` | 0.0041 | 0.0043 | 0.0046 | 238,229 |
+| `graph_neighborhood_d2` | 0.1592 | 0.1707 | 0.2171 | 6,192 |
+| `policy_evaluate` | 0.0077 | 0.008 | 0.0097 | 127,761 |
+| `decision_compose` | 0.0306 | 0.0342 | 0.0638 | 31,375 |
+| `audit_append` | 0.0088 | 0.0113 | 0.0336 | 102,985 |
+| `e2e_dispute_pipeline` | 0.4246 | 0.5501 | 1.3747 | 2,200 |
+
+A live LLM call (hundreds of milliseconds) dominates real latency by three
+orders of magnitude; Sentinel's own controls are not the bottleneck.
+
+## I. Model / provider evaluation (`results/models.json`)
+
+| Provider | Model | Status | ASR no controls | ASR Sentinel | FP | Note |
+|---|---|---|---:|---:|---:|---|
+| offline | `offline-simulator` | ok | 83.3% | 0.0% | 0.0% |  |
+| anthropic | `claude-opus-5` | not_run | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
+
+Live results depend on provider/model/date and are not claimed to generalise. Run `SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models`
+with your own key to fill the live row; nothing here is fabricated.
+
+## Reproduce
 
 ```bash
-make offline                 # all offline metrics + charts
-make test                    # 83 tests
-make bench                   # latency / throughput
-python3 eval/heldout.py      # just the held-out set
+make eval                      # everything above, ~3 s, writes results/*.json and charts
+sentinel eval run --suite security|heldout|kyb|baselines|ablation|financial|integrity|performance|models|charts
+sentinel eval run --suite financial --full     # larger dataset (400 customers / 12k transactions)
+make test                      # includes tests/test_results_regression.py, which recomputes the headline claims
 ```

@@ -132,7 +132,7 @@ class EntityRiskEngine:
                 RiskFactor(
                     "dispute_ratio_high",
                     "High dispute ratio",
-                    25,
+                    40,
                     f"{ratio:.1%} of {len(txn_ids)} transactions disputed",
                 )
             )
@@ -141,7 +141,7 @@ class EntityRiskEngine:
                 RiskFactor(
                     "dispute_ratio_elevated",
                     "Elevated dispute ratio",
-                    12,
+                    25,
                     f"{ratio:.1%} of {len(txn_ids)} transactions disputed",
                 )
             )

@@ -4,83 +4,94 @@ All notable changes to Sentinel. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [Semantic Versioning](https://semver.org/).
 
-## [1.0.1] — 2026-09-13
+## [2.0.0] — 2026-09-23
 
-Final-audit patch. No architecture or API changes.
+**Sentinel becomes Financial Decision Security Infrastructure.** The v1
+four-layer LLM firewall is generalised into a platform where every financial
+surface -- transactions, disputes, merchant onboarding, account security,
+investigations, AI-agent inputs and outputs -- flows through one pipeline:
 
-### Fixed
-- **Audit privacy:** the persisted audit trail documented "stores a hash, never
-  the prose", but L2 detection's matched-trigger snippets (`span`) were written
-  raw. `audit._redact()` now hashes any `span` to `span_sha256` + `span_len`
-  before writing, so no raw untrusted substring lands on disk while the trigger
-  name/score stay auditable. The audit log was already injection-safe. Regression
-  test strengthened to assert a detection-triggering phrase does not leak.
-
-### Changed
-- Test count corrected to **83** across README/docs (one test added by the fix);
-  coverage 91.46%.
-- `docs/FINAL_RELEASE_AUDIT.md` added (release-readiness matrix, actually executed).
-
-## [1.0.0] — 2026-09-13
-
-The resume-ready release: a complete, runnable, inspectable AI firewall for
-high-stakes back-office LLM agents.
+```text
+untrusted information → AI Security Gateway → risk intelligence → AI recommendation
+→ trusted-evidence adjudication → deterministic policy → capability authorization
+→ human review → action → case → tamper-evident audit → replay
+```
 
 ### Added
-- **Typed trust boundary** (`firewall/trust.py`): `UntrustedText` vs `TrustedFacts`
-  (`DisputeFacts` / `KYBFacts`) with `supports(ClaimType)` as the only evidence
-  check. mypy-enforced; proven by `tests/test_trust_boundary.py`.
-- **Canonical `Decision`** object + **append-only audit trail** (`firewall/audit.py`)
-  storing hashes, not prose. One representation drives CLI, API, audit and tests.
-- **Held-out adversarial evaluation** (`red/heldout.py`, `eval/heldout.py`),
-  independently authored and kept disjoint from the dev corpus: **0% guarded ASR,
-  0% false positives** on unseen wording; wired into `make offline` and CI.
-- **Multi-turn `Session` model** (`firewall/session.py`): evaluates the whole
-  transcript so security never depends on the latest message alone.
-- **L4 capability policy engine** (`firewall/limits.py`): explicit
-  `ALLOW` / `REQUIRE_HUMAN_REVIEW` / `BLOCK` outcomes as data, with explanations.
-- **Zero-dependency HTTP API** (`sentinel_api.py`): `POST /api/evaluate`
-  (dispute + KYB, optional `document` and multi-turn `messages`), `GET /health`,
-  `GET /version`, `GET /api/audit/<id>`; optional bearer-token auth; input
-  validation and fail-safe errors.
-- **Docker deployment**: offline-by-default `Dockerfile` (non-root, HEALTHCHECK),
-  `.dockerignore`, `make docker-build` / `make docker-run`.
-- **Interactive console**: full L1→L2→AGENT→L3→L4 pipeline visualiser with 7 attack
-  presets, trusted/untrusted distinction, threat level, audit id, model, latency.
-- **Coverage gate** (pytest-cov, fail-under 85; actual ~91%) and an **offline
-  evaluation smoke test** in CI.
-- **Documentation**: THREAT_MODEL, EVALUATION, TECHNICAL_REPORT, API, DEPLOYMENT,
-  DECISIONS, RESUME, DEMO; refreshed ARCHITECTURE / LIMITATIONS / PERFORMANCE.
-- New generalisation chart (`chart6_heldout.png`).
+- **Domain model** (`sentinel/domain`): typed, immutable entities, Evidence
+  with a structural claim-vs-verified-fact distinction, RiskAssessment,
+  SecurityEvent, the canonical Decision, Case, an in-process typed event bus.
+- **Trust / provenance model**: seven `TrustClass` values; only
+  `TRUSTED_INTERNAL` and `VERIFIED_EXTERNAL` can authorize; model output is
+  `MODEL_GENERATED` and can never become VERIFIED evidence.
+- **AI Security Gateway** (`sentinel/security`): 12-class threat taxonomy,
+  expanded explainable signal set (context poisoning, tool manipulation,
+  capability requests, social pressure, indirect/document reclassification),
+  unicode-obfuscation accounting, multi-turn split-payload detection, and
+  inspection of model output for off-surface capability requests.
+- **Capability registry**: per-capability risk, reversibility, monetary
+  impact, allowed actors, required authorization, human-review thresholds;
+  `AI_AGENT` allowed on no consequential capability; `SKIP_REVIEW` on none.
+- **Policy-as-code** (`sentinel/policy`): versioned JSON policies validated
+  against a field catalog; deterministic, order-independent evaluation with
+  complete explanations; fail-safe on missing required fields. Ships
+  `dispute-refund` v1/v2, `transaction-authorization` v1/v2,
+  `merchant-onboarding`, `account-security`, `investigation`.
+- **Evidence reconciliation + contradiction engine** (`sentinel/evidence`):
+  SUPPORTED / UNSUPPORTED / CONTRADICTED / INSUFFICIENT with first-class
+  Contradiction objects.
+- **Decision composer** (`sentinel/decision/composer.py`): the one place an
+  outcome is computed, from a `_TrustedView` with no model-recommendation
+  field; controls toggles for the ablation.
+- **Risk engine** (`sentinel/risk`): versioned weight tables, behavioural
+  baselines, an entity relationship graph, entity profiles (device → merchant
+  → account → customer), transaction risk with 13 signal families, account
+  security, and a labelled transaction-monitoring simulation (structuring-like,
+  rapid movement, velocity, 24h bursts, geography shifts, exposure, circular
+  transfers, dormant activation, shared-device rings, linked-entity risk).
+- **Workflows** for disputes, transactions, KYB, account security,
+  investigations and AI-security-only evaluation; multi-turn dispute sessions.
+- **Cases** with deterministic opening rules, a guarded lifecycle and
+  human-only resolution.
+- **Tamper-evident audit chain** (`hash_n = SHA256(event_n ‖ hash_n-1)`) with
+  memory / JSONL / SQLite backends and `sentinel audit verify`.
+- **Deterministic synthetic data generator** with correlated behaviour and
+  nine labelled scenarios; **SQLite store** with decision input snapshots.
+- **Replay engine**: rerun a decision under another policy version, rule
+  threshold, risk model version, model recommendation or control set, with a
+  field-level diff and explanation; replays are audited.
+- **Application layer** (`sentinel/app.py`), **versioned API** (`/v1/...`),
+  **CLI** (`sentinel ...`), and a **console** (`ui/`) that only renders engine
+  output, with a static snapshot mode for hosting.
+- **Unified evaluation**: security (ASR = unauthorised capability executed,
+  detection recall, false positives, escalation), held-out, KYB, baselines,
+  8-configuration ablation, multi-level financial risk metrics on labelled
+  data, decision-integrity suite, component benchmarks, provider comparison,
+  charts; `sentinel eval run --suite full`.
+- **Ten security invariants** with property-based tests (Hypothesis), a
+  hostile-vector suite, trust-boundary proofs re-pinned against the new
+  modules; CI runs lint, types, coverage gate, invariants, evaluation smoke,
+  CLI + audit smoke and a Docker build.
+- Documentation rewritten: README, ARCHITECTURE, THREAT_MODEL, EVALUATION,
+  DECISIONS, INTERVIEW, API, DEPLOYMENT, TESTING, DEMO, LIMITATIONS,
+  PERFORMANCE, RESUME.
 
 ### Changed
-- **Repository renamed** `TheScouts` → `sentinel`; all URLs (clone, Pages, CI
-  badge) are now consistent and working.
-- Claim classifier broadened to natural paraphrases (fixes false positives found by
-  the held-out set), with dev corpus results unchanged.
-- README rewritten; test badge 26 → 83; performance numbers refreshed.
-- Version 0.2.0 → 1.0.0.
+- The v1 `firewall/`, `agents/`, `red/`, `eval/`, `llm.py`, `sentinel_api.py`
+  and `console/` are retired; their ideas and their test pins live on in the
+  new package and suite. The v1 console's JavaScript re-implementation of the
+  firewall is gone: the UI has no decision logic.
+- "Attack success" now means an unauthorised consequential capability
+  executed, not "the detector flagged the sentence".
+- Held-out evaluation surfaced a false positive on a novel cancellation
+  phrasing ("called off the booking"); the general pattern was broadened.
+- v1 reports archived under `docs/archive/`.
 
-### Fixed
-- False-positive bug: legitimate paraphrases ("two identical charges", "has not
-  reached me") were mislabeled by the lexical claim classifier and wrongly denied;
-  fixed and pinned by regression tests.
-- Broken README links (Live Demo / clone / CI badge pointed at a nonexistent repo).
+## [1.0.1] — 2026-09-13
+Final-audit patch: audit redaction of matched-trigger snippets; test count
+corrections. See `docs/archive/`.
 
-### Security / evaluation snapshot (all reproducible via `make offline`)
-- Dispute: attack success 83.3% → **0.0%**, false positives **0.0%** (60 attacks,
-  18 controls).
-- Held-out: 16.7%* → **0.0%**, FP **0.0%** (12 independent attacks).
-- KYB: 87.5% → **0.0%**, FP **0.0%** (8 attacks, 5 controls).
-- Ablation: detection-only leaks 6.7%; L3 alone closes it.
-- 83 tests, ~91% coverage; ruff / black / mypy clean.
-
-\* Offline victim agent is lexical, so it under-fires on novel wording; the held-out
-set validates the firewall's generalisation and false-positive behaviour.
-
-## [0.2.0] and earlier
-
-Pre-release hackathon build: L1–L4 firewall, dispute + KYB surfaces, offline and
-live modes, attack taxonomy, ablation, baselines, benchmarks, structured logging,
-unicode/homoglyph normalisation, CI (ruff/black/mypy/pytest), and the GitHub Pages
-demo. See git history before the `release/resume-ready-v1` branch.
+## [1.0.0] — 2026-09-13
+The v1 four-layer AI firewall (typed trust boundary, structured adjudication,
+capability limits, held-out evaluation, zero-dependency API, interactive
+console). See `docs/archive/`.
