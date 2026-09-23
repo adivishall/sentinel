@@ -1,0 +1,50 @@
+"""Investigations as first-class objects."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from sentinel.domain.enums import CasePriority, CaseStatus, Workflow
+
+
+@dataclass(frozen=True)
+class CaseEvent:
+    event_id: str
+    case_id: str
+    kind: str  # created | status_changed | evidence_attached | human_decision | note
+    actor: str
+    detail: dict[str, object]
+    created_at: str
+
+
+@dataclass(frozen=True)
+class HumanDecision:
+    decision_id: str
+    case_id: str
+    reviewer: str
+    outcome: str  # approve | deny | escalate
+    note: str
+    created_at: str
+
+
+@dataclass(frozen=True)
+class Case:
+    case_id: str
+    case_type: Workflow
+    status: CaseStatus
+    priority: CasePriority
+    title: str
+    entities: tuple[str, ...]
+    decision_ids: tuple[str, ...]
+    risk_assessment_ids: tuple[str, ...]
+    evidence_ids: tuple[str, ...]
+    security_event_ids: tuple[str, ...]
+    ai_recommendations: tuple[str, ...]
+    policy_decisions: tuple[str, ...]
+    human_decisions: tuple[HumanDecision, ...]
+    events: tuple[CaseEvent, ...]
+    created_at: str
+    updated_at: str
+    opened_by_rule: str = ""
+    resolution: str | None = None
+    audit_event_ids: tuple[str, ...] = field(default_factory=tuple)
