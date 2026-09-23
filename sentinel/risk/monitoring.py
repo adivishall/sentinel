@@ -31,6 +31,11 @@ class MonitoringContext:
     as_of: str
     window_days: int = 30
     inbound: tuple[Transaction, ...] = field(default_factory=tuple)  # transfers INTO this account
+    linked_accounts: tuple[str, ...] = field(
+        default_factory=tuple
+    )  # via shared device / instrument
+    linked_risk: int = 0  # worst precomputed risk among linked accounts / devices
+    shared_device_accounts: int = 0  # accounts sharing this account's devices
 
 
 def extract_features(
@@ -113,6 +118,9 @@ def extract_features(
         "high_risk_exposure": round(exposure, 3),
         "circular_cycles": [[n.id for n in c] for c in cycles[:3]],
         "dormant_activation": dormant,
+        "linked_accounts": list(ctx.linked_accounts),
+        "linked_risk": ctx.linked_risk,
+        "shared_device_accounts": ctx.shared_device_accounts,
         "evidence_ids": {},
     }
 
@@ -151,6 +159,24 @@ RULES: tuple[Rule, ...] = (
         "dormant_activation",
         "Dormant account activation",
         lambda f, m: "long silence followed by a burst" if f.get("dormant_activation") else None,
+    ),
+    (
+        "shared_device_ring",
+        "Shares a device with other accounts",
+        lambda f, m: (
+            f"{f.get('shared_device_accounts')} accounts on the same device"
+            if float(str(f.get("shared_device_accounts", 0) or 0)) >= 3
+            else None
+        ),
+    ),
+    (
+        "linked_entity_risk",
+        "Linked entity risk",
+        lambda f, m: (
+            ", ".join(_ids(f, "linked_accounts")[:3]) or "linked device"
+            if float(str(f.get("linked_risk", 0) or 0)) >= 50
+            else None
+        ),
     ),
 )
 

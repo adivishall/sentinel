@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentinel — Financial Decision Security</title>
+<meta name="description" content="Sentinel console: financial decision security infrastructure for AI-native finance.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <aside class="nav">
+    <div class="brand">
+      <div class="brand-mark">S</div>
+      <div><div class="brand-name">Sentinel</div><div class="brand-sub">Financial Decision Security</div></div>
+    </div>
+    <nav id="nav"></nav>
+    <div class="nav-foot">
+      <div id="mode-badge" class="badge">…</div>
+      <div id="chain-badge" class="badge">audit …</div>
+      <div class="muted small" id="source-badge"></div>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <div id="crumb" class="crumb">Overview</div>
+      <div class="top-actions">
+        <span class="principle">AI may recommend. Trusted evidence and deterministic policy authorize.</span>
+        <button class="btn ghost" id="refresh">Refresh</button>
+      </div>
+    </header>
+    <section id="view" class="view"></section>
+  </main>
+  <div id="drawer" class="drawer hidden"><div class="drawer-inner"><button class="drawer-close" id="drawer-close">×</button><div id="drawer-body"></div></div></div>
+  <div id="toast" class="toast hidden"></div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

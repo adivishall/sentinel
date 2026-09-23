@@ -1,0 +1,783 @@
+"""The application layer: one engine, three surfaces (CLI, API, UI).
+
+``SentinelApp`` owns the store, the runtime (policies, gateway, cases, audit,
+event bus, provider) and the entity graph / risk engine built over the loaded
+dataset. Every surface calls these methods; none of them re-implements a
+decision."""
+
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from typing import Any
+
+from sentinel.audit.chain import AuditChain, ChainVerification
+from sentinel.cases.service import CaseService
+from sentinel.data.generator import Dataset, generate
+from sentinel.data.store import SentinelStore, SqliteAuditBackend, SqliteCaseRepository
+from sentinel.decision.session import DisputeSession
+from sentinel.decision.snapshot import snapshot
+from sentinel.decision.workflows import (
+    DEFAULT_OPTIONS,
+    AccountSecurityRequest,
+    AISecurityRequest,
+    AISecurityResult,
+    DecisionBundle,
+    DisputeRequest,
+    InvestigationRequest,
+    KYBRequest,
+    RunOptions,
+    Runtime,
+    TransactionRequest,
+    run_account_security,
+    run_ai_security,
+    run_dispute,
+    run_investigation,
+    run_kyb,
+    run_transaction,
+)
+from sentinel.domain.cases import Case
+from sentinel.domain.entities import LoginSession, Transaction
+from sentinel.domain.enums import CaseStatus, TrustClass
+from sentinel.domain.risk import EntityRiskProfile
+from sentinel.domain.serialization import to_dict
+from sentinel.observability import METRICS, get_logger, log_decision
+from sentinel.policy.loader import DEFAULT_REGISTRY
+from sentinel.presets import ATTACKS, SCENARIOS
+from sentinel.replay.engine import ReplayEngine, ReplayOverrides, ReplayResult
+from sentinel.risk import account_security, monitoring
+from sentinel.risk import transaction as txn_risk
+from sentinel.risk.behavioral import BehavioralBaseline, parse_ts
+from sentinel.risk.entity import EntityRiskEngine
+from sentinel.risk.graph import EntityGraph, Node
+from sentinel.security.gateway import Conversation
+from sentinel.security.provenance import UntrustedContent
+
+_log = get_logger("sentinel.app")
+
+
+@dataclass
+class _World:
+    dataset: Dataset
+    graph: EntityGraph
+    engine: EntityRiskEngine
+    index: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+
+class SentinelApp:
+    def __init__(
+        self, store: SentinelStore | None = None, *, persist: bool = True, provider: Any = None
+    ) -> None:
+        self.store = store or SentinelStore(":memory:")
+        self.runtime = Runtime(
+            policies=DEFAULT_REGISTRY,
+            cases=CaseService(SqliteCaseRepository(self.store)),
+            audit=AuditChain(SqliteAuditBackend(self.store)),
+            provider=provider,
+            persist=persist,
+        )
+        self.replay_engine = ReplayEngine(self.runtime.policies)
+        self._world: _World | None = None
+        for p in self.runtime.policies.all():
+            self.store.save_policy_version(p.policy_id, p.version, p.workflow.value, p.to_dict())
+
+    # ---- construction ---------------------------------------------------------------------
+    @classmethod
+    def open(cls, path: str, **kw: Any) -> SentinelApp:
+        return cls(SentinelStore(path), **kw)
+
+    @classmethod
+    def demo(
+        cls,
+        seed: int = 42,
+        customers: int = 200,
+        merchants: int = 40,
+        transactions: int = 5000,
+        **kw: Any,
+    ) -> SentinelApp:
+        app = cls(**kw)
+        app.load_dataset(generate(seed, customers, merchants, transactions))
+        return app
+
+    def load_dataset(self, ds: Dataset) -> dict[str, object]:
+        self.store.load_dataset(ds)
+        self._world = None
+        return ds.summary()
+
+    def generate_dataset(
+        self, seed: int, customers: int, merchants: int, transactions: int
+    ) -> dict[str, object]:
+        return self.load_dataset(generate(seed, customers, merchants, transactions))
+
+    @property
+    def world(self) -> _World:
+        if self._world is None:
+            ds = self.store.to_dataset()
+            g = ds.graph()
+            idx = ds.by_id()
+            eng = EntityRiskEngine(
+                g,
+                idx["customer"],
+                idx["account"],
+                idx["merchant"],
+                idx["device"],
+                idx["transaction"],
+                idx["dispute"],
+                ds.as_of or datetime.utcnow().isoformat(),
+            )
+            self._world = _World(ds, g, eng, idx)
+        return self._world
+
+    # ---- persistence of a bundle ------------------------------------------------------------
+    def _persist(self, b: DecisionBundle) -> DecisionBundle:
+        if not self.runtime.persist:
+            return b
+        if b.risk is not None:
+            self.store.save_risk_assessment(b.risk)
+        if b.security_event is not None:
+            self.store.save_security_event(b.security_event)
+        snap = snapshot(b.inputs) if b.inputs is not None else {}
+        self.store.save_decision(b.decision, snap, [to_dict(e) for e in b.reconciliation.evidence])
+        log_decision(_log, b.decision)
+        METRICS.inc(f"decisions.{b.decision.workflow.value}")
+        METRICS.inc(f"actions.{b.decision.final_action.value}")
+        return b
+
+    # ---- contexts from trusted records --------------------------------------------------------
+    def transaction_context(self, t: Transaction) -> txn_risk.TransactionContext:
+        w = self.world
+        prior = self.store.transactions_before(t.account_id, t.timestamp)
+        disputes = self.store.disputes(account_id=t.account_id, limit=1000)
+        baseline = BehavioralBaseline.from_history(t.account_id, prior, disputes)
+        ts = parse_ts(t.timestamp)
+        recent = tuple(x for x in prior if parse_ts(x.timestamp) >= ts - timedelta(hours=24))
+        known = frozenset(self.store.account_devices(t.account_id)) | frozenset(
+            x.device_id for x in prior
+        )
+        mprof = w.engine.merchant_risk(t.merchant_id)
+        linked, who = w.engine.linked_entity_risk(t.account_id, t.device_id)
+        last = prior[-1] if prior else None
+        return txn_risk.TransactionContext(
+            baseline=baseline,
+            account=self.store.account(t.account_id),
+            merchant=self.store.merchant(t.merchant_id),
+            instrument=self.store.instrument(t.instrument_id),
+            recent=recent,
+            known_devices=known,
+            merchant_risk_score=mprof.score,
+            linked_entity_risk=linked,
+            linked_entity_ids=who,
+            last_country=last.country if last else None,
+            last_country_ts=last.timestamp if last else None,
+            device_shared_accounts=len(w.graph.accounts_sharing_device(t.device_id)),
+        )
+
+    def account_security_context(self, s: LoginSession) -> account_security.AccountSecurityContext:
+        prior = [
+            x
+            for x in self.store.sessions(account_id=s.account_id, limit=500)
+            if x.started_at < s.started_at
+        ]
+        known_dev = frozenset(self.store.account_devices(s.account_id)) | frozenset(
+            x.device_id for x in prior
+        )
+        known_c = frozenset(x.country for x in prior)
+        last = max(prior, key=lambda x: x.started_at) if prior else None
+        hours = (
+            (parse_ts(s.started_at) - parse_ts(last.started_at)).total_seconds() / 3600
+            if last
+            else None
+        )
+        recent = [
+            x
+            for x in prior
+            if parse_ts(x.started_at) >= parse_ts(s.started_at) - timedelta(hours=1)
+        ]
+        acc = self.store.account(s.account_id)
+        return account_security.AccountSecurityContext(
+            known_dev,
+            known_c,
+            last.country if last else None,
+            hours,
+            len(recent),
+            max(1, len(known_dev)),
+            bool(acc and acc.status == "frozen"),
+        )
+
+    def monitoring_context(
+        self, account_id: str, as_of: str | None = None
+    ) -> monitoring.MonitoringContext:
+        w = self.world
+        txns = tuple(self.store.transactions(account_id=account_id, limit=100_000, order="ASC"))
+        base_hist = [
+            t
+            for t in txns
+            if parse_ts(t.timestamp) < parse_ts(as_of or w.dataset.as_of) - timedelta(days=30)
+        ]
+        linked = tuple(sorted(w.graph.linked_accounts(account_id)))
+        linked_risk = max((w.engine.account_risk(a).score for a in linked), default=0)
+        for dev in w.graph.devices_for_account(account_id):
+            linked_risk = max(linked_risk, w.engine.device_risk(dev).score)
+        shared = max(
+            (
+                len(w.graph.accounts_sharing_device(d))
+                for d in w.graph.devices_for_account(account_id)
+            ),
+            default=0,
+        )
+        return monitoring.MonitoringContext(
+            account_id,
+            txns,
+            BehavioralBaseline.from_history(account_id, base_hist),
+            w.index["merchant"],
+            w.graph,
+            as_of or w.dataset.as_of,
+            inbound=tuple(self.store.inbound_transfers(account_id)),
+            linked_accounts=linked,
+            linked_risk=linked_risk,
+            shared_device_accounts=shared,
+        )
+
+    # ---- workflow entry points --------------------------------------------------------------------
+    def evaluate_transaction(
+        self,
+        transaction: Transaction | str,
+        *,
+        untrusted: tuple[UntrustedContent, ...] = (),
+        options: RunOptions = DEFAULT_OPTIONS,
+    ) -> DecisionBundle:
+        t0 = time.perf_counter()
+        t = self.store.transaction(transaction) if isinstance(transaction, str) else transaction
+        if t is None:
+            raise KeyError(f"unknown transaction {transaction}")
+        ctx = self.transaction_context(t)
+        acc = self.store.account(t.account_id)
+        mprof = self.world.engine.merchant_risk(t.merchant_id)
+        b = run_transaction(
+            self.runtime,
+            TransactionRequest(
+                t, ctx, acc.status if acc else "unknown", mprof.level.value, untrusted
+            ),
+            options,
+        )
+        METRICS.observe("evaluate_transaction", (time.perf_counter() - t0) * 1000)
+        return self._persist(b)
+
+    def evaluate_dispute(
+        self,
+        narrative: str,
+        ledger: dict[str, object] | None = None,
+        *,
+        dispute_id: str | None = None,
+        documents: tuple[str, ...] = (),
+        source: str = "cardholder",
+        options: RunOptions = DEFAULT_OPTIONS,
+    ) -> DecisionBundle:
+        t0 = time.perf_counter()
+        account_id = None
+        account_risk = 0
+        if dispute_id and ledger is None:
+            found = self.store.dispute(dispute_id)
+            if found is None:
+                raise KeyError(f"unknown dispute {dispute_id}")
+            d, texts = found
+            t = self.store.transaction(d.transaction_id)
+            ledger = {
+                "amount": d.amount,
+                "merchant": t.merchant_id if t else "unknown",
+                "delivery_status": t.delivery_status if t else "unknown",
+                "prior_disputes_90d": max(0, len(self.store.disputes(account_id=d.account_id)) - 1),
+                "policy_auto_limit": 50_000,
+                "cardholder_present": True,
+            }
+            narrative = narrative or texts.get("narrative", "")
+            if not documents and texts.get("document"):
+                documents = (texts["document"],)
+            account_id = d.account_id
+            account_risk = self.world.engine.account_risk(d.account_id).score
+        docs = tuple(
+            UntrustedContent(x, TrustClass.DOCUMENT_CONTROLLED, "uploaded_document", "document")
+            for x in documents
+        )
+        b = run_dispute(
+            self.runtime,
+            DisputeRequest(
+                UntrustedContent(narrative, TrustClass.USER_CONTROLLED, source),
+                ledger or {},
+                dispute_id or "",
+                docs,
+                None,
+                account_id,
+                account_risk,
+            ),
+            options,
+        )
+        METRICS.observe("evaluate_dispute", (time.perf_counter() - t0) * 1000)
+        return self._persist(b)
+
+    def evaluate_dispute_conversation(
+        self,
+        turns: tuple[str, ...],
+        ledger: dict[str, object],
+        *,
+        options: RunOptions = DEFAULT_OPTIONS,
+    ) -> DecisionBundle:
+        s = DisputeSession(self.runtime, ledger, options=options)
+        b = None
+        for t in turns:
+            b = s.add(t)
+        assert b is not None
+        return self._persist(b)
+
+    def evaluate_merchant(
+        self,
+        application: str,
+        records: dict[str, object] | None = None,
+        *,
+        application_id: str | None = None,
+        merchant_id: str = "",
+        documents: tuple[str, ...] = (),
+        options: RunOptions = DEFAULT_OPTIONS,
+    ) -> DecisionBundle:
+        if application_id and records is None:
+            found = self.store.kyb_application(application_id)
+            if found is None:
+                raise KeyError(f"unknown application {application_id}")
+            k, texts = found
+            records = {
+                "registration_status": k.registration_status,
+                "domain_age_days": k.domain_age_days,
+                "business_age_days": k.business_age_days,
+                "prior_flags": k.prior_flags,
+                "mcc_risk": k.mcc_risk,
+            }
+            application = application or texts.get("application", "")
+            if not documents and texts.get("document"):
+                documents = (texts["document"],)
+            merchant_id = merchant_id or k.merchant_id
+        docs = tuple(
+            UntrustedContent(x, TrustClass.DOCUMENT_CONTROLLED, "uploaded_document", "document")
+            for x in documents
+        )
+        b = run_kyb(
+            self.runtime,
+            KYBRequest(
+                UntrustedContent(application, TrustClass.MERCHANT_CONTROLLED, "application"),
+                records or {},
+                merchant_id,
+                docs,
+            ),
+            options,
+        )
+        return self._persist(b)
+
+    def evaluate_account(
+        self,
+        session: LoginSession | str,
+        *,
+        message: str | None = None,
+        requested_capability: Any = None,
+        options: RunOptions = DEFAULT_OPTIONS,
+    ) -> DecisionBundle:
+        s = self.store.session(session) if isinstance(session, str) else session
+        if s is None:
+            raise KeyError(f"unknown session {session}")
+        ctx = self.account_security_context(s)
+        msg = (
+            UntrustedContent(message, TrustClass.USER_CONTROLLED, "customer_message")
+            if message
+            else None
+        )
+        b = run_account_security(
+            self.runtime, AccountSecurityRequest(s, ctx, msg, requested_capability), options
+        )
+        return self._persist(b)
+
+    def evaluate_investigation(
+        self,
+        account_id: str,
+        *,
+        case_notes: tuple[str, ...] = (),
+        as_of: str | None = None,
+        options: RunOptions = DEFAULT_OPTIONS,
+    ) -> DecisionBundle:
+        ctx = self.monitoring_context(account_id, as_of)
+        notes = tuple(UntrustedContent(n, TrustClass.UNKNOWN, "case_notes") for n in case_notes)
+        b = run_investigation(self.runtime, InvestigationRequest(ctx, notes), options)
+        return self._persist(b)
+
+    def evaluate_ai_security(
+        self,
+        contents: tuple[UntrustedContent, ...],
+        *,
+        agent_key: str = "dispute",
+        run_agent: bool = True,
+        conversation: Conversation | None = None,
+    ) -> AISecurityResult:
+        r = run_ai_security(
+            self.runtime, AISecurityRequest(contents, agent_key, run_agent, conversation)
+        )
+        if r.event is not None and self.runtime.persist:
+            self.store.save_security_event(r.event)
+        return r
+
+    # ---- attack simulator + flagship scenarios ----------------------------------------------------
+    def simulate_attack(
+        self,
+        kind: str,
+        *,
+        narrative: str | None = None,
+        document: str | None = None,
+        options: RunOptions = DEFAULT_OPTIONS,
+    ) -> dict[str, Any]:
+        p = ATTACKS[kind]
+        if p.turns and narrative is None:
+            b = self.evaluate_dispute_conversation(p.turns, p.ledger, options=options)
+            shown = "\n".join(f"Turn {i + 1}: {t}" for i, t in enumerate(p.turns))
+        else:
+            docs = (document,) if document else ((p.document,) if p.document else ())
+            b = self.evaluate_dispute(
+                narrative if narrative is not None else p.narrative,
+                dict(p.ledger),
+                documents=docs,
+                options=options,
+            )
+            shown = narrative if narrative is not None else p.narrative
+        return self.storyboard(
+            b, preset=p.key, shown_input=shown, shown_document=document or p.document
+        )
+
+    def storyboard(
+        self,
+        b: DecisionBundle,
+        *,
+        preset: str | None = None,
+        shown_input: str = "",
+        shown_document: str | None = None,
+    ) -> dict[str, Any]:
+        d = b.decision
+        return {
+            "preset": preset,
+            "attacker_input": shown_input,
+            "attacker_document": shown_document,
+            "ledger": {k: v for k, v in (b.inputs.facts if b.inputs else {}).items()},
+            "stages": [
+                {
+                    "stage": "untrusted_input",
+                    "title": "Untrusted input",
+                    "value": f"{b.security.source_trust.value} · hash {d.input_hash}",
+                    "status": "info",
+                },
+                {
+                    "stage": "ai_security_gateway",
+                    "title": "AI Security Gateway",
+                    "value": f"{b.security.severity.value} · {', '.join(t.value for t in b.security.threat_classes) or 'no findings'}",
+                    "status": "alert" if b.security.flagged else "ok",
+                },
+                {
+                    "stage": "ai_recommendation",
+                    "title": "LLM recommendation",
+                    "value": (
+                        f"{b.ai.recommended_action.upper()} (MODEL_GENERATED)" if b.ai else "n/a"
+                    ),
+                    "status": "alert" if (b.ai and b.ai.requested_capability) else "ok",
+                },
+                {
+                    "stage": "trusted_evidence",
+                    "title": "Trusted evidence",
+                    "value": f"{b.reconciliation.verdict.value} — {b.reconciliation.explanation}",
+                    "status": "ok" if b.reconciliation.supports_claim else "alert",
+                },
+                {
+                    "stage": "policy",
+                    "title": f"Policy {d.policy.policy_id}@v{d.policy.version}",
+                    "value": f"{d.policy.outcome.value} · {', '.join(d.policy.matched_rules) or 'no rules matched'}",
+                    "status": "ok" if d.policy.outcome.value == "ALLOW" else "alert",
+                },
+                {
+                    "stage": "authorization",
+                    "title": "Capability authorization",
+                    "value": f"{(d.requested_capability.value if d.requested_capability else 'none')} → {d.authorization.status.value}",
+                    "status": "ok" if d.authorization.status.value == "GRANTED" else "alert",
+                },
+                {
+                    "stage": "final",
+                    "title": "Final Sentinel decision",
+                    "value": d.final_action.value,
+                    "status": "ok" if d.final_action.value == "ALLOW" else "alert",
+                },
+                {
+                    "stage": "case",
+                    "title": "Case",
+                    "value": b.case.case_id if b.case else "no case",
+                    "status": "info",
+                },
+                {
+                    "stage": "audit",
+                    "title": "Audit",
+                    "value": (
+                        f"event #{b.audit_event.sequence} {b.audit_event.event_hash[:16]}…"
+                        if b.audit_event
+                        else "not persisted"
+                    ),
+                    "status": "info",
+                },
+            ],
+            "headline": (
+                "The AI was persuaded. The financial system was not."
+                if (b.ai and b.ai.requested_capability and not d.executed)
+                else ("Legitimate request approved." if d.executed else "Held for a human.")
+            ),
+            "decision": to_dict(d),
+            "security": to_dict(b.security),
+            "reconciliation": to_dict(b.reconciliation),
+            "risk": to_dict(b.risk) if b.risk else None,
+            "ai": to_dict(b.ai) if b.ai else None,
+            "case": to_dict(b.case) if b.case else None,
+            "audit_event": b.audit_event.to_dict() if b.audit_event else None,
+        }
+
+    def run_scenario(self, key: str, *, options: RunOptions = DEFAULT_OPTIONS) -> dict[str, Any]:
+        p = SCENARIOS[key]
+        tags = [s for s in self.store.scenarios() if s["scenario"] == key]
+        results: list[dict[str, Any]] = []
+        if key == "normal_purchase":
+            for t in self.store.transactions(limit=3, order="DESC"):
+                if t.label == "legit":
+                    results.append(
+                        self._scenario_item(self.evaluate_transaction(t, options=options))
+                    )
+        elif p.workflow == "transaction":
+            for tag in tags[:3]:
+                for eid in tag["entity_ids"]:
+                    if eid.startswith("TX-"):
+                        results.append(
+                            self._scenario_item(self.evaluate_transaction(eid, options=options))
+                        )
+        elif p.workflow == "dispute":
+            for tag in tags[:1]:
+                for did in [e for e in tag["entity_ids"] if e.startswith("DSP-")][:4]:
+                    results.append(
+                        self._scenario_item(
+                            self.evaluate_dispute("", dispute_id=did, options=options)
+                        )
+                    )
+        elif p.workflow == "merchant":
+            for tag in tags[:2]:
+                mid = tag["entity_ids"][0]
+                prof = self.world.engine.merchant_risk(mid)
+                results.append(
+                    {"subject": f"merchant:{mid}", "risk": to_dict(prof), "final_action": None}
+                )
+        elif p.workflow == "investigation":
+            for tag in tags[:2]:
+                for aid in [e for e in tag["entity_ids"] if e.startswith("ACC-")][:3]:
+                    results.append(
+                        self._scenario_item(self.evaluate_investigation(aid, options=options))
+                    )
+        return {"scenario": to_dict(p), "results": results, "tags": tags[:3]}
+
+    def _scenario_item(self, b: DecisionBundle) -> dict[str, Any]:
+        d = b.decision
+        return {
+            "subject": f"{d.subject_type}:{d.subject_id}",
+            "final_action": d.final_action.value,
+            "risk_score": d.risk_score,
+            "risk_level": d.risk_level.value,
+            "evidence_verdict": d.evidence_verdict.value,
+            "security_severity": d.security_severity.value,
+            "ai_recommendation": b.ai.recommended_action if b.ai else None,
+            "policy_outcome": d.policy.outcome.value,
+            "case_id": d.case_id,
+            "decision_id": d.decision_id,
+            "factors": [f"{f.points:+d} {f.label}" for f in (b.risk.factors if b.risk else ())],
+        }
+
+    # ---- batch analysis (populates the dashboard from real computation) -------------------------------
+    def analyze(
+        self,
+        *,
+        transactions: int = 300,
+        disputes: int = 60,
+        applications: int = 30,
+        sessions: int = 60,
+        accounts: int = 20,
+        skip_agent: bool = False,
+    ) -> dict[str, int]:
+        opts = RunOptions(skip_agent=skip_agent)
+        n = {
+            "transactions": 0,
+            "disputes": 0,
+            "applications": 0,
+            "sessions": 0,
+            "investigations": 0,
+        }
+        for t in self.store.transactions(limit=transactions, order="DESC"):
+            self.evaluate_transaction(t, options=opts)
+            n["transactions"] += 1
+        for d in self.store.disputes(limit=disputes):
+            self.evaluate_dispute("", dispute_id=d.dispute_id, options=opts)
+            n["disputes"] += 1
+        for k in self.store.kyb_applications(limit=applications):
+            self.evaluate_merchant("", application_id=k.application_id, options=opts)
+            n["applications"] += 1
+        for s in self.store.sessions(limit=sessions):
+            self.evaluate_account(s, options=opts)
+            n["sessions"] += 1
+        flagged = {
+            e
+            for s in self.store.scenarios()
+            if s["scenario"] in ("graph_linked_fraud", "structuring_like", "dormant_activation")
+            for e in s["entity_ids"]
+            if e.startswith("ACC-")
+        }
+        for aid in list(flagged)[:accounts]:
+            self.evaluate_investigation(aid, options=opts)
+            n["investigations"] += 1
+        for m in self.store.merchants():
+            prof = self.world.engine.merchant_risk(m.merchant_id)
+            from sentinel.domain.risk import RiskAssessment
+
+            self.store.save_risk_assessment(
+                RiskAssessment(
+                    f"RISK-M-{m.merchant_id}",
+                    "merchant",
+                    m.merchant_id,
+                    prof.score,
+                    prof.level,
+                    prof.factors,
+                    "n/a",
+                    prof.model_version,
+                    {},
+                    self.world.dataset.as_of,
+                )
+            )
+        return n
+
+    # ---- reads -------------------------------------------------------------------------------------------
+    def overview(self) -> dict[str, Any]:
+        st = self.store.stats()
+        st["attack_classes"] = self.store.attack_classes()
+        st["risk_over_time"] = self.store.risk_over_time()
+        st["audit_chain"] = to_dict(self.verify_audit())
+        st["dataset"] = {
+            "seed": self.store.get_meta("dataset_seed"),
+            "as_of": self.store.get_meta("as_of"),
+            "customers": self.store.count("customers"),
+            "merchants": self.store.count("merchants"),
+            "accounts": self.store.count("accounts"),
+        }
+        return st
+
+    def entity_risk(self, entity_type: str, entity_id: str) -> dict[str, Any]:
+        if entity_type == "transaction":
+            t = self.store.transaction(entity_id)
+            if t is None:
+                raise KeyError(entity_id)
+            ra = txn_risk.assess_transaction(t, self.transaction_context(t))
+            return to_dict(ra)
+        prof: EntityRiskProfile = self.world.engine.profile(entity_type, entity_id)
+        return to_dict(prof)
+
+    def graph_for(self, entity_type: str, entity_id: str, depth: int = 2) -> dict[str, Any]:
+        return self.world.graph.to_dict(Node(entity_type, entity_id), depth)
+
+    def transaction_view(self, transaction_id: str) -> dict[str, Any]:
+        t = self.store.transaction(transaction_id)
+        if t is None:
+            raise KeyError(transaction_id)
+        ctx = self.transaction_context(t)
+        w = self.world
+        decisions = self.store.decisions(subject_id=transaction_id, limit=5)
+        latest = decisions[0] if decisions else None
+        return {
+            "transaction": to_dict(t),
+            "customer": (
+                to_dict(self.store.customer(ctx.account.customer_id)) if ctx.account else None
+            ),
+            "account": to_dict(ctx.account) if ctx.account else None,
+            "merchant": to_dict(ctx.merchant) if ctx.merchant else None,
+            "device": to_dict(self.store.device(t.device_id)),
+            "baseline": ctx.baseline.to_dict(),
+            "risk": to_dict(txn_risk.assess_transaction(t, ctx)),
+            "entity_risk": {
+                "account": to_dict(w.engine.account_risk(t.account_id)),
+                "merchant": to_dict(w.engine.merchant_risk(t.merchant_id)),
+                "device": to_dict(w.engine.device_risk(t.device_id)),
+            },
+            "graph": w.graph.to_dict(Node("transaction", transaction_id), 2),
+            "decision": latest,
+            "evidence": self.store.evidence_for(latest["decision_id"]) if latest else [],
+            "audit_event": self.audit_event(latest["decision_id"]) if latest else None,
+            "decisions": decisions,
+        }
+
+    def cases(self, status: str | None = None, limit: int = 100) -> list[Case]:
+        return self.runtime.cases.list(status=CaseStatus(status) if status else None, limit=limit)
+
+    def case(self, case_id: str) -> Case | None:
+        return self.runtime.cases.get(case_id)
+
+    def audit_event(self, event_or_decision_id: str) -> dict[str, Any] | None:
+        ev = self.runtime.audit.get(event_or_decision_id)
+        return ev.to_dict() if ev else None
+
+    def verify_audit(self) -> ChainVerification:
+        return self.runtime.audit.verify()
+
+    def replay(self, decision_id: str, overrides: ReplayOverrides) -> ReplayResult:
+        original = self.store.decision(decision_id)
+        snap = self.store.decision_snapshot(decision_id)
+        if original is None or snap is None:
+            raise KeyError(f"unknown decision {decision_id}")
+        from sentinel.decision.composer import compose
+        from sentinel.decision.snapshot import restore
+
+        base = compose(
+            restore(snap, self.runtime.policies)
+        )  # canonical re-derivation of the original
+        r = self.replay_engine.replay(base, snap, overrides)
+        if self.runtime.persist:
+            payload = {
+                "replay_id": r.replay_id,
+                "decision_id": r.decision_id,
+                "overrides": r.overrides,
+                "original": r.original,
+                "replayed": r.replayed,
+                "changed": r.changed,
+                "diffs": [to_dict(d) for d in r.diffs],
+                "explanation": r.explanation,
+                "created_at": r.created_at,
+            }
+            self.store.save_replay(r.replay_id, decision_id, r.changed, r.created_at, payload)
+            self.runtime.audit.append(
+                actor="sentinel",
+                workflow=r.replayed_decision.workflow.value,
+                action=f"REPLAY:{r.replayed['final_action']}",
+                decision_id=decision_id,
+                subject_id=r.replay_id,
+                policy_id=r.replayed_decision.policy.policy_id,
+                policy_version=r.replayed_decision.policy.version,
+                kind="replay",
+                detail={"overrides": r.overrides, "changed": r.changed},
+            )
+        return r
+
+    def system_info(self) -> dict[str, Any]:
+        from sentinel import __version__
+        from sentinel.agents.providers import get_provider, mode
+
+        p = self.runtime.provider or get_provider()
+        return {
+            "name": "sentinel",
+            "version": __version__,
+            "mode": mode(),
+            "provider": p.name,
+            "model": p.model,
+            "policies": [pp.key for pp in self.runtime.policies.all()],
+            "risk_models": ["txn-1.0", "txn-1.1", "acct-1.0", "mon-1.0", "disp-1.0"],
+            "audit": to_dict(self.verify_audit()),
+            "metrics": METRICS.snapshot(),
+            "store": self.store.path,
+        }

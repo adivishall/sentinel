@@ -114,6 +114,8 @@ MONITORING_V1 = RiskModel(
         "high_risk_merchant_exposure": 15,
         "circular_transfers": 30,
         "dormant_activation": 20,
+        "shared_device_ring": 15,
+        "linked_entity_risk": 20,
     },
     thresholds={"reporting_threshold": 50_000, "structuring_band": 0.8, "dormant_days": 90},
 )

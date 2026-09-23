@@ -112,6 +112,7 @@ class DecisionBundle:
     case: Case | None
     audit_event: AuditEvent | None
     policy_context_hash: str
+    inputs: DecisionInputs | None = None
 
 
 # ---- helpers ------------------------------------------------------------------------
@@ -272,6 +273,7 @@ def _finish(
         case,
         audit_event,
         decision.policy.context_hash,
+        inputs,
     )
 
 

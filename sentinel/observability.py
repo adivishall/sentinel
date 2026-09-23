@@ -1,0 +1,105 @@
+"""Structured JSON logging with correlation ids.
+
+Every line carries trace_id / request_id / decision_id where known, plus the
+workflow, entity, risk, policy, capability and action fields the mandate asks
+for -- and never raw untrusted text. Off by default (WARNING); set
+SENTINEL_LOG=INFO to see per-decision lines."""
+
+from __future__ import annotations
+
+import contextvars
+import json
+import logging
+import os
+import sys
+import uuid
+from collections import Counter
+from typing import Any
+
+trace_id: contextvars.ContextVar[str | None] = contextvars.ContextVar("trace_id", default=None)
+request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar("request_id", default=None)
+
+
+class _JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, Any] = {
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+            "trace_id": trace_id.get(),
+            "request_id": request_id.get(),
+        }
+        detail = getattr(record, "detail", None)
+        if isinstance(detail, dict):
+            payload.update(detail)
+        return json.dumps(payload, default=str)
+
+
+def get_logger(name: str) -> logging.Logger:
+    logger = logging.getLogger(name)
+    if not logger.handlers:
+        h = logging.StreamHandler(sys.stderr)
+        h.setFormatter(_JsonFormatter())
+        logger.addHandler(h)
+        logger.setLevel(os.getenv("SENTINEL_LOG", "WARNING").upper())
+        logger.propagate = False
+    return logger
+
+
+def new_trace() -> str:
+    t = uuid.uuid4().hex[:16]
+    trace_id.set(t)
+    return t
+
+
+def log_decision(logger: logging.Logger, decision: Any) -> None:
+    logger.info(
+        "decision",
+        extra={
+            "detail": {
+                "decision_id": decision.decision_id,
+                "workflow": decision.workflow.value,
+                "entity_id": decision.subject_id,
+                "risk_score": decision.risk_score,
+                "policy_version": f"{decision.policy.policy_id}@v{decision.policy.version}",
+                "capability": (
+                    decision.requested_capability.value if decision.requested_capability else None
+                ),
+                "action": decision.final_action.value,
+                "security_event": decision.security_event_id,
+                "input_hash": decision.input_hash,
+            }
+        },
+    )
+
+
+class Metrics:
+    """Lightweight in-process counters (exposed by GET /v1/system)."""
+
+    def __init__(self) -> None:
+        self.counters: Counter[str] = Counter()
+        self.latency_ms: dict[str, list[float]] = {}
+
+    def inc(self, key: str, n: int = 1) -> None:
+        self.counters[key] += n
+
+    def observe(self, key: str, ms: float) -> None:
+        self.latency_ms.setdefault(key, []).append(ms)
+        if len(self.latency_ms[key]) > 5000:
+            del self.latency_ms[key][:-5000]
+
+    def snapshot(self) -> dict[str, Any]:
+        out: dict[str, Any] = {"counters": dict(self.counters), "latency": {}}
+        for k, v in self.latency_ms.items():
+            s = sorted(v)
+            n = len(s)
+            out["latency"][k] = {
+                "n": n,
+                "p50_ms": round(s[n // 2], 3),
+                "p95_ms": round(s[min(n - 1, int(n * 0.95))], 3),
+                "p99_ms": round(s[min(n - 1, int(n * 0.99))], 3),
+            }
+        return out
+
+
+METRICS = Metrics()

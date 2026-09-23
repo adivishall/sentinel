@@ -53,6 +53,24 @@ class EntityRiskEngine:
     disputes: dict[str, Dispute]
     as_of: str
     _cache: dict[tuple[str, str], EntityRiskProfile] = field(default_factory=dict)
+    _by_merchant: dict[str, list[Transaction]] = field(default_factory=dict)
+    _by_account: dict[str, list[Transaction]] = field(default_factory=dict)
+    _disp_by_account: dict[str, list[Dispute]] = field(default_factory=dict)
+    _disp_by_merchant: dict[str, list[Dispute]] = field(default_factory=dict)
+    _indexed: bool = False
+
+    def _index(self) -> None:
+        if self._indexed:
+            return
+        for t in self.transactions.values():
+            self._by_merchant.setdefault(t.merchant_id, []).append(t)
+            self._by_account.setdefault(t.account_id, []).append(t)
+        for d in self.disputes.values():
+            self._disp_by_account.setdefault(d.account_id, []).append(d)
+            txn = self.transactions.get(d.transaction_id)
+            if txn is not None:
+                self._disp_by_merchant.setdefault(txn.merchant_id, []).append(d)
+        self._indexed = True
 
     # ---- device ---------------------------------------------------------------------
     def device_risk(self, device_id: str) -> EntityRiskProfile:
@@ -105,13 +123,9 @@ class EntityRiskEngine:
         if m is None:
             factors.append(RiskFactor("merchant_unknown", "Merchant not in records", 20))
             return _profile("merchant", merchant_id, factors)
-        txn_ids = [t for t in self.transactions.values() if t.merchant_id == merchant_id]
-        disp = [
-            d
-            for d in self.disputes.values()
-            if self.transactions.get(d.transaction_id)
-            and self.transactions[d.transaction_id].merchant_id == merchant_id
-        ]
+        self._index()
+        txn_ids = self._by_merchant.get(merchant_id, [])
+        disp = self._disp_by_merchant.get(merchant_id, [])
         ratio = len(disp) / len(txn_ids) if txn_ids else 0.0
         if ratio >= 0.05 and len(txn_ids) >= 5:
             factors.append(
@@ -182,10 +196,11 @@ class EntityRiskEngine:
         if a is None:
             factors.append(RiskFactor("account_unknown", "Account not in records", 20))
             return _profile("account", account_id, factors)
+        self._index()
         disp = [
             d
-            for d in self.disputes.values()
-            if d.account_id == account_id and _days_between(d.submitted_at, self.as_of) <= 90
+            for d in self._disp_by_account.get(account_id, [])
+            if _days_between(d.submitted_at, self.as_of) <= 90
         ]
         if len(disp) >= 2:
             factors.append(
@@ -230,7 +245,7 @@ class EntityRiskEngine:
                     "linked_device_medium", "Uses a medium-risk device", 10, f"device score {worst}"
                 )
             )
-        txns = [t for t in self.transactions.values() if t.account_id == account_id]
+        txns = self._by_account.get(account_id, [])
         if txns:
             hi = sum(
                 t.amount
