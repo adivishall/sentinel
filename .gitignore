@@ -4,4 +4,12 @@ __pycache__/
 .DS_Store
 .coverage
 htmlcov/
-eval/results/audit.jsonl
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+data/
+results/_eval_run.log
+*.egg-info/
+build/
+dist/

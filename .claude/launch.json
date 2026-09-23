@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "sentinel-console",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "sentinel", "--db", ":memory:", "serve", "--port", "8765", "--analyze"],
+      "port": 8765,
+      "env": {"SENTINEL_FORCE_OFFLINE": "1"}
+    }
+  ]
+}

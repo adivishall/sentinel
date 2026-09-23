@@ -129,6 +129,17 @@ def _velocity_elevated(f: Features, m: RiskModel) -> str | None:
     )
 
 
+def _velocity_burst(f: Features, m: RiskModel) -> str | None:
+    v = _num(f, "velocity_1h")
+    return f"{int(v)} transactions in the last hour" if v >= 8 else None
+
+
+def _young_shared(f: Features, m: RiskModel) -> str | None:
+    if _num(f, "account_age_days") < 30 and _num(f, "device_shared_accounts") >= 3:
+        return f"account {int(_num(f, 'account_age_days'))} days old on a device shared by {int(_num(f, 'device_shared_accounts'))} accounts"
+    return None
+
+
 def _bool(key: str, detail: str) -> Rule:
     return (key, detail, lambda f, m: detail if f.get(key) else None)  # type: ignore[return-value]
 
@@ -138,6 +149,7 @@ RULES: tuple[Rule, ...] = (
     ("amount_anomaly_high", "Amount well above account baseline", _amount_high),
     ("amount_anomaly_moderate", "Amount above account baseline", _amount_moderate),
     ("amount_ratio_small_baseline", "Amount far above thin baseline", _amount_ratio),
+    ("velocity_burst", "Transaction burst", _velocity_burst),
     ("velocity_spike", "Transaction velocity spike", _velocity_spike),
     ("velocity_elevated", "Elevated transaction velocity", _velocity_elevated),
     (
@@ -145,6 +157,7 @@ RULES: tuple[Rule, ...] = (
         "New device",
         lambda f, m: "device never seen on this account" if f.get("is_new_device") else None,
     ),
+    ("young_account_shared_device", "Young account on a shared device", _young_shared),
     (
         "shared_device",
         "Device shared across accounts",

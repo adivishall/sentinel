@@ -1,3 +1,4 @@
-# Runtime. Offline mode (make offline) needs NONE of these.
-anthropic==0.40.0     # live mode only
-matplotlib==3.9.2     # chart generation
+# Runtime: NONE. The Sentinel core is standard-library only.
+# Optional extras:
+anthropic==0.40.0     # live mode (real Claude agents)
+matplotlib==3.9.2     # chart PNGs for the evaluation

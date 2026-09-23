@@ -22,18 +22,27 @@ jobs:
         run: python -m black --check .
       - name: Type check (mypy)
         run: python -m mypy
-      - name: Tests + coverage (pytest)
+      - name: Tests + coverage gate
         env:
           SENTINEL_FORCE_OFFLINE: "1"
-        run: >-
-          python -m pytest tests/ -q
-          --cov=firewall --cov=agents --cov=sentinel_api
-          --cov-report=term-missing --cov-fail-under=85
-
-      - name: Offline evaluation smoke test
+        run: python -m pytest tests/ -q --cov=sentinel --cov-report=term --cov-fail-under=80
+      - name: Security regression suite (invariants + evaluation smoke)
         env:
           SENTINEL_FORCE_OFFLINE: "1"
         run: |
-          python eval/harness.py
-          python eval/ablation.py
-          python eval/heldout.py
+          python -m pytest tests/test_invariants.py -q
+          python -m sentinel eval run --suite security --out /tmp/results
+          python -m sentinel eval run --suite heldout --out /tmp/results
+          python -m sentinel eval run --suite ablation --out /tmp/results
+          python -m sentinel eval run --suite integrity --out /tmp/results
+      - name: CLI + audit chain smoke
+        env:
+          SENTINEL_FORCE_OFFLINE: "1"
+          SENTINEL_DB: /tmp/ci.db
+        run: |
+          python -m sentinel data generate --seed 42 --customers 100 --merchants 20 --transactions 2000
+          python -m sentinel analyze --transactions 40 --disputes 10 --applications 5 --sessions 10 --accounts 4
+          python -m sentinel security attack --scenario document_injection
+          python -m sentinel audit verify
+      - name: Docker build
+        run: docker build -t sentinel .

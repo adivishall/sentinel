@@ -575,7 +575,7 @@ class _Gen:
                     aid,
                     when=self.days_ago(1, 60),
                     merchant=m.merchant_id,
-                    label="fraud:merchant_abuse",
+                    label="exposure:merchant_abuse",
                 )
                 ids.append(t.transaction_id)
                 if r.random() < 0.2:

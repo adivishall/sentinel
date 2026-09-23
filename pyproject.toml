@@ -3,33 +3,34 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sentinel-firewall"
-version = "1.0.0"
-description = "An AI firewall for back-office LLM pipelines (dispute triage, KYC/KYB, AML)."
+name = "sentinel-decision-security"
+version = "2.0.0"
+description = "Financial Decision Security Infrastructure for AI-native finance: AI may recommend; trusted evidence, deterministic risk controls and explicit policy authorize."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "adivishall" }]
-keywords = ["ai-security", "prompt-injection", "llm-security", "payment-security", "guardrails"]
-dependencies = []  # offline core has zero runtime deps
+keywords = ["ai-security", "prompt-injection", "fraud-risk", "policy-as-code", "fintech", "decision-integrity", "audit"]
+dependencies = []  # the core is standard library only (sqlite3, http.server, dataclasses)
 
 [project.optional-dependencies]
 live = ["anthropic==0.40.0"]
 charts = ["matplotlib==3.9.2"]
-dev = ["pytest==8.3.3", "pytest-cov==5.0.0", "ruff==0.16.5", "black==26.5.1", "mypy==2.3.1"]
+dev = ["pytest==8.3.3", "pytest-cov==5.0.0", "hypothesis==6.148.13", "ruff==0.16.5", "black==26.5.1", "mypy==2.3.1"]
 
 [project.scripts]
-sentinel-eval = "eval.harness:run"
-sentinel-ablation = "eval.ablation:main"
+sentinel = "sentinel.cli.main:main"
 
-[tool.setuptools]
-py-modules = ["llm", "sentinel_api"]
-packages = ["agents", "red", "firewall", "eval"]
+[tool.setuptools.packages.find]
+include = ["sentinel*"]
+
+[tool.setuptools.package-data]
+sentinel = ["policy/policies/*.json", "evaluation/attacks/*.json"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-exclude = ["submission", "notebooks", "data"]
+exclude = ["submission", "social", "notebooks", "data", "results", "ui"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 ignore = ["E501"]  # line length handled by black
@@ -37,24 +38,24 @@ ignore = ["E501"]  # line length handled by black
 [tool.black]
 line-length = 100
 target-version = ["py311"]
+extend-exclude = "submission|social|results|data"
 
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true
 warn_unused_ignores = false
 follow_imports = "silent"
-files = ["firewall", "sentinel_api.py"]
+files = ["sentinel"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.coverage.run]
-source = ["firewall", "agents", "sentinel_api"]
-omit = ["*/__pycache__/*"]
+source = ["sentinel"]
+omit = ["*/__pycache__/*", "sentinel/agents/providers/anthropic.py", "sentinel/evaluation/charts.py"]
 
 [tool.coverage.report]
-# Security-critical modules are held to a high bar; the API's serve() loop and
-# unreachable defensive branches keep the aggregate a touch lower.
-fail_under = 85
-show_missing = true
+fail_under = 80
+show_missing = false

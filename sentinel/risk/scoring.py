@@ -42,6 +42,8 @@ TRANSACTION_V1 = RiskModel(
         "amount_ratio_small_baseline": 12,
         "velocity_spike": 13,
         "velocity_elevated": 8,
+        "velocity_burst": 22,
+        "young_account_shared_device": 14,
         "new_device": 17,
         "shared_device": 8,
         "impossible_travel": 20,

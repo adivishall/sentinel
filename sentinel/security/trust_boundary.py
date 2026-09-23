@@ -76,7 +76,12 @@ _CLAIM_PATTERNS: tuple[tuple[ClaimType, re.Pattern[str]], ...] = (
     ),
     (
         ClaimType.CANCELLATION,
-        re.compile(r"cancel(l)?ed?.{0,20}order|order.{0,20}cancel|cancelled.{0,20}(it|within)"),
+        re.compile(
+            r"cancel(l)?(ed|ation)?.{0,25}(order|booking|purchase|subscription|payment|it|within)"
+            r"|(order|booking|purchase|subscription).{0,25}cancel"
+            r"|call(ed)? (it |the \w+ |my \w+ )?off"
+            r"|withdrew (the |my )?(order|booking|purchase)"
+        ),
     ),
     (
         ClaimType.UNAUTHORIZED,

@@ -1,65 +1,68 @@
-.PHONY: setup corpus eval heldout charts all demo offline clean test lint bench live-check live live-full ablation baselines kyb api docker-build docker-run
+.PHONY: help install test lint typecheck cov eval bench demo api ui snapshot data analyze attack audit-verify replay docker-build docker-run clean live-check
 
-setup:            ## install deps (only needed for live mode + charts)
-	pip install -r requirements.txt
+PY ?= python3
+DB ?= data/sentinel.db
+export SENTINEL_FORCE_OFFLINE ?= 1
 
-corpus:           ## build the attack + control corpus
-	python3 red/corpus.py
+help:             ## list targets
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-eval:             ## run all cases: unguarded vs firewall -> results/
-	python3 eval/harness.py
+install:          ## install dev tooling (the core has no runtime deps)
+	$(PY) -m pip install -r requirements-dev.txt
 
-ablation:         ## real layer ablation -> results/ablation.json
-	python3 eval/ablation.py
+test:             ## run the test suite (offline, no key)
+	$(PY) -m pytest tests/ -q
 
-baselines:        ## beat-the-obvious-defence comparison -> results/baselines.json
-	python3 eval/baselines.py
-
-kyb:              ## KYB second-surface benchmark -> results/kyb.json
-	SENTINEL_FORCE_OFFLINE=1 python3 eval/kyb_harness.py
-
-heldout:          ## held-out (anti-circularity) evaluation -> results/heldout.json
-	SENTINEL_FORCE_OFFLINE=1 python3 eval/heldout.py
-
-charts:           ## render the submission charts
-	python3 eval/charts.py
-
-all: corpus eval ablation baselines kyb heldout charts   ## full pipeline
-
-offline:          ## force offline mode end-to-end
-	SENTINEL_FORCE_OFFLINE=1 $(MAKE) all
-
-demo:             ## open the standalone demo console
-	python3 -c "import webbrowser,os;webbrowser.open('file://'+os.path.abspath('console/index.html'))"
-
-api:              ## run the Sentinel HTTP API locally (offline, no key)
-	SENTINEL_FORCE_OFFLINE=1 PORT=8000 python3 sentinel_api.py
-
-docker-build:     ## build the API container image
-	docker build -t sentinel-api .
-
-docker-run:       ## run the API container (offline) on :8000
-	docker run --rm -p 8000:8000 sentinel-api
-
-test:             ## run the pytest suite (offline)
-	SENTINEL_FORCE_OFFLINE=1 python3 -m pytest tests/ -q
+cov:              ## tests with coverage gate
+	$(PY) -m pytest tests/ -q --cov=sentinel --cov-report=term --cov-fail-under=80
 
 lint:             ## ruff + black --check + mypy
-	python3 -m ruff check .
-	python3 -m black --check .
-	python3 -m mypy
+	$(PY) -m ruff check .
+	$(PY) -m black --check .
+	$(PY) -m mypy
 
-bench:            ## firewall latency / throughput benchmark
-	SENTINEL_FORCE_OFFLINE=1 python3 eval/bench.py
+data:             ## generate the deterministic synthetic dataset into $(DB)
+	$(PY) -m sentinel --db $(DB) data generate --seed 42 --customers 500 --merchants 60 --transactions 20000
 
-live-check:       ## preflight: one Claude call to verify key + model
-	python3 scripts/live_check.py
+analyze:          ## run the engine over a slice of the dataset (populates the console)
+	$(PY) -m sentinel --db $(DB) analyze
 
-live:             ## live sample run (cheap) vs offline
-	python3 scripts/live_run.py
+demo: attack      ## the flagship demo
 
-live-full:        ## live run over the whole corpus (costlier)
-	python3 scripts/live_run.py --full
+attack:           ## "Attack the financial AI" -- the flagship demonstration
+	$(PY) -m sentinel --db :memory: security attack --scenario document_injection
+
+api:              ## API + console on :8000 (in-memory demo dataset, analysed on start)
+	$(PY) -m sentinel --db :memory: serve --host 0.0.0.0 --port 8000 --analyze
+
+ui: api           ## alias: the console is served by the API
+
+snapshot:         ## static console snapshot (GitHub Pages) computed by the real engine
+	$(PY) -m sentinel --db :memory: ui snapshot --out ui/snapshot.json
+
+eval:             ## full evaluation: security · held-out · KYB · baselines · ablation · financial · integrity · performance · models · charts
+	$(PY) -m sentinel eval run --suite full
+
+eval-quick:       ## the CI subset
+	$(PY) -m sentinel eval run --suite security
+	$(PY) -m sentinel eval run --suite heldout
+	$(PY) -m sentinel eval run --suite ablation
+	$(PY) -m sentinel eval run --suite integrity
+
+bench:            ## component + end-to-end latency benchmark
+	$(PY) -m sentinel bench
+
+audit-verify:     ## verify the tamper-evident audit chain in $(DB)
+	$(PY) -m sentinel --db $(DB) audit verify
+
+live-check:       ## one Claude call to verify the key + model (needs ANTHROPIC_API_KEY)
+	SENTINEL_FORCE_OFFLINE=0 $(PY) scripts/live_check.py
+
+docker-build:     ## build the container image
+	docker build -t sentinel .
+
+docker-run:       ## run the API + console container on :8000
+	docker run --rm -p 8000:8000 sentinel
 
 clean:
-	rm -f eval/results/*.png eval/results/*.json red/attacks/corpus.json
+	rm -rf data/*.db results/*.png .coverage .pytest_cache .mypy_cache .ruff_cache
