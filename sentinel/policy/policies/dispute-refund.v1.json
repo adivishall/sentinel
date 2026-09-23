@@ -1,0 +1,114 @@
+{
+  "policy_id": "dispute-refund",
+  "version": 1,
+  "workflow": "dispute",
+  "effective_from": "2026-09-01",
+  "description": "Refund control: evidence decides support; policy decides who may execute.",
+  "required_fields": [
+    "amount",
+    "evidence_verdict",
+    "security_severity",
+    "risk_score",
+    "policy_auto_limit"
+  ],
+  "rules": [
+    {
+      "id": "block-critical-ai-security",
+      "when": [
+        {
+          "field": "security_severity",
+          "op": "==",
+          "value": "CRITICAL"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Critical AI-security finding on the untrusted input."
+    },
+    {
+      "id": "block-capability-escalation",
+      "when": [
+        {
+          "field": "capability_escalation",
+          "op": "is_true"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "The model requested a capability outside its surface."
+    },
+    {
+      "id": "block-unsupported-claim",
+      "when": [
+        {
+          "field": "evidence_verdict",
+          "op": "in",
+          "value": [
+            "UNSUPPORTED",
+            "CONTRADICTED"
+          ]
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Verified ledger evidence does not support the claim."
+    },
+    {
+      "id": "review-insufficient-evidence",
+      "when": [
+        {
+          "field": "evidence_verdict",
+          "op": "==",
+          "value": "INSUFFICIENT"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "The claim cannot yet be verified against the ledger."
+    },
+    {
+      "id": "review-over-auto-limit",
+      "when": [
+        {
+          "field": "amount",
+          "op": ">",
+          "value": 50000
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Refund exceeds the \u20b950,000 auto-approval limit."
+    },
+    {
+      "id": "review-critical-risk",
+      "when": [
+        {
+          "field": "risk_score",
+          "op": ">=",
+          "value": 75
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Dispute risk is CRITICAL."
+    },
+    {
+      "id": "review-high-ai-security",
+      "when": [
+        {
+          "field": "security_severity",
+          "op": "==",
+          "value": "HIGH"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "High-severity AI-security finding; a human confirms before money moves."
+    },
+    {
+      "id": "review-repeat-disputer",
+      "when": [
+        {
+          "field": "prior_disputes_90d",
+          "op": ">=",
+          "value": 3
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Three or more disputes in 90 days."
+    }
+  ]
+}

@@ -50,7 +50,11 @@ def test_outcome_and_severity_ordering():
         > PolicyOutcome.ALLOW.rank
     )
     assert Severity.CRITICAL.rank > Severity.HIGH.rank > Severity.NONE.rank
-    assert FinalAction.EXECUTE.is_consequential and not FinalAction.BLOCK.is_consequential
+    assert (
+        FinalAction.ALLOW.permissiveness
+        > FinalAction.REQUIRE_HUMAN_REVIEW.permissiveness
+        > FinalAction.BLOCK.permissiveness
+    )
 
 
 def test_untrusted_evidence_can_never_be_verified():

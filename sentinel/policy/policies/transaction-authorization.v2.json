@@ -1,0 +1,120 @@
+{
+  "policy_id": "transaction-authorization",
+  "version": 2,
+  "workflow": "transaction",
+  "effective_from": "2026-09-20",
+  "description": "Payment authorisation v2: HIGH band widened (score >= 70 now blocks; >= 40 reviews).",
+  "required_fields": [
+    "amount",
+    "risk_score",
+    "risk_level",
+    "security_severity"
+  ],
+  "rules": [
+    {
+      "id": "block-critical-ai-security",
+      "when": [
+        {
+          "field": "security_severity",
+          "op": "==",
+          "value": "CRITICAL"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Critical AI-security finding on the untrusted input."
+    },
+    {
+      "id": "block-capability-escalation",
+      "when": [
+        {
+          "field": "capability_escalation",
+          "op": "is_true"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "The model requested a capability outside its surface."
+    },
+    {
+      "id": "block-frozen-account",
+      "when": [
+        {
+          "field": "account_status",
+          "op": "==",
+          "value": "frozen"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Account is frozen."
+    },
+    {
+      "id": "review-over-auto-limit",
+      "when": [
+        {
+          "field": "amount",
+          "op": ">",
+          "value": 150000
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Amount exceeds the \u20b91,50,000 auto-approval limit."
+    },
+    {
+      "id": "review-critical-merchant",
+      "when": [
+        {
+          "field": "merchant_risk_level",
+          "op": "==",
+          "value": "CRITICAL"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Merchant risk is CRITICAL."
+    },
+    {
+      "id": "block-risk-70",
+      "when": [
+        {
+          "field": "risk_score",
+          "op": ">=",
+          "value": 70
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Transaction risk >= 70."
+    },
+    {
+      "id": "review-risk-40",
+      "when": [
+        {
+          "field": "risk_score",
+          "op": ">=",
+          "value": 40
+        },
+        {
+          "field": "risk_score",
+          "op": "<",
+          "value": 70
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Transaction risk 40-69."
+    },
+    {
+      "id": "stepup-risk-25",
+      "when": [
+        {
+          "field": "risk_score",
+          "op": ">=",
+          "value": 25
+        },
+        {
+          "field": "risk_score",
+          "op": "<",
+          "value": 40
+        }
+      ],
+      "outcome": "STEP_UP",
+      "reason": "Transaction risk 25-39."
+    }
+  ]
+}

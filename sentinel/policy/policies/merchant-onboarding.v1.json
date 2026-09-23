@@ -1,0 +1,113 @@
+{
+  "policy_id": "merchant-onboarding",
+  "version": 1,
+  "workflow": "merchant_onboarding",
+  "effective_from": "2026-09-01",
+  "description": "KYB onboarding: acquirer records decide; documents never do.",
+  "required_fields": [
+    "evidence_verdict",
+    "security_severity",
+    "registration_status",
+    "prior_flags"
+  ],
+  "rules": [
+    {
+      "id": "block-critical-ai-security",
+      "when": [
+        {
+          "field": "security_severity",
+          "op": "==",
+          "value": "CRITICAL"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Critical AI-security finding on the untrusted input."
+    },
+    {
+      "id": "block-capability-escalation",
+      "when": [
+        {
+          "field": "capability_escalation",
+          "op": "is_true"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "The model requested a capability outside its surface."
+    },
+    {
+      "id": "block-shell",
+      "when": [
+        {
+          "field": "registration_status",
+          "op": "==",
+          "value": "shell"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Shell registration."
+    },
+    {
+      "id": "block-repeat-flags",
+      "when": [
+        {
+          "field": "prior_flags",
+          "op": ">=",
+          "value": 2
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Two or more prior fraud flags."
+    },
+    {
+      "id": "block-contradicted",
+      "when": [
+        {
+          "field": "evidence_verdict",
+          "op": "==",
+          "value": "CONTRADICTED"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Acquirer records contradict the application."
+    },
+    {
+      "id": "review-incomplete",
+      "when": [
+        {
+          "field": "evidence_verdict",
+          "op": "in",
+          "value": [
+            "INSUFFICIENT",
+            "UNSUPPORTED"
+          ]
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Verification incomplete."
+    },
+    {
+      "id": "review-high-mcc",
+      "when": [
+        {
+          "field": "mcc_risk",
+          "op": "==",
+          "value": "high"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "High-risk merchant category."
+    },
+    {
+      "id": "review-high-ai-security",
+      "when": [
+        {
+          "field": "security_severity",
+          "op": "==",
+          "value": "HIGH"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "High-severity AI-security finding in the application."
+    }
+  ]
+}

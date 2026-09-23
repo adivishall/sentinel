@@ -1,0 +1,72 @@
+{
+  "policy_id": "investigation",
+  "version": 1,
+  "workflow": "investigation",
+  "effective_from": "2026-09-01",
+  "description": "Transaction monitoring: structured indicators open cases; a model may summarise, never close.",
+  "required_fields": [
+    "risk_level",
+    "security_severity"
+  ],
+  "rules": [
+    {
+      "id": "block-critical-ai-security",
+      "when": [
+        {
+          "field": "security_severity",
+          "op": "==",
+          "value": "CRITICAL"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Critical AI-security finding on the untrusted input."
+    },
+    {
+      "id": "block-capability-escalation",
+      "when": [
+        {
+          "field": "capability_escalation",
+          "op": "is_true"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "The model requested a capability outside its surface."
+    },
+    {
+      "id": "review-critical-patterns",
+      "when": [
+        {
+          "field": "risk_level",
+          "op": "==",
+          "value": "CRITICAL"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Critical monitoring indicators; escalate to an investigator."
+    },
+    {
+      "id": "review-high-patterns",
+      "when": [
+        {
+          "field": "risk_level",
+          "op": "==",
+          "value": "HIGH"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "High monitoring indicators; open a case."
+    },
+    {
+      "id": "review-close-request",
+      "when": [
+        {
+          "field": "requested_capability",
+          "op": "==",
+          "value": "CLOSE_CASE"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Closing a case is a human decision."
+    }
+  ]
+}

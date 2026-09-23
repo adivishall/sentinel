@@ -115,7 +115,9 @@ class Decision:
     session_id: str | None = None
     controls: tuple[str, ...] = field(default_factory=tuple)
     ai_agreed: bool | None = None  # did the model's wish coincide with the outcome?
+    executed_capability: Capability | None = None  # the consequential capability that ran, if any
 
     @property
     def executed(self) -> bool:
-        return self.final_action is FinalAction.EXECUTE
+        """Did a consequential capability actually run?"""
+        return self.final_action is FinalAction.ALLOW and self.executed_capability is not None

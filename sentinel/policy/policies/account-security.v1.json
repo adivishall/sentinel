@@ -1,0 +1,102 @@
+{
+  "policy_id": "account-security",
+  "version": 1,
+  "workflow": "account_security",
+  "effective_from": "2026-09-01",
+  "description": "Account security: protective holds are cheap and reversible; unfreezing and payout changes are human-only.",
+  "required_fields": [
+    "risk_level",
+    "security_severity"
+  ],
+  "rules": [
+    {
+      "id": "block-critical-ai-security",
+      "when": [
+        {
+          "field": "security_severity",
+          "op": "==",
+          "value": "CRITICAL"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Critical AI-security finding on the untrusted input."
+    },
+    {
+      "id": "block-capability-escalation",
+      "when": [
+        {
+          "field": "capability_escalation",
+          "op": "is_true"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "The model requested a capability outside its surface."
+    },
+    {
+      "id": "hold-critical",
+      "when": [
+        {
+          "field": "risk_level",
+          "op": "==",
+          "value": "CRITICAL"
+        }
+      ],
+      "outcome": "TEMPORARY_HOLD",
+      "reason": "Login risk is CRITICAL; hold the account pending review."
+    },
+    {
+      "id": "hold-payout-change-new-device",
+      "when": [
+        {
+          "field": "payout_change",
+          "op": "is_true"
+        },
+        {
+          "field": "new_device",
+          "op": "is_true"
+        }
+      ],
+      "outcome": "TEMPORARY_HOLD",
+      "reason": "Payout changed from a new device."
+    },
+    {
+      "id": "review-high",
+      "when": [
+        {
+          "field": "risk_level",
+          "op": "==",
+          "value": "HIGH"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Login risk is HIGH."
+    },
+    {
+      "id": "stepup-medium",
+      "when": [
+        {
+          "field": "risk_level",
+          "op": "==",
+          "value": "MEDIUM"
+        }
+      ],
+      "outcome": "STEP_UP",
+      "reason": "Login risk is MEDIUM; step up authentication."
+    },
+    {
+      "id": "review-sensitive-capability",
+      "when": [
+        {
+          "field": "requested_capability",
+          "op": "in",
+          "value": [
+            "UNFREEZE_ACCOUNT",
+            "CHANGE_PAYOUT"
+          ]
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Unfreezing or changing payout always needs a human."
+    }
+  ]
+}

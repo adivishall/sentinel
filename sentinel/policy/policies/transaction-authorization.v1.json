@@ -1,0 +1,110 @@
+{
+  "policy_id": "transaction-authorization",
+  "version": 1,
+  "workflow": "transaction",
+  "effective_from": "2026-09-01",
+  "description": "Payment authorisation: deterministic risk bands and an auto-approval limit.",
+  "required_fields": [
+    "amount",
+    "risk_score",
+    "risk_level",
+    "security_severity"
+  ],
+  "rules": [
+    {
+      "id": "block-critical-ai-security",
+      "when": [
+        {
+          "field": "security_severity",
+          "op": "==",
+          "value": "CRITICAL"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Critical AI-security finding on the untrusted input."
+    },
+    {
+      "id": "block-capability-escalation",
+      "when": [
+        {
+          "field": "capability_escalation",
+          "op": "is_true"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "The model requested a capability outside its surface."
+    },
+    {
+      "id": "block-frozen-account",
+      "when": [
+        {
+          "field": "account_status",
+          "op": "==",
+          "value": "frozen"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Account is frozen."
+    },
+    {
+      "id": "block-critical-risk",
+      "when": [
+        {
+          "field": "risk_level",
+          "op": "==",
+          "value": "CRITICAL"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Transaction risk is CRITICAL."
+    },
+    {
+      "id": "review-high-risk",
+      "when": [
+        {
+          "field": "risk_level",
+          "op": "==",
+          "value": "HIGH"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Transaction risk is HIGH."
+    },
+    {
+      "id": "stepup-medium-risk",
+      "when": [
+        {
+          "field": "risk_level",
+          "op": "==",
+          "value": "MEDIUM"
+        }
+      ],
+      "outcome": "STEP_UP",
+      "reason": "Transaction risk is MEDIUM; step up authentication."
+    },
+    {
+      "id": "review-over-auto-limit",
+      "when": [
+        {
+          "field": "amount",
+          "op": ">",
+          "value": 150000
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Amount exceeds the \u20b91,50,000 auto-approval limit."
+    },
+    {
+      "id": "review-critical-merchant",
+      "when": [
+        {
+          "field": "merchant_risk_level",
+          "op": "==",
+          "value": "CRITICAL"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Merchant risk is CRITICAL."
+    }
+  ]
+}

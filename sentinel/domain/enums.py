@@ -203,10 +203,11 @@ _POLICY_RANK = {
 
 
 class FinalAction(StrEnum):
-    """What actually happens to the request. ``EXECUTE`` means the requested
-    consequential capability runs (refund paid, merchant live, ...)."""
+    """What actually happens to the request. ``ALLOW`` means the request
+    proceeds -- and if a consequential capability was requested, it executes
+    (refund paid, merchant live, payment authorised)."""
 
-    EXECUTE = "EXECUTE"
+    ALLOW = "ALLOW"
     DENY = "DENY"
     STEP_UP = "STEP_UP"
     REQUIRE_HUMAN_REVIEW = "REQUIRE_HUMAN_REVIEW"
@@ -214,8 +215,20 @@ class FinalAction(StrEnum):
     BLOCK = "BLOCK"
 
     @property
-    def is_consequential(self) -> bool:
-        return self is FinalAction.EXECUTE
+    def permissiveness(self) -> int:
+        """Higher = more permissive. Used by the decision-integrity evaluation
+        to check that untrusted input can only ever *tighten* an outcome."""
+        return _PERMISSIVENESS[self]
+
+
+_PERMISSIVENESS = {
+    FinalAction.ALLOW: 5,
+    FinalAction.STEP_UP: 4,
+    FinalAction.REQUIRE_HUMAN_REVIEW: 3,
+    FinalAction.TEMPORARY_HOLD: 2,
+    FinalAction.DENY: 1,
+    FinalAction.BLOCK: 0,
+}
 
 
 class CaseStatus(StrEnum):
