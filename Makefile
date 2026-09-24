@@ -1,4 +1,4 @@
-.PHONY: help install test lint typecheck cov eval bench demo api ui snapshot data analyze attack audit-verify replay docker-build docker-run clean live-check
+.PHONY: help install test lint typecheck cov eval bench docs demo api ui snapshot data analyze attack audit-verify replay docker-build docker-run clean live-check
 
 PY ?= python3
 DB ?= data/sentinel.db
@@ -51,6 +51,9 @@ eval-quick:       ## the CI subset
 
 bench:            ## component + end-to-end latency benchmark
 	$(PY) -m sentinel bench
+
+docs:             ## re-render docs/EVALUATION.md, docs/PERFORMANCE.md and the README / résumé numbers from results/
+	$(PY) scripts/render_docs.py
 
 audit-verify:     ## verify the tamper-evident audit chain in $(DB)
 	$(PY) -m sentinel --db $(DB) audit verify

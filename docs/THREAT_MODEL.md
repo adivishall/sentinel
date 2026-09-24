@@ -90,4 +90,17 @@ them.
   booking") and the *general* pattern was fixed, not the string.
 - The offline agent is a faithful simulation of the documented failure mode,
   not proof that a specific production LLM fails identically. `make live-check`
-  and `sentinel eval run --suite models` exist to probe a real model.
+  and `sentinel eval run --suite models` exist to probe a real model. Its
+  attack-success rate is a property of the simulator, which shares an author
+  with the corpus.
+- The API's trusted inputs (`ledger`, `records`, `transaction`, `session`)
+  are trusted by contract, not by proof: the caller is assumed to be the
+  system of record. Auth is optional; the server warns when it starts open on
+  a non-loopback bind. Ablation controls are refused on the evaluate routes
+  unless `SENTINEL_ALLOW_UNGUARDED=1`.
+- Policy versions are labels. Every decision pins the policy content hash and
+  replay reports `policy_drift`, but nothing prevents editing a shipped
+  version in place; production would make policy files immutable artifacts.
+- The audit chain detects modification, deletion, insertion and reordering,
+  not a consistent rewrite of the whole chain from genesis; it has no external
+  anchor.

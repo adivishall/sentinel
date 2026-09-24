@@ -70,20 +70,80 @@ We would rather state these than have them found.
 15. **Determinism has one caveat.** Identifiers and timestamps are not
     deterministic; everything that affects an outcome is, and replay compares
     outcomes, not ids.
+16. **The API's trust contract is by convention.** `ledger`, `records`,
+    `transaction` and `session` in a request body are treated as the
+    institution's records because the caller is meant to be the system of
+    record. Nothing in the protocol proves that; auth is optional and the
+    server warns when it starts open on a non-loopback address. Ablation
+    controls (`unguarded`, `options.controls`) are refused on the evaluate
+    routes unless `SENTINEL_ALLOW_UNGUARDED=1`.
+17. **The audit chain has no external anchor.** Modification, deletion,
+    insertion and reordering are detected; a storage attacker who rewrites
+    the *entire* chain consistently from genesis is not. Production would
+    anchor the head hash externally (a signed timestamp, a second store).
 
+## Known weaknesses found in the v2.0.1 review (deliberately not tuned away)
+
+18. **The unguarded baseline is the simulator's.** 83.3% (dev), 37.5%
+    (held-out) and 100% (KYB) describe how often the deterministic offline
+    agent obeys the corpus; the corpus and the agent share an author. They are
+    a contrast for the protected path, not a claim about any real model.
+19. **The guarded 0% is structural.** Every attack ledger is unsupporting and
+    every KYB attack record is bad, so under the design no attack *can*
+    execute; those rows are regression checks. The empirical content of the
+    security suite is the false-positive rate on deserved claims, the
+    detection recall, and the held-out claim-classifier coverage.
+20. **Risk weights were tuned on seed 42.** The financial suite now also runs
+    two held-out seeds and reports the range; the account-level scenarios are
+    the mirror image of the monitoring rules (structuring = 3 transfers at
+    80–100% of the threshold in 7 days; the generator emits 4 in 4 days), so
+    100% account-level recall is by construction, not evidence of generality.
+21. **Account-level false positives come from a time-unbounded cycle finder.**
+    All four seed-42 false positives are legitimate accounts whose random
+    baseline transfers happen to form a cycle somewhere in 240 days; the
+    circular-transfer indicator does not bound the cycle to the monitoring
+    window. On the two held-out seeds there are no false positives. Left as
+    is and documented rather than fixed in a metrics-reporting pass.
+22. **Transaction-level recall is low by construction.** The first several
+    transactions of a burst carry no velocity yet; the second account-takeover
+    transaction is in the same country as the first, so impossible travel does
+    not fire; and the generator registers the attacker's device as a known
+    account device, so `new_device` never fires on takeover transactions. The
+    account-level monitor exists for the first two; the third is a generator
+    realism bug that *depresses* recall and is documented, not patched.
+23. **Entity profiles are as-of the dataset date, not the transaction time.**
+    A merchant's dispute ratio and an account's profile read every record,
+    including ones after the transaction being scored. The per-transaction
+    baseline is now point-in-time (disputes filed after the transaction no
+    longer enter its chargeback rate); the entity profiles are not.
+24. **Merchant-level metrics have n=3 positives**, two of which are defined by
+    fields the profile reads directly (shell registration, prior flags). They
+    are reported for completeness, not as a result.
+25. **Detection recall mixes two mechanisms.** A "detected" attack is one the
+    merged assessment flagged, whether by the lexical text scan or by the
+    structural model-output check (an off-surface capability request). The
+    held-out rows show which: lexical misses that the structural check caught.
+
+<!-- gen:limitations-solid -->
 ## What is genuinely solid
 
 - The trust boundary and the composer: the authoritative decision is computed
   from a view that has no field for prose or for the model's recommendation.
-  The integrity suite measures the consequence directly: **0%** of protected
-  decisions made more permissive by attacker text or by any of six model
-  recommendations, against **77.9%** with no controls.
-- **0%** unauthorised capability executions across the development corpus,
-  the held-out set and KYB, with **0%** false positives on deserved refunds --
-  including the urgent-but-legitimate phrasings.
+  The integrity suite measures the property as it is enforced: across 136
+  attacks, **0.0%** exceeded the ledger-supported ceiling and **0.0%**
+  executed without ledger support, against **77.9%** permissive influence with
+  no controls; 360 model-recommendation replays changed nothing.
+- **0.0%** unauthorised capability executions across the development corpus,
+  the held-out set and KYB (structural, by construction), with **0.0%** false
+  positives on deserved refunds -- including the urgent-but-legitimate
+  phrasings -- which is the empirical part.
 - Model output is typed untrusted and cannot become evidence; an agent
   pushed off its tool surface produces a CRITICAL event, a BLOCK and a P1
   case, never an execution.
+- Policy is fail-closed (a missing input can never switch a rule off) and
+  content-hashed (a replay knows whether "v2" is still the v2 the decision
+  saw).
 - Every block is explainable (evidence, contradictions, matched rules,
   authorization reason, blocked-by list) and every decision is replayable and
   hash-chained.
+<!-- /gen:limitations-solid -->

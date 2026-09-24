@@ -49,6 +49,12 @@ Open http://localhost:8000/ for the console.
 }
 ```
 
+`controls` and `unguarded` are **refused with 403 on the evaluate routes**
+unless the server runs with `SENTINEL_ALLOW_UNGUARDED=1`. The authoritative
+path is always the full control set by request; the ablation switches are
+accepted by `/v1/attacks/simulate` and `/v1/replay`, which record the control
+set on the decision and the audit event.
+
 ## Response — the canonical Decision
 
 ```jsonc
@@ -71,11 +77,25 @@ Open http://localhost:8000/ for the console.
 }
 ```
 
+## Trust contract
+
 Everything in `narrative`, `documents`, `messages`, `untrusted`, `message`,
 `case_notes` and `text` is treated as **untrusted** with the trust class given
 (or `USER_CONTROLLED` / `DOCUMENT_CONTROLLED` by field). `ledger`, `records`,
-`transaction` and `session` are treated as trusted records supplied by the
-caller -- in an integration, the caller is the system of record, not the user.
+`transaction` and `session` are treated as **trusted records supplied by the
+caller**. That is a contract, not a proof: in an integration the caller must
+be the system of record, never a channel a customer can reach. Consequences:
+
+- put the API behind the institution's boundary and set `SENTINEL_API_KEY`;
+  the server prints a warning when it starts open on a non-loopback address;
+- prefer the record-backed forms (`{dispute_id}`, `{application_id}`,
+  `{transaction_id}`, `{session_id}`), which read the facts from the store;
+- never build the `ledger` object from anything the disputing party sent.
+
+`POST /v1/replay` returns `policy_drift` (the policy version named in the
+snapshot no longer has the content the decision was made under) and
+`original_drift` (re-deriving the original from its snapshot no longer
+reproduces the recorded outcome).
 
 ## Errors
 

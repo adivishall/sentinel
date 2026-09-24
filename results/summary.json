@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-23T23:11:42",
-  "seconds": 2.8,
+  "generated_at": "2026-09-24T18:00:02",
+  "seconds": 3.5,
   "security": {
     "n_attacks": 120,
     "n_controls": 21,
@@ -35,7 +35,7 @@
   "ablation": {
     "no_controls": 0.833,
     "prompt_hardening": 0.167,
-    "detection_only": 0.458,
+    "detection_only": 0.167,
     "risk_only": 0.833,
     "policy_only": 0.333,
     "adjudication_only": 0.0,
@@ -43,30 +43,77 @@
     "full": 0.0
   },
   "financial": {
-    "precision": 0.737,
+    "precision": 0.933,
     "recall": 0.269,
-    "false_positive_rate": 0.0016,
+    "false_positive_rate": 0.0003,
     "false_negative_rate": 0.731,
     "prevalence": 0.0163,
-    "transactions": 3183
+    "transactions": 3183,
+    "seed_range": {
+      "transaction_level": {
+        "precision": {
+          "min": 0.857,
+          "max": 0.933
+        },
+        "recall": {
+          "min": 0.269,
+          "max": 0.407
+        },
+        "false_positive_rate": {
+          "min": 0.0003,
+          "max": 0.0013
+        }
+      },
+      "account_level": {
+        "precision": {
+          "min": 0.714,
+          "max": 1.0
+        },
+        "recall": {
+          "min": 1.0,
+          "max": 1.0
+        },
+        "false_positive_rate": {
+          "min": 0.0,
+          "max": 0.0268
+        }
+      },
+      "merchant_level": {
+        "precision": {
+          "min": 0.4,
+          "max": 1.0
+        },
+        "recall": {
+          "min": 0.667,
+          "max": 1.0
+        },
+        "false_positive_rate": {
+          "min": 0.0,
+          "max": 0.1111
+        }
+      }
+    }
   },
   "integrity": {
     "text_influence_permissive_protected": 0.0,
     "model_influence_protected": 0.0,
     "legit_plus_injection_loosened": 0.0,
-    "text_influence_permissive_unguarded": 0.779
+    "text_influence_permissive_unguarded": 0.779,
+    "text_beyond_ledger_ceiling": 0.0,
+    "executed_without_ledger_support": 0.0,
+    "attack_text_approved_on_supporting_ledger": 0.081
   },
   "performance": {
-    "normalize": 0.0187,
-    "gateway_inspect": 0.1858,
-    "claim_classify": 0.0214,
-    "evidence_reconcile": 0.0245,
-    "risk_score_transaction": 0.0131,
-    "graph_linked_accounts": 0.0043,
-    "graph_neighborhood_d2": 0.1707,
-    "policy_evaluate": 0.008,
-    "decision_compose": 0.0342,
-    "audit_append": 0.0113,
-    "e2e_dispute_pipeline": 0.5501
+    "normalize": 0.0184,
+    "gateway_inspect": 0.1832,
+    "claim_classify": 0.0202,
+    "evidence_reconcile": 0.0241,
+    "risk_score_transaction": 0.0126,
+    "graph_linked_accounts": 0.0042,
+    "graph_neighborhood_d2": 0.1735,
+    "policy_evaluate": 0.0094,
+    "decision_compose": 0.0349,
+    "audit_append": 0.0101,
+    "e2e_dispute_pipeline": 0.4556
   }
 }

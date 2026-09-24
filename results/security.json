@@ -130,5 +130,5 @@
     "policy:dispute-refund@v2": 100,
     "trusted_evidence": 100
   },
-  "seconds": 0.1
+  "seconds": 0.09
 }

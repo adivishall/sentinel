@@ -45,13 +45,19 @@ threshold alone cannot express "a model may never unfreeze an account".
 **Trade-off.** Values are demo policy, not industry standards, and are
 labelled as such.
 
-## D5 — Policy is versioned, schema-validated data
+## D5 — Policy is versioned, schema-validated, fail-closed data
 
 **Decision.** JSON policies validated against a field catalog; all rules
-evaluated, most severe wins, all matches explained; missing required fields
-raise (→ fail-safe human review).
+evaluated, most severe wins, all matches explained. Every field a rule reads
+must be one the composer always provides or be declared in
+`required_fields`; a context missing any referenced field raises (→ fail-safe
+human review). Every policy carries a content hash; decisions and snapshots
+pin it.
 **Why.** Deterministic, testable, replayable, diff-able; misconfiguration is
-caught at load time rather than at 3 a.m.
+caught at load time rather than at 3 a.m. v2.0.0 treated an absent field as
+"condition does not hold", which let a missing input silently disable a
+BLOCK rule -- the classic fail-open. A version number alone cannot prove a
+replay ran the same policy; a hash can.
 **Trade-off.** Expressiveness is limited to AND-ed conditions over declared
 fields. That is a feature.
 
@@ -108,6 +114,29 @@ come from evidence and policy, not from a detector matching its own words.
 **Trade-off.** Not proof about a specific production LLM. `sentinel eval run
 --suite models` runs the identical suite live when a key is present and
 records `not_run` otherwise; nothing is fabricated.
+
+## D13 — Ablation controls are a lab feature, not an API option
+
+**Decision.** `options.controls` / `unguarded` are refused (403) on the
+authoritative evaluate routes unless the operator sets
+`SENTINEL_ALLOW_UNGUARDED=1`; the attack simulator and replay accept them and
+record the control set on the decision and the audit event.
+**Why.** "The protected path is always FULL" was true in the composer and
+false at the API boundary: any caller could switch controls off per request
+and record an `APPROVE_REFUND` execution.
+**Trade-off.** The console's unguarded toggle only works through the
+simulator, which is where it belongs.
+
+## D14 — The detection-only ablation holds exactly what it flags
+
+**Decision.** With policy off, a detected finding (severity ≥ MEDIUM, the
+same threshold `detection_recall` counts) holds the request for a human.
+**Why.** v2.0.0 held only HIGH+, so the "detection only" configuration
+leaked 35 attacks it had flagged and reported 45.8% attack success. With a
+consistent definition it leaks exactly the two classes with nothing to
+detect: 16.7%. Reporting the higher number would have flattered Sentinel's
+marginal contribution.
+**Trade-off.** None; the honest number is smaller.
 
 ## D12 — One engine, three surfaces, a static snapshot for hosting
 

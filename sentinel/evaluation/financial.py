@@ -13,7 +13,13 @@ is supposed to catch it:
 block). Reported per level: precision, recall, FPR, FNR, per-scenario recall,
 plus a calibration table (observed fraud rate per band) and policy outcomes on
 a sample. Synthetic data; the numbers characterise the rule model on this
-generator, nothing more."""
+generator, nothing more.
+
+The rule weights were hand-tuned while looking at the seed-42 dataset, so the
+seed-42 figures are development figures. The same suite therefore also runs on
+held-out seeds the weights were never inspected against, and reports the range;
+a large gap between development and held-out seeds would mean the weights fit
+one dataset rather than the scenario patterns."""
 
 from __future__ import annotations
 
@@ -50,6 +56,21 @@ def _prf(tp: int, fp: int, fn: int, tn: int) -> dict[str, Any]:
     }
 
 
+HELD_OUT_SEEDS: tuple[int, ...] = (7, 2024)
+LEVELS = ("transaction_level", "account_level", "merchant_level")
+
+
+def _range(runs: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Min / max of each headline metric per level across the seeds."""
+    out: dict[str, Any] = {}
+    for level in LEVELS:
+        out[level] = {}
+        for metric in ("precision", "recall", "false_positive_rate"):
+            vals = [r[level][metric] for r in runs.values()]
+            out[level][metric] = {"min": min(vals), "max": max(vals)}
+    return out
+
+
 def run(
     seed: int = 42,
     customers: int = 150,
@@ -58,6 +79,33 @@ def run(
     *,
     model: str = "txn-1.0",
     policy_sample: int = 400,
+    held_out_seeds: tuple[int, ...] = HELD_OUT_SEEDS,
+) -> dict[str, Any]:
+    dev = _evaluate(
+        seed, customers, merchants, transactions, model=model, policy_sample=policy_sample
+    )
+    held: dict[str, dict[str, Any]] = {}
+    for s in held_out_seeds:
+        if s == seed:
+            continue
+        r = _evaluate(s, customers, merchants, transactions, model=model, policy_sample=0)
+        held[str(s)] = {level: r[level] for level in LEVELS} | {
+            "recall_by_scenario": r["recall_by_scenario"]
+        }
+    dev["seeds"] = {"development": seed, "held_out": [int(k) for k in held]}
+    dev["held_out_seeds"] = held
+    dev["seed_range"] = _range({"dev": dev, **held})
+    return dev
+
+
+def _evaluate(
+    seed: int,
+    customers: int,
+    merchants: int,
+    transactions: int,
+    *,
+    model: str,
+    policy_sample: int,
 ) -> dict[str, Any]:
     app = SentinelApp.demo(seed, customers, merchants, transactions, persist=False)
     m = scoring.get_model(model)
@@ -139,7 +187,7 @@ def run(
             mtn += 1
 
     # policy-level outcomes on a sample (full pipeline, no agent)
-    sample = [t for t, _ in rows[-policy_sample:]]
+    sample = [t for t, _ in rows[-policy_sample:]] if policy_sample else []
     fraud_allowed = legit_blocked = fraud_n = legit_n = 0
     outcomes: Counter[str] = Counter()
     for t in sample:
@@ -230,6 +278,12 @@ def main(out_dir: str = "results", full: bool = False) -> dict[str, Any]:
     print(
         f"  policy sample n={ps['n']}: fraud allowed {pct(ps['fraud_allowed_rate'])}, legit blocked/denied {pct(ps['legit_blocked_or_denied_rate'])}"
     )
+    for s, h in r["held_out_seeds"].items():
+        for level in LEVELS:
+            x = h[level]
+            print(
+                f"  held-out seed {s} {level:18} precision {pct(x['precision'])}  recall {pct(x['recall'])}  FPR {pct(x['false_positive_rate'])}  (tp {x['tp']} fp {x['fp']} fn {x['fn']} tn {x['tn']})"
+            )
     return r
 
 

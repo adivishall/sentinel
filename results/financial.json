@@ -9,12 +9,12 @@
   "positive_definition": "risk level HIGH or CRITICAL",
   "transaction_level": {
     "tp": 14,
-    "fp": 5,
+    "fp": 1,
     "fn": 38,
-    "tn": 3126,
-    "precision": 0.737,
+    "tn": 3130,
+    "precision": 0.933,
     "recall": 0.269,
-    "false_positive_rate": 0.0016,
+    "false_positive_rate": 0.0003,
     "false_negative_rate": 0.731,
     "scenarios": [
       "fraud:account_takeover",
@@ -88,12 +88,12 @@
     "definition": "abused (scenario) or shell registration or >= 2 prior flags"
   },
   "tp": 14,
-  "fp": 5,
+  "fp": 1,
   "fn": 38,
-  "tn": 3126,
-  "precision": 0.737,
+  "tn": 3130,
+  "precision": 0.933,
   "recall": 0.269,
-  "false_positive_rate": 0.0016,
+  "false_positive_rate": 0.0003,
   "false_negative_rate": 0.731,
   "prevalence": 0.0163,
   "recall_by_scenario": {
@@ -112,16 +112,16 @@
   },
   "calibration": {
     "LOW": {
-      "n": 2864,
-      "observed_fraud_rate": 0.0052
+      "n": 2954,
+      "observed_fraud_rate": 0.0051
     },
     "MEDIUM": {
-      "n": 300,
-      "observed_fraud_rate": 0.0767
+      "n": 214,
+      "observed_fraud_rate": 0.1075
     },
     "HIGH": {
-      "n": 14,
-      "observed_fraud_rate": 0.6429
+      "n": 10,
+      "observed_fraud_rate": 0.9
     },
     "CRITICAL": {
       "n": 5,
@@ -129,12 +129,12 @@
     }
   },
   "score_histogram": {
-    "0": 1532,
-    "10": 1058,
-    "20": 408,
-    "30": 126,
-    "40": 40,
-    "50": 10,
+    "0": 2017,
+    "10": 717,
+    "20": 328,
+    "30": 82,
+    "40": 24,
+    "50": 6,
     "60": 2,
     "70": 4,
     "80": 2,
@@ -142,11 +142,11 @@
   },
   "factor_frequency": {
     "new_merchant": 1308,
-    "chargeback_high": 861,
-    "chargeback_some": 538,
     "merchant_risk_high": 420,
     "merchant_risk_medium": 390,
+    "chargeback_some": 371,
     "unusual_hour": 347,
+    "chargeback_high": 185,
     "auth_weak": 140,
     "amount_anomaly_extreme": 125,
     "amount_anomaly_moderate": 119,
@@ -160,8 +160,8 @@
   "policy_sample": {
     "n": 400,
     "outcomes": {
-      "ALLOW": 320,
-      "STEP_UP": 46,
+      "ALLOW": 323,
+      "STEP_UP": 43,
       "REQUIRE_HUMAN_REVIEW": 27,
       "DENY": 7
     },
@@ -169,5 +169,250 @@
     "legit_blocked_or_denied_rate": 0.0,
     "policy": "transaction-authorization@latest"
   },
-  "seconds": 0.7
+  "seeds": {
+    "development": 42,
+    "held_out": [
+      7,
+      2024
+    ]
+  },
+  "held_out_seeds": {
+    "7": {
+      "transaction_level": {
+        "tp": 14,
+        "fp": 1,
+        "fn": 38,
+        "tn": 3129,
+        "precision": 0.933,
+        "recall": 0.269,
+        "false_positive_rate": 0.0003,
+        "false_negative_rate": 0.731,
+        "scenarios": [
+          "fraud:account_takeover",
+          "fraud:burst",
+          "fraud:graph_linked"
+        ],
+        "prevalence": 0.0163
+      },
+      "account_level": {
+        "tp": 10,
+        "fp": 0,
+        "fn": 0,
+        "tn": 147,
+        "precision": 1.0,
+        "recall": 1.0,
+        "false_positive_rate": 0.0,
+        "false_negative_rate": 0.0,
+        "scenarios": [
+          "fraud:structuring",
+          "fraud:dormant_activation",
+          "fraud:graph_linked",
+          "fraud:burst"
+        ],
+        "recall_by_scenario": {
+          "fraud:burst": {
+            "n": 3,
+            "recall": 1.0
+          },
+          "fraud:dormant_activation": {
+            "n": 2,
+            "recall": 1.0
+          },
+          "fraud:graph_linked": {
+            "n": 3,
+            "recall": 1.0
+          },
+          "fraud:structuring": {
+            "n": 2,
+            "recall": 1.0
+          }
+        },
+        "calibration": {
+          "LOW": {
+            "n": 144,
+            "observed_fraud_rate": 0.0
+          },
+          "HIGH": {
+            "n": 6,
+            "observed_fraud_rate": 1.0
+          },
+          "CRITICAL": {
+            "n": 4,
+            "observed_fraud_rate": 1.0
+          },
+          "MEDIUM": {
+            "n": 3,
+            "observed_fraud_rate": 0.0
+          }
+        }
+      },
+      "merchant_level": {
+        "tp": 2,
+        "fp": 1,
+        "fn": 1,
+        "tn": 26,
+        "precision": 0.667,
+        "recall": 0.667,
+        "false_positive_rate": 0.037,
+        "false_negative_rate": 0.333,
+        "bad_merchants": 3,
+        "definition": "abused (scenario) or shell registration or >= 2 prior flags"
+      },
+      "recall_by_scenario": {
+        "fraud:account_takeover": {
+          "n": 6,
+          "recall": 0.333
+        },
+        "fraud:burst": {
+          "n": 28,
+          "recall": 0.143
+        },
+        "fraud:graph_linked": {
+          "n": 18,
+          "recall": 0.444
+        }
+      }
+    },
+    "2024": {
+      "transaction_level": {
+        "tp": 24,
+        "fp": 4,
+        "fn": 35,
+        "tn": 3116,
+        "precision": 0.857,
+        "recall": 0.407,
+        "false_positive_rate": 0.0013,
+        "false_negative_rate": 0.593,
+        "scenarios": [
+          "fraud:account_takeover",
+          "fraud:burst",
+          "fraud:graph_linked"
+        ],
+        "prevalence": 0.0186
+      },
+      "account_level": {
+        "tp": 10,
+        "fp": 0,
+        "fn": 0,
+        "tn": 144,
+        "precision": 1.0,
+        "recall": 1.0,
+        "false_positive_rate": 0.0,
+        "false_negative_rate": 0.0,
+        "scenarios": [
+          "fraud:structuring",
+          "fraud:dormant_activation",
+          "fraud:graph_linked",
+          "fraud:burst"
+        ],
+        "recall_by_scenario": {
+          "fraud:burst": {
+            "n": 3,
+            "recall": 1.0
+          },
+          "fraud:dormant_activation": {
+            "n": 2,
+            "recall": 1.0
+          },
+          "fraud:graph_linked": {
+            "n": 3,
+            "recall": 1.0
+          },
+          "fraud:structuring": {
+            "n": 2,
+            "recall": 1.0
+          }
+        },
+        "calibration": {
+          "LOW": {
+            "n": 136,
+            "observed_fraud_rate": 0.0
+          },
+          "HIGH": {
+            "n": 6,
+            "observed_fraud_rate": 1.0
+          },
+          "MEDIUM": {
+            "n": 8,
+            "observed_fraud_rate": 0.0
+          },
+          "CRITICAL": {
+            "n": 4,
+            "observed_fraud_rate": 1.0
+          }
+        }
+      },
+      "merchant_level": {
+        "tp": 2,
+        "fp": 0,
+        "fn": 0,
+        "tn": 28,
+        "precision": 1.0,
+        "recall": 1.0,
+        "false_positive_rate": 0.0,
+        "false_negative_rate": 0.0,
+        "bad_merchants": 2,
+        "definition": "abused (scenario) or shell registration or >= 2 prior flags"
+      },
+      "recall_by_scenario": {
+        "fraud:account_takeover": {
+          "n": 6,
+          "recall": 0.833
+        },
+        "fraud:burst": {
+          "n": 35,
+          "recall": 0.343
+        },
+        "fraud:graph_linked": {
+          "n": 18,
+          "recall": 0.389
+        }
+      }
+    }
+  },
+  "seed_range": {
+    "transaction_level": {
+      "precision": {
+        "min": 0.857,
+        "max": 0.933
+      },
+      "recall": {
+        "min": 0.269,
+        "max": 0.407
+      },
+      "false_positive_rate": {
+        "min": 0.0003,
+        "max": 0.0013
+      }
+    },
+    "account_level": {
+      "precision": {
+        "min": 0.714,
+        "max": 1.0
+      },
+      "recall": {
+        "min": 1.0,
+        "max": 1.0
+      },
+      "false_positive_rate": {
+        "min": 0.0,
+        "max": 0.0268
+      }
+    },
+    "merchant_level": {
+      "precision": {
+        "min": 0.4,
+        "max": 1.0
+      },
+      "recall": {
+        "min": 0.667,
+        "max": 1.0
+      },
+      "false_positive_rate": {
+        "min": 0.0,
+        "max": 0.1111
+      }
+    }
+  },
+  "seconds": 1.5
 }

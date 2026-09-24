@@ -4,6 +4,56 @@ All notable changes to Sentinel. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] — 2026-09-24
+
+A hostile senior-engineer review of the finished 2.0.0 system (fintech
+backend, fraud/risk, application security, AI security, recruiter). Only the
+critical and high findings are fixed here; the medium and cosmetic ones are
+listed in `docs/LIMITATIONS.md`. No weight or threshold was changed to move a
+number.
+
+### Fixed
+- **Policy engine was fail-open on absent fields.** A rule whose field was
+  missing from the context silently did not fire, which could switch a BLOCK
+  rule off. Every field a rule reads must now be always-present or declared in
+  `required_fields` (validated at load); evaluation raises on any missing
+  referenced field and the composer turns that into a fail-safe human review.
+  The shipped policies declare their fields.
+- **Policy versions were mutable labels.** Every `Policy` carries a content
+  hash; decisions and input snapshots pin it; replay reports `policy_drift`
+  when the served version no longer matches, and `original_drift` when the
+  engine no longer reproduces the recorded outcome. Exposed on the API, CLI
+  and audit event.
+- **The evaluate routes accepted `unguarded` / `options.controls` from any
+  caller.** They now return 403 unless `SENTINEL_ALLOW_UNGUARDED=1`; the attack
+  simulator and replay keep the switches. `serve` warns when auth is off on a
+  non-loopback bind.
+- **Temporal leakage in transaction risk features.** The per-transaction
+  baseline counted disputes filed *after* the transaction; it is now
+  point-in-time, and `prior_disputes_90d` for stored disputes counts only
+  earlier disputes within 90 days. Transaction-level precision moved from
+  73.7% to 93.3% (recall unchanged) purely from removing the leak.
+- **The detection-only ablation leaked attacks it had flagged.** It held only
+  HIGH+ findings while "detected" meant ≥ MEDIUM; it now holds exactly what it
+  flags. Its attack success drops from 45.8% to 16.7%, which is the honest
+  (smaller) contribution of the other controls.
+
+### Changed
+- **The invariant is stated precisely.** "Untrusted text can only tighten a
+  decision" was false as written: text selects the claim type, so on a
+  supporting ledger a clear claim is approved and a vague one is not. The
+  claim now reads "untrusted text and model output cannot produce an outcome
+  the trusted records do not support"; the integrity suite measures it on
+  supporting ledgers (ledger-supported ceiling, execution without support) and
+  labels the unsupporting-ledger rows as structural (0 by construction). The
+  property test's escape hatch is gone.
+- **The financial suite runs two held-out seeds** (7, 2024) alongside the
+  development seed the weights were tuned on, and reports the range.
+- Documentation regenerated from `results/` by `scripts/render_docs.py`
+  (`make docs`); every headline number says whether it is structural or
+  empirical and that the unguarded baseline is the offline simulator's.
+- Version 2.0.1.
+
 ## [2.0.0] — 2026-09-23
 
 **Sentinel becomes Financial Decision Security Infrastructure.** The v1

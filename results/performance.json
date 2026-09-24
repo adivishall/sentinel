@@ -4,91 +4,91 @@
   "components": {
     "normalize": {
       "n": 1000,
-      "mean_ms": 0.0178,
-      "p50_ms": 0.0175,
-      "p95_ms": 0.0187,
-      "p99_ms": 0.0215,
-      "throughput_per_sec": 56204
+      "mean_ms": 0.0176,
+      "p50_ms": 0.0174,
+      "p95_ms": 0.0184,
+      "p99_ms": 0.0211,
+      "throughput_per_sec": 56869
     },
     "gateway_inspect": {
       "n": 1000,
-      "mean_ms": 0.1767,
-      "p50_ms": 0.175,
-      "p95_ms": 0.1858,
-      "p99_ms": 0.2044,
-      "throughput_per_sec": 5658
+      "mean_ms": 0.1749,
+      "p50_ms": 0.1736,
+      "p95_ms": 0.1832,
+      "p99_ms": 0.2002,
+      "throughput_per_sec": 5716
     },
     "claim_classify": {
       "n": 1000,
-      "mean_ms": 0.0196,
-      "p50_ms": 0.0191,
-      "p95_ms": 0.0214,
-      "p99_ms": 0.0325,
-      "throughput_per_sec": 51114
+      "mean_ms": 0.0193,
+      "p50_ms": 0.019,
+      "p95_ms": 0.0202,
+      "p99_ms": 0.0241,
+      "throughput_per_sec": 51935
     },
     "evidence_reconcile": {
       "n": 1000,
-      "mean_ms": 0.0226,
-      "p50_ms": 0.0219,
-      "p95_ms": 0.0245,
-      "p99_ms": 0.0418,
-      "throughput_per_sec": 44316
+      "mean_ms": 0.022,
+      "p50_ms": 0.0216,
+      "p95_ms": 0.0241,
+      "p99_ms": 0.0304,
+      "throughput_per_sec": 45546
     },
     "risk_score_transaction": {
       "n": 1000,
-      "mean_ms": 0.0122,
+      "mean_ms": 0.0119,
       "p50_ms": 0.0117,
-      "p95_ms": 0.0131,
-      "p99_ms": 0.0193,
-      "throughput_per_sec": 81802
+      "p95_ms": 0.0126,
+      "p99_ms": 0.0149,
+      "throughput_per_sec": 83930
     },
     "graph_linked_accounts": {
       "n": 1000,
       "mean_ms": 0.0042,
       "p50_ms": 0.0041,
-      "p95_ms": 0.0043,
-      "p99_ms": 0.0046,
-      "throughput_per_sec": 238229
+      "p95_ms": 0.0042,
+      "p99_ms": 0.0051,
+      "throughput_per_sec": 239075
     },
     "graph_neighborhood_d2": {
       "n": 200,
-      "mean_ms": 0.1615,
-      "p50_ms": 0.1592,
-      "p95_ms": 0.1707,
-      "p99_ms": 0.2171,
-      "throughput_per_sec": 6192
+      "mean_ms": 0.1598,
+      "p50_ms": 0.1567,
+      "p95_ms": 0.1735,
+      "p99_ms": 0.1934,
+      "throughput_per_sec": 6258
     },
     "policy_evaluate": {
       "n": 1000,
-      "mean_ms": 0.0078,
-      "p50_ms": 0.0077,
-      "p95_ms": 0.008,
-      "p99_ms": 0.0097,
-      "throughput_per_sec": 127761
+      "mean_ms": 0.0091,
+      "p50_ms": 0.0088,
+      "p95_ms": 0.0094,
+      "p99_ms": 0.0153,
+      "throughput_per_sec": 109427
     },
     "decision_compose": {
       "n": 1000,
-      "mean_ms": 0.0319,
-      "p50_ms": 0.0306,
-      "p95_ms": 0.0342,
-      "p99_ms": 0.0638,
-      "throughput_per_sec": 31375
+      "mean_ms": 0.0322,
+      "p50_ms": 0.0317,
+      "p95_ms": 0.0349,
+      "p99_ms": 0.0431,
+      "throughput_per_sec": 31082
     },
     "audit_append": {
       "n": 1000,
-      "mean_ms": 0.0097,
-      "p50_ms": 0.0088,
-      "p95_ms": 0.0113,
-      "p99_ms": 0.0336,
-      "throughput_per_sec": 102985
+      "mean_ms": 0.0089,
+      "p50_ms": 0.0085,
+      "p95_ms": 0.0101,
+      "p99_ms": 0.0142,
+      "throughput_per_sec": 112422
     },
     "e2e_dispute_pipeline": {
       "n": 500,
-      "mean_ms": 0.4545,
-      "p50_ms": 0.4246,
-      "p95_ms": 0.5501,
-      "p99_ms": 1.3747,
-      "throughput_per_sec": 2200
+      "mean_ms": 0.4249,
+      "p50_ms": 0.4181,
+      "p95_ms": 0.4556,
+      "p99_ms": 0.5725,
+      "throughput_per_sec": 2354
     }
   },
   "workloads": {

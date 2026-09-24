@@ -49,3 +49,31 @@ def test_decision_integrity_is_structural():
     assert r["model_influence_protected"] == 0.0
     assert r["legit_plus_injection_loosened"] == 0.0
     assert r["text_influence_permissive_unguarded"] > 0.5  # the contrast that makes the 0% meaningful
+    # the property as enforced: on a SUPPORTING ledger text selects the claim (> 0, by design)
+    # but never exceeds the ledger-supported ceiling and never executes unsupported (0)
+    assert r["text_beyond_ledger_ceiling"] == 0.0
+    assert r["executed_without_ledger_support"] == 0.0
+    assert r["text_selected_claim_on_supporting_ledger"] > 0.0
+    assert r["attack_text_approved_on_supporting_ledger"] > 0.0  # deserved refunds are paid
+
+
+def test_detection_only_holds_exactly_what_it_flags():
+    """The detection-only ablation must leak ONLY attacks the gateway did not flag; a
+    flagged attack that still executes would mean the configuration is defined wrongly."""
+    rows = harness.run(corpus.build())
+    a = ablation.run()
+    unflagged_breaches = sum(1 for r in rows if r["is_attack"] and r["ug_breach"] and not r["detected"])
+    n = sum(1 for r in rows if r["is_attack"])
+    assert a["detection_only"]["asr"] == round(unflagged_breaches / n, 3)
+
+
+def test_financial_suite_reports_held_out_seeds():
+    from sentinel.evaluation import financial
+
+    r = financial.run(customers=60, merchants=12, transactions=800, policy_sample=50)
+    assert r["seeds"]["development"] == 42 and len(r["seeds"]["held_out"]) == 2
+    for level in ("transaction_level", "account_level", "merchant_level"):
+        rng = r["seed_range"][level]
+        assert 0.0 <= rng["precision"]["min"] <= rng["precision"]["max"] <= 1.0
+        for h in r["held_out_seeds"].values():
+            assert set(h[level]) >= {"precision", "recall", "false_positive_rate", "tp", "fp"}

@@ -345,14 +345,16 @@ def test_property_normalisation_is_idempotent_and_fail_safe(text):
     st.sampled_from(ATTACK_TEXTS),
     st.sampled_from([LEDGER_DELIVERED, LEDGER_LOST, {**LEDGER_LOST, "amount": 185000}]),
 )
-def test_property_untrusted_text_only_tightens_protected_decisions(text, ledger):
-    base = _run("Following up on my order, thanks.", ledger)
+def test_property_untrusted_text_never_exceeds_the_ledger_supported_ceiling(text, ledger):
+    """The precise invariant. Untrusted text may SELECT which trusted fact is checked
+    (so on a supporting ledger a clear claim is approved and a vague one is not), but it
+    can never produce an outcome more permissive than the plain legitimate claim gets on
+    the same ledger, and nothing executes unless the ledger supports the selected claim."""
+    ceiling = _run("My order never arrived.", ledger)
     mut = _run(text, ledger)
-    assert (
-        mut.decision.final_action.permissiveness
-        <= max(base.decision.final_action.permissiveness, FinalAction.DENY.permissiveness)
-        or ledger is LEDGER_LOST
-    )
+    assert mut.decision.final_action.permissiveness <= ceiling.decision.final_action.permissiveness
+    if mut.decision.executed:
+        assert mut.reconciliation.supports_claim and ledger is not LEDGER_DELIVERED
     if ledger is LEDGER_DELIVERED:
         assert not mut.decision.executed
 

@@ -30,7 +30,17 @@ policy context or the audit log.
 A financial control must be explainable, versioned, diff-able and replayable.
 A deterministic engine over declared fields gives you all four; a model
 "deciding" gives you none. All rules are evaluated and the most severe wins,
-so the explanation is complete regardless of rule order.
+so the explanation is complete regardless of rule order. It is fail-closed:
+every field a rule reads must be present, so a missing input can never
+silently switch a BLOCK rule off (v2.0.0 had that fail-open bug; the review
+found it and the fix is a validation rule plus an evaluation error).
+
+**How do you know a replay ran the same policy?**
+A version number is a label; a file edit can reuse it. Every decision and
+snapshot pins the policy's *content hash*. Replay compares the hash the
+decision was made under with the hash the registry serves now and flags
+`policy_drift`; it also re-derives the original from its snapshot and flags
+`original_drift` if the engine no longer reproduces the recorded outcome.
 
 **Why SQLite?**
 The core is standard-library only and runs from a clean checkout; SQLite gives
@@ -75,7 +85,29 @@ yields the fact, the contradiction engine records the mismatch.
 **What if the detector misses the attack?**
 Nothing changes for the outcome. Detection informs severity (which can only
 tighten); it is not on the authorization path. Held-out detection recall is
-reported honestly and is well below 100%; guarded attack success is still 0%.
+reported honestly and is well below 100%; guarded attack success is still 0%
+-- and it is 0% *by construction*: an attack on an unsupporting ledger cannot
+execute under the design, so that number is a regression check, not a
+detection result. The honest empirical numbers are the false-positive rate on
+deserved claims and the claim classifier's held-out coverage.
+
+**Isn't "0% attack success" then vacuous?**
+On its own, yes, and the docs say so. What makes it meaningful is the
+contrast: the same inputs against the unguarded simulated agent execute
+83.3% of the time, a hardened prompt still leaks 16.7%, and a detection-only
+system leaks 16.7% (exactly the two classes with no injection to detect).
+The claim is not "we detect attacks"; it is "detection is not what stops
+them".
+
+**What can untrusted text actually change?**
+It selects the claim type -- which trusted fact gets checked. On a ledger
+that supports the claim, "my order never arrived" is approved and "following
+up, thanks" is not; on a ledger that does not, nothing is. The integrity
+suite measures the property as it is enforced: on supporting ledgers, 0% of
+attack texts exceed the ledger-supported ceiling and 0% execute without
+support, while 61.8% do change the outcome relative to a neutral message
+(they select the claim) and 8.1% are approved -- deserved refunds, whatever
+the prose around them. Saying "text can only tighten" would be wrong.
 
 **What if the LLM itself is compromised?**
 Its output is `MODEL_GENERATED`, so: it can recommend anything, it can request
@@ -178,6 +210,18 @@ rate limit -- fine for a demo, not a production edge.
 
 ## ML / AI
 
+**Are the financial numbers real?**
+They characterise a hand-weighted rule model on a synthetic generator. The
+weights were tuned while looking at seed 42, so the suite also runs two seeds
+the weights never saw and reports the range. The account-level scenarios are
+the mirror image of the monitoring rules, so 100% recall there is by
+construction; the interesting facts are the false positives (a time-unbounded
+cycle finder on seed 42, none on the held-out seeds) and the low
+transaction-level recall (the first transactions of a burst have no velocity
+yet). A review also found the per-transaction baseline was counting disputes
+filed *after* the transaction; fixing that point-in-time leak moved
+transaction precision from 73.7% to 93.3% without touching a weight.
+
 **Why not simply train a fraud model?**
 You should, eventually -- as *one more trusted signal*. It does not replace
 the architecture: a trained score is still a recommendation, evidence still
@@ -203,13 +247,19 @@ review routing, audit.
 The dataset, the fraud scenarios, the transaction-monitoring patterns, the
 offline agent, the KYB records. Everything is labelled synthetic.
 
+<!-- gen:interview-claims -->
 **What claims can you actually prove?**
-Structural ones, by test: untrusted text and model output cannot make a
-protected decision more permissive (integrity suite: 0% over 136 attacks and
-360 recommendation replays, vs 77.9% permissive influence with no controls);
-zero unauthorised capability executions across the corpus, the held-out set
-and KYB; zero false positives on deserved refunds; audit tampering is
-detected. Measured ones, on synthetic data: see `docs/EVALUATION.md`.
+Structural ones, by test: untrusted text and model output cannot produce an
+outcome the trusted records do not support (integrity suite over 136
+attacks: 0.0% exceeded the ledger-supported ceiling, 0.0% executed
+without support, 0.0% of 360 recommendation replays changed anything, vs
+77.9% permissive influence with no controls); zero unauthorised capability
+executions across the corpus, the held-out set and KYB -- which is 0 by
+construction and is kept as a regression check; audit tampering is detected.
+Empirical ones, on synthetic data: 0.0% false positives on deserved refunds,
+0.0% on unseen legitimate wording, and the financial figures with their
+held-out-seed range. See `docs/EVALUATION.md`, which separates the two kinds.
+<!-- /gen:interview-claims -->
 
 **What remains unimplemented for production?**
 Real record integrations, binary document parsing, a trained risk model,

@@ -117,7 +117,10 @@ def run_suite(name: str = "full", out_dir: str = "results", full: bool = False) 
                     "prevalence",
                 )
             }
-            | {"transactions": f.get("dataset", {}).get("transactions")},
+            | {
+                "transactions": f.get("dataset", {}).get("transactions"),
+                "seed_range": f.get("seed_range"),
+            },
             "integrity": {
                 k2: i.get(k2)
                 for k2 in (
@@ -125,6 +128,9 @@ def run_suite(name: str = "full", out_dir: str = "results", full: bool = False) 
                     "model_influence_protected",
                     "legit_plus_injection_loosened",
                     "text_influence_permissive_unguarded",
+                    "text_beyond_ledger_ceiling",
+                    "executed_without_ledger_support",
+                    "attack_text_approved_on_supporting_ledger",
                 )
             },
             "performance": {k2: v.get("p95_ms") for k2, v in p.get("components", {}).items()},

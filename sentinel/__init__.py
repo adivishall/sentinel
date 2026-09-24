@@ -23,4 +23,4 @@ dependency direction is strictly downward:
     api / cli / app   the application layer (one engine, three surfaces)
 """
 
-__version__ = "2.0.0"
+__version__ = "2.0.1"

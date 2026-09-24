@@ -14,7 +14,7 @@
     "hardened": true
   },
   "detection_only": {
-    "asr": 0.458,
+    "asr": 0.167,
     "fp": 0.4,
     "escalation_executed": 0.0,
     "controls": [
