@@ -78,9 +78,42 @@ def test_missing_required_field_is_an_error_not_allow():
         evaluate(p, {"amount": 1})
 
 
-def test_absent_optional_field_means_rule_cannot_fire():
+def test_absent_referenced_field_is_an_error_never_a_silent_non_match():
+    """Fail-closed: a missing input can never disable a rule. (v2.0.0 treated an absent
+    field as 'condition does not hold', which silently switched BLOCK rules off.)"""
     p = policy_from_dict(_doc())
-    assert evaluate(p, {}).outcome is PolicyOutcome.ALLOW
+    with pytest.raises(PolicyEvaluationError):
+        evaluate(p, {})
+    with pytest.raises(PolicyEvaluationError):
+        evaluate(p, {"amount": 90000})  # security_severity is referenced by r2
+
+
+def test_rules_may_only_reference_declared_or_always_present_fields():
+    bad = _doc(
+        rules=[
+            {
+                "id": "frozen",
+                "when": [{"field": "account_status", "op": "==", "value": "frozen"}],
+                "outcome": "BLOCK",
+            }
+        ]
+    )
+    with pytest.raises(PolicyValidationError, match="required_fields"):
+        policy_from_dict(bad)
+    ok = policy_from_dict({**bad, "required_fields": ["account_status"]})
+    assert evaluate(ok, {"account_status": "frozen"}).outcome is PolicyOutcome.BLOCK
+    with pytest.raises(PolicyEvaluationError):
+        evaluate(ok, {})
+
+
+def test_policy_content_hash_changes_when_content_changes_not_when_version_label_reused():
+    a = policy_from_dict(_doc())
+    b = policy_from_dict(_doc())
+    doc = _doc()
+    doc["rules"][0]["when"][0]["value"] = 10_000  # same policy_id, same version, new threshold
+    c = policy_from_dict(doc)
+    assert a.content_hash == b.content_hash and a.content_hash != c.content_hash
+    assert evaluate(a, {"amount": 1, "security_severity": "NONE"}).policy_hash == a.content_hash
 
 
 @pytest.mark.parametrize(

@@ -9,7 +9,8 @@
     "evidence_verdict",
     "security_severity",
     "risk_score",
-    "policy_auto_limit"
+    "policy_auto_limit",
+    "prior_disputes_90d"
   ],
   "rules": [
     {
@@ -72,7 +73,7 @@
         }
       ],
       "outcome": "REQUIRE_HUMAN_REVIEW",
-      "reason": "Refund exceeds the \u20b950,000 auto-approval limit."
+      "reason": "Refund exceeds the ₹50,000 auto-approval limit."
     },
     {
       "id": "review-critical-risk",

@@ -8,7 +8,8 @@
     "evidence_verdict",
     "security_severity",
     "registration_status",
-    "prior_flags"
+    "prior_flags",
+    "mcc_risk"
   ],
   "rules": [
     {

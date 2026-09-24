@@ -24,6 +24,7 @@ import json
 import mimetypes
 import os
 import re
+import sys
 import threading
 import time
 from collections import deque
@@ -110,6 +111,21 @@ class Router:
         return None
 
 
+def _evaluate_options(d: dict[str, Any]) -> Any:
+    """Options for the authoritative evaluate routes. Ablation controls (``unguarded``,
+    ``options.controls``) are a lab feature: they are accepted here only when the operator
+    sets ``SENTINEL_ALLOW_UNGUARDED=1``. The attack simulator and replay always accept them
+    and record the control set on the decision and the audit event."""
+    opts = S.run_options(d)
+    if opts.controls != S.ALL_CONTROLS and os.environ.get("SENTINEL_ALLOW_UNGUARDED") != "1":
+        raise ApiError(
+            403,
+            "reduced controls are not accepted on evaluate routes; use /v1/attacks/simulate or "
+            "/v1/replay, or start the server with SENTINEL_ALLOW_UNGUARDED=1 for lab use",
+        )
+    return opts
+
+
 def build_routes(app: SentinelApp) -> Router:
     r = Router()
 
@@ -130,7 +146,7 @@ def build_routes(app: SentinelApp) -> Router:
     # ---- workflows -------------------------------------------------------------------------
     def tx_eval(q: Any, b: Any, p: Any) -> Any:
         d = S.obj(b)
-        opts = S.run_options(d)
+        opts = _evaluate_options(d)
         untrusted = S.untrusted_list(d, "untrusted")
         if "transaction" in d:
             t = S.transaction(d)
@@ -140,7 +156,7 @@ def build_routes(app: SentinelApp) -> Router:
 
     def dispute_eval(q: Any, b: Any, p: Any) -> Any:
         d = S.obj(b)
-        opts = S.run_options(d)
+        opts = _evaluate_options(d)
         docs = S.opt_str_list(d, "documents")
         if "document" in d and d["document"] is not None:
             docs = docs + (S.req_str(d, "document"),)
@@ -173,7 +189,7 @@ def build_routes(app: SentinelApp) -> Router:
 
     def merchant_eval(q: Any, b: Any, p: Any) -> Any:
         d = S.obj(b)
-        opts = S.run_options(d)
+        opts = _evaluate_options(d)
         docs = S.opt_str_list(d, "documents")
         if d.get("document"):
             docs = docs + (S.req_str(d, "document"),)
@@ -198,7 +214,7 @@ def build_routes(app: SentinelApp) -> Router:
 
     def account_eval(q: Any, b: Any, p: Any) -> Any:
         d = S.obj(b)
-        opts = S.run_options(d)
+        opts = _evaluate_options(d)
         msg = S.opt_str(d, "message")
         cap = S.capability(d, "requested_capability")
         if "session" in d:
@@ -223,7 +239,7 @@ def build_routes(app: SentinelApp) -> Router:
                 S.req_str(d, "account_id", max_len=64),
                 case_notes=S.opt_str_list(d, "case_notes"),
                 as_of=S.opt_str(d, "as_of", None, 40),
-                options=S.run_options(d),
+                options=_evaluate_options(d),
             ).decision
         )
 
@@ -541,6 +557,8 @@ def build_routes(app: SentinelApp) -> Router:
             "diffs": [to_dict(d) for d in res.diffs],
             "explanation": res.explanation,
             "created_at": res.created_at,
+            "policy_drift": res.policy_drift,
+            "original_drift": res.original_drift,
         }
 
     r.add("POST", "/v1/replay", replay)
@@ -831,6 +849,13 @@ def serve(app: SentinelApp, host: str = "0.0.0.0", port: int = 8000) -> None:
     print(
         f"Sentinel v{__version__} API + console on http://{host}:{port}  mode={app.system_info()['mode']}  auth={auth}  db={app.store.path}"
     )
+    if not os.environ.get("SENTINEL_API_KEY") and host not in ("127.0.0.1", "localhost", "::1"):
+        print(
+            "WARNING: SENTINEL_API_KEY is unset and the API is bound to a non-loopback address. "
+            "Every caller can submit 'trusted' ledger/record facts and read every decision. "
+            "This is a lab configuration; set SENTINEL_API_KEY or bind to 127.0.0.1.",
+            file=sys.stderr,
+        )
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

@@ -169,8 +169,10 @@ def test_case_policy_audit_replay_scenario(db, capsys, tmp_path):
                 "amount": 90000,
                 "evidence_verdict": "SUPPORTED",
                 "security_severity": "NONE",
+                "capability_escalation": False,
                 "risk_score": 5,
                 "policy_auto_limit": 50000,
+                "prior_disputes_90d": 0,
             }
         )
     )

@@ -174,6 +174,42 @@ def test_replay_policy_version_and_rule_override():
     assert not r2.changed and r2.replayed["policy"] == "dispute-refund@v2"
 
 
+def test_replay_detects_policy_content_drift_and_original_drift():
+    """A policy version is a label; the snapshot pins the content hash. Editing v2 without
+    bumping the version is detected, and so is an engine change that no longer reproduces
+    the recorded outcome."""
+    from sentinel.policy import PolicyRegistry
+    from sentinel.policy.loader import policy_from_dict
+
+    rt = Runtime(persist=False)
+    ledger = {"amount": 18000, "delivery_status": "not_delivered", "policy_auto_limit": 50000}
+    b = run_dispute(rt, DisputeRequest(UntrustedContent("My order never arrived"), ledger))
+    snap = snapshot(b.inputs)
+    assert snap["policy"]["content_hash"] == b.decision.policy.policy_hash
+    clean = ReplayEngine(DEFAULT_REGISTRY).replay(b.decision, snap, ReplayOverrides())
+    assert not clean.policy_drift and not clean.original_drift
+    # a silently edited v2 (same version number, lower auto-limit)
+    reg = PolicyRegistry()
+    for p in DEFAULT_REGISTRY.all():
+        doc = p.to_dict()
+        if p.policy_id == "dispute-refund" and p.version == 2:
+            for r in doc["rules"]:
+                if r["id"] == "review-over-auto-limit":
+                    r["when"][0]["value"] = 10_000
+        reg.register(policy_from_dict(doc))
+    drifted = ReplayEngine(reg).replay(b.decision, snap, ReplayOverrides())
+    assert drifted.policy_drift and "no longer has the content" in drifted.explanation
+    assert drifted.replayed["final_action"] == "REQUIRE_HUMAN_REVIEW"
+    # explicitly pinning a version is a deliberate choice, not drift
+    pinned = ReplayEngine(reg).replay(b.decision, snap, ReplayOverrides(policy_version=2))
+    assert not pinned.policy_drift
+    # the recorded outcome disagrees with the re-derivation -> original drift
+    od = ReplayEngine(DEFAULT_REGISTRY).replay(
+        b.decision, snap, ReplayOverrides(), recorded={"final_action": "DENY", "executed_capability": None}
+    )
+    assert od.original_drift and "engine has changed" in od.explanation
+
+
 def test_replay_ai_recommendation_is_irrelevant_on_protected_path():
     rt = Runtime(persist=False)
     b = run_dispute(

@@ -18,6 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from sentinel.domain.enums import PolicyOutcome, Workflow
+from sentinel.domain.ids import content_hash
 
 OPS: frozenset[str] = frozenset(
     {"==", "!=", ">", ">=", "<", "<=", "in", "not_in", "is_true", "is_false", "contains"}
@@ -67,6 +68,32 @@ FIELD_CATALOG: dict[str, tuple[str, str]] = {
     "monitoring_patterns": ("list", "Monitoring indicator codes"),
 }
 
+# Fields the decision composer sets on EVERY policy context. A rule may reference
+# any other catalog field only if the policy declares it in ``required_fields``,
+# so that its absence is an evaluation error (fail-safe) rather than a rule that
+# silently cannot fire (fail-open).
+CONTEXT_FIELDS: frozenset[str] = frozenset(
+    {
+        "workflow",
+        "amount",
+        "requested_capability",
+        "capability_irreversible",
+        "capability_financial_effect",
+        "risk_score",
+        "risk_level",
+        "risk_factors",
+        "evidence_verdict",
+        "evidence_supports_claim",
+        "contradiction_count",
+        "claim_type",
+        "security_severity",
+        "security_score",
+        "security_flagged",
+        "capability_escalation",
+        "threat_classes",
+    }
+)
+
 
 @dataclass(frozen=True)
 class Condition:
@@ -101,10 +128,22 @@ class Policy:
     default_outcome: PolicyOutcome = PolicyOutcome.ALLOW
     required_fields: tuple[str, ...] = field(default_factory=tuple)
     effective_from: str = ""
+    # Hash of the full document, computed once at construction (``dataclasses.replace``
+    # re-runs ``__post_init__``, so a modified copy gets its own hash). A version number
+    # is a label that a file edit can silently reuse; this is what a decision and a
+    # replay pin.
+    content_hash: str = field(default="", compare=False, repr=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "content_hash", content_hash(self.to_dict()))
 
     @property
     def key(self) -> str:
         return f"{self.policy_id}@v{self.version}"
+
+    @property
+    def referenced_fields(self) -> frozenset[str]:
+        return frozenset(c.field for r in self.rules for c in r.when)
 
     def to_dict(self) -> dict[str, object]:
         return {

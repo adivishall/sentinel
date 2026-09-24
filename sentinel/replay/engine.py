@@ -68,6 +68,12 @@ class ReplayResult:
     explanation: str
     replayed_decision: Decision
     created_at: str
+    # The policy version named in the snapshot no longer has the content it had at decision
+    # time (the JSON was edited without a version bump). The replay ran the CURRENT content.
+    policy_drift: bool = False
+    # Re-deriving the original from its snapshot gave a different outcome from the one that
+    # was actually recorded -- the engine changed since the decision was made.
+    original_drift: bool = False
 
 
 def _summary(d: Decision) -> dict[str, Any]:
@@ -117,9 +123,21 @@ class ReplayEngine:
         self.policies = policies
 
     def replay(
-        self, original: Decision, snapshot: dict[str, Any], overrides: ReplayOverrides
+        self,
+        original: Decision,
+        snapshot: dict[str, Any],
+        overrides: ReplayOverrides,
+        *,
+        recorded: dict[str, Any] | None = None,
     ) -> ReplayResult:
+        """``original`` is the canonical re-derivation of the stored decision; ``recorded``
+        is the stored decision payload itself when the caller has it, so the two can be
+        compared for drift."""
         inputs = restore(snapshot, self.policies, policy_version=overrides.policy_version)
+        pinned = str(snapshot.get("policy", {}).get("content_hash") or "")
+        policy_drift = bool(
+            overrides.policy_version is None and pinned and pinned != inputs.policy.content_hash
+        )
         if overrides.rule_values:
             inputs = replace(inputs, policy=_with_rule_values(inputs.policy, overrides.rule_values))
         risk = inputs.risk
@@ -173,6 +191,29 @@ class ReplayEngine:
             expl = f"Outcome changed ({before['final_action']} -> {after['final_action']}) because: {why}."
         else:
             expl = f"Outcome unchanged ({before['final_action']}) under: {why}."
+        original_drift = False
+        if recorded is not None:
+            rec_action = recorded.get("final_action")
+            rec_exec = recorded.get("executed_capability")
+            original_drift = bool(
+                rec_action is not None
+                and (
+                    rec_action != before["final_action"]
+                    or rec_exec != before["executed_capability"]
+                )
+            )
+        if policy_drift:
+            expl += (
+                f" WARNING: {inputs.policy.key} no longer has the content recorded at decision "
+                f"time (hash {pinned} -> {inputs.policy.content_hash}); the replay used the "
+                "current content."
+            )
+        if original_drift:
+            expl += (
+                " WARNING: re-deriving the original decision from its snapshot no longer "
+                f"reproduces the recorded outcome ({recorded.get('final_action') if recorded else '?'} "
+                f"recorded, {before['final_action']} re-derived); the engine has changed."
+            )
         return ReplayResult(
             new_id("REPLAY"),
             original.decision_id,
@@ -184,4 +225,6 @@ class ReplayEngine:
             expl,
             new,
             now_iso(),
+            policy_drift,
+            original_drift,
         )

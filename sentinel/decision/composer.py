@@ -186,10 +186,9 @@ def _decide(
                 ("fail-safe",),
                 (f"policy could not be evaluated: {e}",),
             )
-    elif DETECTION in v.controls and (
-        v.security.severity.rank >= Severity.HIGH.rank or v.security.capability_escalation
-    ):
-        # A detector-only system holds what it detects; it has no policy of its own.
+    elif DETECTION in v.controls and (v.security.flagged or v.security.capability_escalation):
+        # A detector-only system holds exactly what it flags (severity >= MEDIUM, the same
+        # threshold ``detection_recall`` counts) and has no policy of its own.
         pol = PolicyDecision(
             v.policy.policy_id,
             v.policy.version,
@@ -398,6 +397,7 @@ def compose(inputs: DecisionInputs) -> Decision:
             pol.matched_rules,
             pol.explanations,
             content_hash(context),
+            inputs.policy.content_hash,
         ),
         authorization=auth,
         human_review=HumanReview(human, reason if human else ""),

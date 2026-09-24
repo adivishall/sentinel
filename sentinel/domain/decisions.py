@@ -64,6 +64,7 @@ class PolicyDecision:
     matched_rules: tuple[str, ...]
     explanations: tuple[str, ...]
     context_hash: str = ""
+    policy_hash: str = ""  # content hash of the policy document (versions are labels; this is not)
 
 
 @dataclass(frozen=True)

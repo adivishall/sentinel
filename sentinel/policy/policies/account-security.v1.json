@@ -6,7 +6,9 @@
   "description": "Account security: protective holds are cheap and reversible; unfreezing and payout changes are human-only.",
   "required_fields": [
     "risk_level",
-    "security_severity"
+    "security_severity",
+    "payout_change",
+    "new_device"
   ],
   "rules": [
     {

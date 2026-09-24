@@ -30,7 +30,11 @@ from sentinel.policy.loader import PolicyRegistry
 
 def snapshot(inputs: DecisionInputs) -> dict[str, Any]:
     d = to_dict(inputs)
-    d["policy"] = {"policy_id": inputs.policy.policy_id, "version": inputs.policy.version}
+    d["policy"] = {
+        "policy_id": inputs.policy.policy_id,
+        "version": inputs.policy.version,
+        "content_hash": inputs.policy.content_hash,
+    }
     return d
 
 

@@ -11,7 +11,7 @@ from collections.abc import Mapping
 
 from sentinel.domain.decisions import PolicyDecision
 from sentinel.domain.ids import content_hash
-from sentinel.policy.models import FIELD_CATALOG, OPS, Condition, Policy, Rule
+from sentinel.policy.models import CONTEXT_FIELDS, FIELD_CATALOG, OPS, Condition, Policy, Rule
 
 
 class PolicyValidationError(ValueError):
@@ -54,7 +54,9 @@ def _cmp(op: str, actual: object, expected: object) -> bool:
 
 def condition_holds(c: Condition, context: Mapping[str, object]) -> bool:
     if c.field not in context:
-        return False  # absent -> the condition does not hold (rule cannot fire)
+        # ``evaluate`` rejects a context missing any referenced field before rules run;
+        # this branch only guards direct calls.
+        raise PolicyEvaluationError(f"condition on {c.field!r}: field absent from context")
     return _cmp(c.op, context[c.field], c.value)
 
 
@@ -91,12 +93,21 @@ def validate(policy: Policy) -> None:
     for f in policy.required_fields:
         if f not in FIELD_CATALOG:
             raise PolicyValidationError(f"required field {f!r} is not in the catalog")
+    undeclared = sorted(policy.referenced_fields - CONTEXT_FIELDS - set(policy.required_fields))
+    if undeclared:
+        raise PolicyValidationError(
+            f"rules reference {undeclared} which the composer does not always provide; "
+            "declare them in required_fields so their absence fails safe"
+        )
 
 
 def evaluate(policy: Policy, context: Mapping[str, object]) -> PolicyDecision:
-    missing = [f for f in policy.required_fields if f not in context]
+    """Fail-closed: every field a rule reads must be present. A missing input can
+    never silently disable a rule."""
+    needed = set(policy.required_fields) | policy.referenced_fields
+    missing = sorted(f for f in needed if f not in context)
     if missing:
-        raise PolicyEvaluationError(f"{policy.key}: context missing required fields {missing}")
+        raise PolicyEvaluationError(f"{policy.key}: context missing fields {missing}")
     matched = [r for r in policy.rules if rule_matches(r, context)]
     outcome = policy.default_outcome
     for r in matched:
@@ -109,4 +120,5 @@ def evaluate(policy: Policy, context: Mapping[str, object]) -> PolicyDecision:
         matched_rules=tuple(r.rule_id for r in matched),
         explanations=tuple(f"[{r.rule_id}] {r.describe()}: {r.reason}" for r in matched),
         context_hash=content_hash({k: context[k] for k in sorted(context)}),
+        policy_hash=policy.content_hash,
     )

@@ -8,7 +8,9 @@
     "amount",
     "risk_score",
     "risk_level",
-    "security_severity"
+    "security_severity",
+    "account_status",
+    "merchant_risk_level"
   ],
   "rules": [
     {
@@ -92,7 +94,7 @@
         }
       ],
       "outcome": "REQUIRE_HUMAN_REVIEW",
-      "reason": "Amount exceeds the \u20b91,50,000 auto-approval limit."
+      "reason": "Amount exceeds the ₹1,50,000 auto-approval limit."
     },
     {
       "id": "review-critical-merchant",

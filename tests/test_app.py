@@ -126,6 +126,31 @@ def test_dispute_by_id_uses_stored_narrative_and_ledger(app):
     assert b.decision.subject_id == d.dispute_id and b.decision.amount == d.amount
 
 
+def test_transaction_baseline_is_point_in_time(app):
+    """Disputes filed AFTER a transaction never enter that transaction's baseline."""
+    from sentinel.risk.behavioral import parse_ts
+
+    found = None
+    for d in app.store.all_disputes():
+        for t in app.store.transactions(account_id=d.account_id, limit=200, order="ASC"):
+            if parse_ts(t.timestamp) < parse_ts(d.submitted_at):
+                found = (t, d)
+                break
+        if found:
+            break
+    assert found, "dataset should contain a transaction older than a dispute on its account"
+    t, _ = found
+    ctx = app.transaction_context(t)
+    prior = app.store.transactions_before(t.account_id, t.timestamp)
+    before = [
+        x
+        for x in app.store.disputes(account_id=t.account_id, limit=1000)
+        if parse_ts(x.submitted_at) < parse_ts(t.timestamp)
+    ]
+    expected = round(len(before) / len(prior), 4) if prior else 0.0
+    assert ctx.baseline.chargeback_rate == expected
+
+
 def test_cases_audit_and_replay(app):
     cases = app.cases()
     assert cases and app.case(cases[0].case_id) is not None

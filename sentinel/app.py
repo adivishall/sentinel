@@ -148,9 +148,15 @@ class SentinelApp:
     def transaction_context(self, t: Transaction) -> txn_risk.TransactionContext:
         w = self.world
         prior = self.store.transactions_before(t.account_id, t.timestamp)
-        disputes = self.store.disputes(account_id=t.account_id, limit=1000)
-        baseline = BehavioralBaseline.from_history(t.account_id, prior, disputes)
         ts = parse_ts(t.timestamp)
+        # Point-in-time: only disputes that existed when this transaction happened may
+        # enter its baseline. A dispute filed later is information from the future.
+        disputes = [
+            d
+            for d in self.store.disputes(account_id=t.account_id, limit=1000)
+            if parse_ts(d.submitted_at) < ts
+        ]
+        baseline = BehavioralBaseline.from_history(t.account_id, prior, disputes)
         recent = tuple(x for x in prior if parse_ts(x.timestamp) >= ts - timedelta(hours=24))
         known = frozenset(self.store.account_devices(t.account_id)) | frozenset(
             x.device_id for x in prior
@@ -283,11 +289,19 @@ class SentinelApp:
                 raise KeyError(f"unknown dispute {dispute_id}")
             d, texts = found
             t = self.store.transaction(d.transaction_id)
+            submitted = parse_ts(d.submitted_at)
+            prior_90d = [
+                x
+                for x in self.store.disputes(account_id=d.account_id, limit=1000)
+                if x.dispute_id != d.dispute_id
+                and parse_ts(x.submitted_at) < submitted
+                and (submitted - parse_ts(x.submitted_at)).days <= 90
+            ]
             ledger = {
                 "amount": d.amount,
                 "merchant": t.merchant_id if t else "unknown",
                 "delivery_status": t.delivery_status if t else "unknown",
-                "prior_disputes_90d": max(0, len(self.store.disputes(account_id=d.account_id)) - 1),
+                "prior_disputes_90d": len(prior_90d),
                 "policy_auto_limit": 50_000,
                 "cardholder_present": True,
             }
@@ -737,7 +751,7 @@ class SentinelApp:
         base = compose(
             restore(snap, self.runtime.policies)
         )  # canonical re-derivation of the original
-        r = self.replay_engine.replay(base, snap, overrides)
+        r = self.replay_engine.replay(base, snap, overrides, recorded=original)
         if self.runtime.persist:
             payload = {
                 "replay_id": r.replay_id,
@@ -749,6 +763,8 @@ class SentinelApp:
                 "diffs": [to_dict(d) for d in r.diffs],
                 "explanation": r.explanation,
                 "created_at": r.created_at,
+                "policy_drift": r.policy_drift,
+                "original_drift": r.original_drift,
             }
             self.store.save_replay(r.replay_id, decision_id, r.changed, r.created_at, payload)
             self.runtime.audit.append(
@@ -760,7 +776,12 @@ class SentinelApp:
                 policy_id=r.replayed_decision.policy.policy_id,
                 policy_version=r.replayed_decision.policy.version,
                 kind="replay",
-                detail={"overrides": r.overrides, "changed": r.changed},
+                detail={
+                    "overrides": r.overrides,
+                    "changed": r.changed,
+                    "policy_drift": r.policy_drift,
+                    "original_drift": r.original_drift,
+                },
             )
         return r
 

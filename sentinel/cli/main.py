@@ -446,6 +446,8 @@ def cmd_replay(args: argparse.Namespace) -> int:
         "changed": r.changed,
         "diffs": [to_dict(d) for d in r.diffs],
         "explanation": r.explanation,
+        "policy_drift": r.policy_drift,
+        "original_drift": r.original_drift,
     }
     _out(
         args,
