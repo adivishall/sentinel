@@ -149,7 +149,7 @@ def run_suite(
                 )
             },
             "baselines": {k2: b.get(k2) for k2 in ("no_defence", "hardened_prompt", "sentinel")},
-            "ablation": {k2: v.get("asr") for k2, v in a.items()},
+            "ablation": {k2: v.get("asr") for k2, v in a.items() if k2 != "methodology"},
             "financial": {
                 k2: f.get(k2)
                 for k2 in (

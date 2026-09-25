@@ -54,6 +54,8 @@ def main(out_dir: str = "results") -> dict[str, Any]:
     write_json(out_dir, "ablation.json", r)
     print("[ablation] configuration                ASR      FP     off-surface executed")
     for k, v in r.items():
+        if k == "methodology":
+            continue
         print(f"  {k:26} {pct(v['asr'])} {pct(v['fp'])}   {pct(v['escalation_executed'])}")
     return r
 

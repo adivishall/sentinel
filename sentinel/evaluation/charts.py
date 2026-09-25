@@ -68,7 +68,7 @@ def main(out_dir: str = "results") -> list[str]:
 
     ab = _load(out_dir, "ablation.json")
     if ab:
-        names = list(ab)
+        names = [k for k in ab if k != "methodology"]
         fig, ax = plt.subplots(figsize=(11, 4.6))
         vals = [ab[k]["asr"] * 100 for k in names]
         cols = [RED if v > 20 else AMBER if v > 0 else BLUE for v in vals]
