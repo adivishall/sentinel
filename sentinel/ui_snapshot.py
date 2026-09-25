@@ -42,7 +42,11 @@ def build_snapshot(app: Any, out: str = "ui/snapshot.json") -> str:
     tx_views = {t.transaction_id: app.transaction_view(t.transaction_id) for t in tx_rows[:24]}
     cases = [to_dict(c) for c in app.cases(limit=100)]
     attacks = {k: app.simulate_attack(k) for k in ATTACKS}
+    compare = {k: app.simulate_attack(k, compare=True) for k in ATTACKS}
     scenarios = {k: app.run_scenario(k) for k in SCENARIOS}
+    from sentinel.policy import lint
+    from sentinel.security.capabilities import matrix
+
     accounts = app.store.accounts()[:60]
     merchants = app.store.merchants()[:60]
     snap = {
@@ -80,10 +84,19 @@ def build_snapshot(app: Any, out: str = "ui/snapshot.json") -> str:
                 "decisions": [
                     app.store.decision(d) for d in c["decision_ids"] if app.store.decision(d)
                 ],
-                "security_events": [],
+                "security_events": [
+                    e for e in (app.store.security_event(x) for x in c["security_event_ids"]) if e
+                ],
             }
             for c in cases[:40]
         },
+        "case_reviews": {c["case_id"]: app.review_packet(c["case_id"]) for c in cases[:40]},
+        "capabilities": {
+            "capabilities": matrix(),
+            "invariant": "no AI actor may execute a consequential capability; SKIP_REVIEW has no actor",
+        },
+        "policy_lint": {p.key: lint(p) for p in app.runtime.policies.all()},
+        "attack_compare": compare,
         "security_events": {"events": app.store.security_events(100)},
         "policies": {"policies": [p.to_dict() for p in app.runtime.policies.all()]},
         "audit": {
