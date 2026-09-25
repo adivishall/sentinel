@@ -90,10 +90,31 @@ def _load_json(path: str) -> dict[str, Any]:
     return data
 
 
-def _options(args: argparse.Namespace) -> Any:
+def _options(args: argparse.Namespace, *, authoritative: bool = False) -> Any:
+    """Run options from the flags. ``authoritative`` commands (transaction / dispute /
+    merchant / account / investigation) refuse the what-if switches unless the operator
+    sets SENTINEL_ALLOW_UNGUARDED=1: an older policy version or risk model is not an
+    authorization, and a persisted ALLOW under a weaker policy would be a bypass."""
     from sentinel.decision.workflows import RunOptions
     from sentinel.risk import scoring
 
+    if authoritative and os.environ.get("SENTINEL_ALLOW_UNGUARDED") != "1":
+        used = [
+            f
+            for f, present in (
+                ("--unguarded", getattr(args, "unguarded", False)),
+                ("--policy-version", getattr(args, "policy_version", None)),
+                ("--risk-model", getattr(args, "risk_model", None)),
+            )
+            if present
+        ]
+        if used:
+            raise SystemExit(
+                f"error: {', '.join(used)} are what-if switches; the authoritative commands "
+                "always run full controls, the latest policy and the default risk model. Use "
+                "`sentinel replay run` or `sentinel security attack`, or set "
+                "SENTINEL_ALLOW_UNGUARDED=1 for lab use."
+            )
     controls: frozenset[str] | None = frozenset() if getattr(args, "unguarded", False) else None
     kw: dict[str, Any] = {}
     if controls is not None:
@@ -144,9 +165,11 @@ def cmd_transaction(args: argparse.Namespace) -> int:
         data = _load_json(args.target)
         t = S.transaction(data if "transaction" in data else {"transaction": data})
         untrusted = S.untrusted_list(data, "untrusted")
-        b = app.evaluate_transaction(t, untrusted=untrusted, options=_options(args))
+        b = app.evaluate_transaction(
+            t, untrusted=untrusted, options=_options(args, authoritative=True)
+        )
     else:
-        b = app.evaluate_transaction(args.target, options=_options(args))
+        b = app.evaluate_transaction(args.target, options=_options(args, authoritative=True))
     _out(
         args,
         to_dict(b.decision),
@@ -166,7 +189,7 @@ def cmd_transaction(args: argparse.Namespace) -> int:
 def cmd_dispute(args: argparse.Namespace) -> int:
     app = _app(args)
     if args.id:
-        b = app.evaluate_dispute("", dispute_id=args.id, options=_options(args))
+        b = app.evaluate_dispute("", dispute_id=args.id, options=_options(args, authoritative=True))
     else:
         data = _load_json(args.file)
         docs = tuple(data.get("documents", [])) + (
@@ -174,14 +197,14 @@ def cmd_dispute(args: argparse.Namespace) -> int:
         )
         if data.get("messages"):
             b = app.evaluate_dispute_conversation(
-                tuple(data["messages"]), data["ledger"], options=_options(args)
+                tuple(data["messages"]), data["ledger"], options=_options(args, authoritative=True)
             )
         else:
             b = app.evaluate_dispute(
                 data.get("narrative", data.get("submission", "")),
                 data["ledger"],
                 documents=docs,
-                options=_options(args),
+                options=_options(args, authoritative=True),
             )
     _out(
         args,
@@ -194,7 +217,9 @@ def cmd_dispute(args: argparse.Namespace) -> int:
 def cmd_merchant(args: argparse.Namespace) -> int:
     app = _app(args)
     if args.id:
-        b = app.evaluate_merchant("", application_id=args.id, options=_options(args))
+        b = app.evaluate_merchant(
+            "", application_id=args.id, options=_options(args, authoritative=True)
+        )
     else:
         data = _load_json(args.file)
         docs = tuple(data.get("documents", [])) + (
@@ -205,7 +230,7 @@ def cmd_merchant(args: argparse.Namespace) -> int:
             data["records"],
             merchant_id=data.get("merchant_id", ""),
             documents=docs,
-            options=_options(args),
+            options=_options(args, authoritative=True),
         )
     _out(
         args,
@@ -226,10 +251,12 @@ def cmd_account(args: argparse.Namespace) -> int:
             s,
             message=data.get("message"),
             requested_capability=S.capability(data, "requested_capability"),
-            options=_options(args),
+            options=_options(args, authoritative=True),
         )
     else:
-        b = app.evaluate_account(args.target, message=args.message, options=_options(args))
+        b = app.evaluate_account(
+            args.target, message=args.message, options=_options(args, authoritative=True)
+        )
     _out(args, to_dict(b.decision), _decision_text(b.decision))
     return 0
 
@@ -237,7 +264,9 @@ def cmd_account(args: argparse.Namespace) -> int:
 def cmd_investigation(args: argparse.Namespace) -> int:
     app = _app(args)
     b = app.evaluate_investigation(
-        args.account_id, case_notes=tuple(args.note or ()), options=_options(args)
+        args.account_id,
+        case_notes=tuple(args.note or ()),
+        options=_options(args, authoritative=True),
     )
     _out(
         args,

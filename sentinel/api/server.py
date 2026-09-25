@@ -154,11 +154,23 @@ def _evaluate_options(d: dict[str, Any]) -> Any:
     sets ``SENTINEL_ALLOW_UNGUARDED=1``. The attack simulator and replay always accept them
     and record the control set on the decision and the audit event."""
     opts = S.run_options(d)
-    if opts.controls != S.ALL_CONTROLS and os.environ.get("SENTINEL_ALLOW_UNGUARDED") != "1":
+    lab = os.environ.get("SENTINEL_ALLOW_UNGUARDED") == "1"
+    if opts.controls != S.ALL_CONTROLS and not lab:
         raise ApiError(
             403,
             "reduced controls are not accepted on evaluate routes; use /v1/attacks/simulate or "
             "/v1/replay, or start the server with SENTINEL_ALLOW_UNGUARDED=1 for lab use",
+        )
+    if (opts.policy_version is not None or opts.risk_model is not None) and not lab:
+        # An older policy version or risk model is a what-if, not an authorization: v1 of
+        # dispute-refund has no double-refund rule and txn-1.0 lacks the burst signals, so
+        # letting a caller pick them would be a policy / risk bypass by request parameter.
+        raise ApiError(
+            403,
+            "policy_version and risk_model overrides are not accepted on evaluate routes: the "
+            "authoritative path always runs the latest policy and the default risk model; use "
+            "/v1/replay for what-if analysis, or start the server with SENTINEL_ALLOW_UNGUARDED=1 "
+            "for lab use",
         )
     return opts
 
