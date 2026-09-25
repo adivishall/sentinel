@@ -593,19 +593,7 @@ def build_routes(app: SentinelApp) -> Router:
             res = app.replay(body.decision_id, ov)
         except KeyError as e:
             raise ApiError(404, str(e)) from None
-        return {
-            "replay_id": res.replay_id,
-            "decision_id": res.decision_id,
-            "overrides": res.overrides,
-            "original": res.original,
-            "replayed": res.replayed,
-            "changed": res.changed,
-            "diffs": [to_dict(d) for d in res.diffs],
-            "explanation": res.explanation,
-            "created_at": res.created_at,
-            "policy_drift": res.policy_drift,
-            "original_drift": res.original_drift,
-        }
+        return res.to_dict()
 
     r.add("POST", "/v1/replay", replay)
     r.add("GET", "/v1/replays", lambda q, b, p: {"replays": app.store.replays(_lim(q))})

@@ -395,7 +395,11 @@ VIEWS.replay = async () => {
 function replayView(x) {
   const keys = Object.keys(x.original);
   const diffs = (x.decision_diff || x.diffs || []);
-  return `<div class="headline">${esc(x.explanation)}</div><div class="row small" style="margin:8px 0">changed: <b>${x.changed ? "yes" : "no"}</b> · policy drift: ${x.policy_drift ? chip("YES", "CONTRADICTED") : chip("no", "SUPPORTED")} · engine drift: ${(x.engine_drift || x.original_drift) ? chip("YES", "CONTRADICTED") : chip("no", "SUPPORTED")} · ${diffs.length} field(s) differ</div><div class="diff"><div class="h">field</div><div class="h">original</div><div class="h">replayed</div>${keys.map(k => { const ch = JSON.stringify(x.original[k]) !== JSON.stringify(x.replayed[k]); return `<div>${esc(k)}</div><div>${esc(JSON.stringify(x.original[k]))}</div><div class="${ch ? "changed" : ""}">${esc(JSON.stringify(x.replayed[k]))}</div>`; }).join("")}</div>`;
+  const v = x.versions || {};
+  const ver = Object.keys(v).length ? `<div class="row small muted" style="margin:4px 0">${["policy", "risk_model", "engine"].filter(k => v[k]).map(k => `${esc(k.replace("_", " "))}: <span class="mono">${esc(v[k].recorded ?? "—")}</span> → <span class="mono">${esc(v[k].replay ?? "—")}</span>`).join(" · ")}</div>` : "";
+  const rec = x.record_verified === undefined ? "" : ` · recorded side: ${x.record_verified ? chip("matches audit event", "SUPPORTED") : chip("DISAGREES WITH AUDIT EVENT", "CONTRADICTED")}`;
+  const issues = (x.record_issues || []).length ? `<div class="note">${x.record_issues.map(esc).join("<br>")}</div>` : "";
+  return `<div class="headline">${esc(x.explanation)}</div>${ver}${issues}<div class="row small" style="margin:8px 0">changed: <b>${x.changed ? "yes" : "no"}</b>${rec} · policy drift: ${x.policy_drift ? chip("YES", "CONTRADICTED") : chip("no", "SUPPORTED")} · engine drift: ${(x.engine_drift || x.original_drift) ? chip("YES", "CONTRADICTED") : chip("no", "SUPPORTED")} · ${diffs.length} field(s) differ</div><div class="diff"><div class="h">field</div><div class="h">original</div><div class="h">replayed</div>${keys.map(k => { const ch = JSON.stringify(x.original[k]) !== JSON.stringify(x.replayed[k]); return `<div>${esc(k)}</div><div>${esc(JSON.stringify(x.original[k]))}</div><div class="${ch ? "changed" : ""}">${esc(JSON.stringify(x.replayed[k]))}</div>`; }).join("")}</div>`;
 }
 
 VIEWS.evaluations = async () => {

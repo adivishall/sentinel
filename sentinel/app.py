@@ -1060,21 +1060,17 @@ class SentinelApp:
         base = compose(
             restore(snap, self.runtime.policies)
         )  # canonical re-derivation of the original
-        r = self.replay_engine.replay(base, snap, overrides, recorded=original)
+        ev = self.runtime.audit.get(decision_id)
+        r = self.replay_engine.replay(
+            base,
+            snap,
+            overrides,
+            recorded=original,
+            audit=ev.to_dict() if ev else None,
+            verify=True,
+        )
         if self.runtime.persist:
-            payload = {
-                "replay_id": r.replay_id,
-                "decision_id": r.decision_id,
-                "overrides": r.overrides,
-                "original": r.original,
-                "replayed": r.replayed,
-                "changed": r.changed,
-                "diffs": [to_dict(d) for d in r.diffs],
-                "explanation": r.explanation,
-                "created_at": r.created_at,
-                "policy_drift": r.policy_drift,
-                "original_drift": r.original_drift,
-            }
+            payload = r.to_dict()
             self.store.save_replay(r.replay_id, decision_id, r.changed, r.created_at, payload)
             self.runtime.audit.append(
                 actor="sentinel",
@@ -1090,6 +1086,7 @@ class SentinelApp:
                     "changed": r.changed,
                     "policy_drift": r.policy_drift,
                     "original_drift": r.original_drift,
+                    "record_verified": r.record_verified,
                 },
             )
         return r

@@ -7,8 +7,8 @@
 3. The audit chain reports an unreadable record, an inserted record, a broken link
    and tampered index columns; refuses to append onto an inconsistent store; and a
    checkpoint names the record it disagrees with.
-4. Replay compares the STORED decision with the recomputed one and reports engine
-   drift when the stored record no longer re-derives.
+4. Replay compares the STORED decision (anchored to its audit event) with the
+   recomputed one and reports a stored record that disagrees with the chain.
 """
 
 from __future__ import annotations
@@ -357,16 +357,18 @@ def test_replay_diffs_the_stored_decision_and_reports_engine_drift(app):
     assert app.audit_event(did)["kind"] != "replay"  # the decision's own event is still first
     r_pol = app.replay(did, ReplayOverrides(policy_version=1))
     assert any(d["field"] == "policy" and d["after"].endswith("@v1") for d in r_pol.decision_diff)
-    # tamper with the stored record: the replay's 'before' is what was stored, and drift is flagged
+    # tamper with the stored record: the audit event anchors the recorded side, and the
+    # disagreement is reported rather than trusted (tests/test_replay_integrity.py)
     stored = app.store.decision(did)
+    recorded_score = stored["risk_score"]
     stored["risk_score"] = 99
     c = app.store._conn
     c.execute("UPDATE decisions SET payload = ? WHERE decision_id = ?", (json.dumps(stored), did))
     c.commit()
     r2 = app.replay(did, ReplayOverrides())
-    assert r2.original["risk_score"] == 99 and r2.engine_drift
-    assert any(d["field"] == "risk_score" and d["before"] == 99 for d in r2.decision_diff)
-    assert "engine has changed" in r2.explanation
+    assert r2.original["risk_score"] == recorded_score and not r2.record_verified
+    assert any("risk_score" in i and "99" in i for i in r2.record_issues)
+    assert "does not match its audit event" in r2.explanation
 
 
 def test_replay_risk_model_change_is_explicit(app):
@@ -375,8 +377,6 @@ def test_replay_risk_model_change_is_explicit(app):
     r = app.replay(
         b.decision.decision_id, ReplayOverrides(risk_model=scoring.TRANSACTION_V1.version)
     )
-    assert (
-        any(d["field"] in ("risk_score", "risk_level", "matched_rules") for d in r.decision_diff)
-        or r.decision_diff == []
-    )
-    assert "txn-1.0" in " ".join(r.overrides)
+    assert {"field": "risk_model", "before": "txn-2.0", "after": "txn-1.0"} in r.decision_diff
+    assert r.versions["risk_model"] == {"recorded": "txn-2.0", "replay": "txn-1.0"}
+    assert "txn-1.0" in " ".join(r.overrides) and r.record_verified

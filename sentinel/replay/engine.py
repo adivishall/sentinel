@@ -7,15 +7,33 @@
 Determinism is what makes this possible: the composer is a pure function of
 its snapshot, so re-running it under different *versions* isolates the
 effect of the change. Overriding the model recommendation exists to show it
-changes nothing on the protected path."""
+changes nothing on the protected path.
+
+What a replay compares, and why it can be trusted:
+
+- ``original`` is what was RECORDED, anchored to the tamper-evident audit chain:
+  the fields the decision's audit event carries (action, risk score, policy
+  version, authorization, executed capability, evidence verdict, risk model)
+  come from the audit event, and any disagreement with the stored decision is a
+  ``record_issue``. The stored input snapshot is checked against the SHA-256 the
+  audit event recorded, so an edited snapshot cannot replay as "no change".
+- ``replayed`` is the composer's output on that snapshot under the overrides.
+- ``engine_drift``: the snapshot re-derived with no overrides no longer gives
+  the recorded outcome (the engine changed). ``policy_drift``: the named policy
+  version no longer has the content recorded at decision time.
+- ``versions`` names the policy, risk model and engine on each side.
+
+A replay is a what-if: it is stored as a replay record (and an audit event of
+kind ``replay``) and never overwrites or re-records the original decision."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from sentinel import __version__
 from sentinel.decision.composer import compose
-from sentinel.decision.snapshot import restore
+from sentinel.decision.snapshot import restore, snapshot_hash
 from sentinel.domain.decisions import AIRecommendation, Decision
 from sentinel.domain.enums import Capability
 from sentinel.domain.ids import new_id, now_iso
@@ -74,6 +92,11 @@ class ReplayResult:
     # Re-deriving the original from its snapshot gave a different outcome from the one that
     # was actually recorded -- the engine changed since the decision was made.
     original_drift: bool = False
+    # policy / risk_model / engine: {"recorded": ..., "replay": ...}
+    versions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Did the stored decision and snapshot agree with the decision's audit event?
+    record_verified: bool = True
+    record_issues: tuple[str, ...] = ()
 
     @property
     def engine_drift(self) -> bool:
@@ -99,13 +122,17 @@ class ReplayResult:
             "policy_drift": self.policy_drift,
             "engine_drift": self.engine_drift,
             "original_drift": self.original_drift,
+            "versions": self.versions,
+            "record_verified": self.record_verified,
+            "record_issues": list(self.record_issues),
         }
 
 
-def _summary(d: Decision) -> dict[str, Any]:
+def _summary(d: Decision, risk_model: str | None = None) -> dict[str, Any]:
     return {
         "final_action": d.final_action.value,
         "policy": f"{d.policy.policy_id}@v{d.policy.version}",
+        "risk_model": risk_model,
         "policy_outcome": d.policy.outcome.value,
         "matched_rules": list(d.policy.matched_rules),
         "risk_score": d.risk_score,
@@ -120,7 +147,12 @@ def _summary(d: Decision) -> dict[str, Any]:
     }
 
 
-def summary_from_stored(d: dict[str, Any]) -> dict[str, Any]:
+def _snap_model(snap: dict[str, Any]) -> str | None:
+    r = snap.get("risk") or {}
+    return str(r["model_version"]) if r.get("model_version") else None
+
+
+def summary_from_stored(d: dict[str, Any], snap: dict[str, Any] | None = None) -> dict[str, Any]:
     """The same summary read from a stored decision payload (``Decision.to_dict``), so a
     replay is compared with what was actually recorded, not with a fresh re-derivation."""
     pol = d.get("policy") or {}
@@ -129,6 +161,7 @@ def summary_from_stored(d: dict[str, Any]) -> dict[str, Any]:
     return {
         "final_action": d.get("final_action"),
         "policy": f"{pol.get('policy_id')}@v{pol.get('version')}",
+        "risk_model": _snap_model(snap or {}),
         "policy_outcome": pol.get("outcome"),
         "matched_rules": list(pol.get("matched_rules") or []),
         "risk_score": d.get("risk_score"),
@@ -152,6 +185,40 @@ DRIFT_FIELDS = (
     "executed_capability",
     "evidence_verdict",
 )
+
+
+def anchor_to_audit(
+    before: dict[str, Any], snap: dict[str, Any], audit: dict[str, Any] | None
+) -> tuple[dict[str, Any], list[str]]:
+    """Overlay the fields the decision's audit event records onto ``before`` and list
+    every disagreement. The audit chain is tamper-evident; the decisions table is not."""
+    if audit is None:
+        return before, ["no audit event records this decision; the stored record is unverified"]
+    issues: list[str] = []
+    if audit.get("kind", "decision") != "decision":
+        issues.append(f"the first audit event for this decision is a {audit.get('kind')!r} event")
+    detail = audit.get("detail") or {}
+    want = detail.get("snapshot_hash")
+    if not want:
+        issues.append("the audit event has no snapshot hash; the input snapshot is unverified")
+    elif snapshot_hash(snap) != want:
+        issues.append("the stored input snapshot does not match the hash in its audit event")
+    anchored = {
+        "final_action": audit.get("action"),
+        "risk_score": audit.get("risk_score"),
+        "policy": f"{audit.get('policy_id')}@v{audit.get('policy_version')}",
+        "executed_capability": detail.get("executed_capability"),
+        "authorization": detail.get("authorization"),
+        "evidence_verdict": detail.get("evidence_verdict"),
+    }
+    if "risk_model" in detail:
+        anchored["risk_model"] = detail.get("risk_model")
+    out = dict(before)
+    for k, v in anchored.items():
+        if out.get(k) != v:
+            issues.append(f"stored {k} {out.get(k)!r} differs from its audit event ({v!r})")
+            out[k] = v
+    return out, issues
 
 
 def _with_rule_values(policy: Policy, values: dict[str, object]) -> Policy:
@@ -190,10 +257,12 @@ class ReplayEngine:
         overrides: ReplayOverrides,
         *,
         recorded: dict[str, Any] | None = None,
+        audit: dict[str, Any] | None = None,
+        verify: bool = False,
     ) -> ReplayResult:
         """``original`` is the canonical re-derivation of the stored decision; ``recorded``
-        is the stored decision payload itself when the caller has it, so the two can be
-        compared for drift."""
+        is the stored decision payload and ``audit`` its audit event. With ``verify`` the
+        recorded side is anchored to the audit event (``anchor_to_audit``)."""
         inputs = restore(snapshot, self.policies, policy_version=overrides.policy_version)
         pinned = str(snapshot.get("policy", {}).get("content_hash") or "")
         policy_drift = bool(
@@ -241,10 +310,14 @@ class ReplayEngine:
         if overrides.controls is not None:
             inputs = replace(inputs, controls=overrides.controls)
         new = compose(inputs)
-        rederived, after = _summary(original), _summary(new)
-        # ``before`` is the STORED decision when the caller has it; the diff is always
-        # "what was recorded" vs "what the replay produced".
-        before = summary_from_stored(recorded) if recorded is not None else rederived
+        rederived = _summary(original, _snap_model(snapshot))
+        after = _summary(new, inputs.risk.model_version if inputs.risk is not None else None)
+        # ``before`` is the STORED decision when the caller has it, anchored to its audit
+        # event; the diff is always "what was recorded" vs "what the replay produced".
+        before = summary_from_stored(recorded, snapshot) if recorded is not None else rederived
+        issues: list[str] = []
+        if verify:
+            before, issues = anchor_to_audit(before, snapshot, audit)
         diffs = tuple(Diff(k, before[k], after[k]) for k in before if before[k] != after[k])
         changed = any(
             d.field in ("final_action", "policy_outcome", "authorization", "executed_capability")
@@ -265,6 +338,13 @@ class ReplayEngine:
                 f" WARNING: {inputs.policy.key} no longer has the content recorded at decision "
                 f"time (hash {pinned} -> {inputs.policy.content_hash}); the replay used the "
                 "current content."
+            )
+        if issues:
+            expl = (
+                "WARNING: the stored record does not match its audit event ("
+                + "; ".join(issues)
+                + "). The recorded side below uses the audit event's values. "
+                + expl
             )
         if original_drift:
             expl += (
@@ -287,4 +367,14 @@ class ReplayEngine:
             now_iso(),
             policy_drift,
             original_drift,
+            {
+                "policy": {"recorded": before["policy"], "replay": after["policy"]},
+                "risk_model": {"recorded": before["risk_model"], "replay": after["risk_model"]},
+                "engine": {
+                    "recorded": snapshot.get("engine_version", "unrecorded (pre-2.2.0 snapshot)"),
+                    "replay": __version__,
+                },
+            },
+            not issues,
+            tuple(issues),
         )

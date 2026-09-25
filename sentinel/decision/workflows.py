@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 
+from sentinel import __version__
 from sentinel.agents.base import Agent
 from sentinel.agents.catalog import SPECS
 from sentinel.agents.providers import LLMProvider
@@ -23,6 +24,7 @@ from sentinel.cases.service import CaseService
 from sentinel.decision import composer
 from sentinel.decision.authority import require_authoritative
 from sentinel.decision.composer import DecisionInputs, compose
+from sentinel.decision.snapshot import snapshot, snapshot_hash
 from sentinel.domain.cases import Case
 from sentinel.domain.decisions import AIRecommendation, Decision
 from sentinel.domain.entities import LoginSession, Transaction
@@ -219,6 +221,10 @@ def _finish(
                 "authorization": decision.authorization.status.value,
                 "controls": list(decision.controls),
                 "security_event_id": decision.security_event_id,
+                "risk_model": risk.model_version if risk is not None else None,
+                # replay verifies the stored input snapshot against this
+                "snapshot_hash": snapshot_hash(snapshot(inputs)),
+                "engine_version": __version__,
             },
         )
         decision = replace(decision, audit_event_id=audit_event.event_id)

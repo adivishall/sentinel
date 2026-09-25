@@ -22,6 +22,7 @@ from sentinel.domain.enums import (
     Workflow,
 )
 from sentinel.domain.evidence import Claim, Contradiction, Evidence, EvidenceSet, Reconciliation
+from sentinel.domain.ids import content_hash
 from sentinel.domain.risk import RiskAssessment, RiskFactor
 from sentinel.domain.security import SecurityAssessment, SecurityFinding
 from sentinel.domain.serialization import to_dict
@@ -29,13 +30,24 @@ from sentinel.policy.loader import PolicyRegistry
 
 
 def snapshot(inputs: DecisionInputs) -> dict[str, Any]:
+    """The decision's inputs as plain JSON (sets sorted, so it hashes the same in any
+    process), with the policy pinned by content hash and the engine version recorded."""
+    from sentinel import __version__
+
     d = to_dict(inputs)
     d["policy"] = {
         "policy_id": inputs.policy.policy_id,
         "version": inputs.policy.version,
         "content_hash": inputs.policy.content_hash,
     }
+    d["engine_version"] = __version__
     return d
+
+
+def snapshot_hash(snap: dict[str, Any]) -> str:
+    """SHA-256 of a snapshot; recorded in the decision's audit event so replay can prove
+    the stored snapshot is the one the decision was made from."""
+    return content_hash(snap, length=64)
 
 
 def _evidence(e: dict[str, Any]) -> Evidence:
