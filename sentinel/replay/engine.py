@@ -113,10 +113,45 @@ def _summary(d: Decision) -> dict[str, Any]:
         "authorization": d.authorization.status.value,
         "executed_capability": d.executed_capability.value if d.executed_capability else None,
         "evidence_verdict": d.evidence_verdict.value,
+        "contradiction_count": d.contradiction_count,
         "ai_recommendation": (
             d.ai_recommendation.recommended_action if d.ai_recommendation else None
         ),
     }
+
+
+def summary_from_stored(d: dict[str, Any]) -> dict[str, Any]:
+    """The same summary read from a stored decision payload (``Decision.to_dict``), so a
+    replay is compared with what was actually recorded, not with a fresh re-derivation."""
+    pol = d.get("policy") or {}
+    auth = d.get("authorization") or {}
+    ai = d.get("ai_recommendation") or {}
+    return {
+        "final_action": d.get("final_action"),
+        "policy": f"{pol.get('policy_id')}@v{pol.get('version')}",
+        "policy_outcome": pol.get("outcome"),
+        "matched_rules": list(pol.get("matched_rules") or []),
+        "risk_score": d.get("risk_score"),
+        "risk_level": d.get("risk_level"),
+        "authorization": auth.get("status"),
+        "executed_capability": d.get("executed_capability"),
+        "evidence_verdict": d.get("evidence_verdict"),
+        "contradiction_count": d.get("contradiction_count"),
+        "ai_recommendation": ai.get("recommended_action") if ai else None,
+    }
+
+
+# Fields whose disagreement between the stored decision and its re-derivation means the
+# engine (or its data) changed since the decision was made.
+DRIFT_FIELDS = (
+    "final_action",
+    "policy_outcome",
+    "matched_rules",
+    "risk_score",
+    "authorization",
+    "executed_capability",
+    "evidence_verdict",
+)
 
 
 def _with_rule_values(policy: Policy, values: dict[str, object]) -> Policy:
@@ -206,7 +241,10 @@ class ReplayEngine:
         if overrides.controls is not None:
             inputs = replace(inputs, controls=overrides.controls)
         new = compose(inputs)
-        before, after = _summary(original), _summary(new)
+        rederived, after = _summary(original), _summary(new)
+        # ``before`` is the STORED decision when the caller has it; the diff is always
+        # "what was recorded" vs "what the replay produced".
+        before = summary_from_stored(recorded) if recorded is not None else rederived
         diffs = tuple(Diff(k, before[k], after[k]) for k in before if before[k] != after[k])
         changed = any(
             d.field in ("final_action", "policy_outcome", "authorization", "executed_capability")
@@ -217,17 +255,11 @@ class ReplayEngine:
             expl = f"Outcome changed ({before['final_action']} -> {after['final_action']}) because: {why}."
         else:
             expl = f"Outcome unchanged ({before['final_action']}) under: {why}."
-        original_drift = False
-        if recorded is not None:
-            rec_action = recorded.get("final_action")
-            rec_exec = recorded.get("executed_capability")
-            original_drift = bool(
-                rec_action is not None
-                and (
-                    rec_action != before["final_action"]
-                    or rec_exec != before["executed_capability"]
-                )
-            )
+        original_drift = bool(
+            recorded is not None
+            and before.get("final_action") is not None
+            and any(before[k] != rederived[k] for k in DRIFT_FIELDS)
+        )
         if policy_drift:
             expl += (
                 f" WARNING: {inputs.policy.key} no longer has the content recorded at decision "
@@ -237,8 +269,10 @@ class ReplayEngine:
         if original_drift:
             expl += (
                 " WARNING: re-deriving the original decision from its snapshot no longer "
-                f"reproduces the recorded outcome ({recorded.get('final_action') if recorded else '?'} "
-                f"recorded, {before['final_action']} re-derived); the engine has changed."
+                f"reproduces the recorded decision (recorded {before['final_action']} / "
+                f"{before['policy_outcome']} / risk {before['risk_score']}, re-derived "
+                f"{rederived['final_action']} / {rederived['policy_outcome']} / risk "
+                f"{rederived['risk_score']}); the engine has changed."
             )
         return ReplayResult(
             new_id("REPLAY"),
