@@ -117,6 +117,9 @@ class Decision:
     controls: tuple[str, ...] = field(default_factory=tuple)
     ai_agreed: bool | None = None  # did the model's wish coincide with the outcome?
     executed_capability: Capability | None = None  # the consequential capability that ran, if any
+    # True only for a decision recorded by a persisting runtime after the authority check
+    # (sentinel.decision.authority); a what-if or unpersisted evaluation is False.
+    authoritative: bool = False
 
     @property
     def executed(self) -> bool:

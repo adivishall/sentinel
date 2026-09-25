@@ -38,6 +38,7 @@ from sentinel import __version__
 from sentinel.api import schemas as S
 from sentinel.app import SentinelApp
 from sentinel.cases.service import InvalidTransition
+from sentinel.decision.authority import ControlDowngrade
 from sentinel.domain.enums import CasePriority, CaseStatus, Workflow
 from sentinel.domain.serialization import to_dict
 from sentinel.observability import METRICS, get_logger, new_trace, request_id
@@ -149,30 +150,22 @@ def _adjudication(b: Any) -> dict[str, Any]:
 
 
 def _evaluate_options(d: dict[str, Any]) -> Any:
-    """Options for the authoritative evaluate routes. Ablation controls (``unguarded``,
-    ``options.controls``) are a lab feature: they are accepted here only when the operator
-    sets ``SENTINEL_ALLOW_UNGUARDED=1``. The attack simulator and replay always accept them
-    and record the control set on the decision and the audit event."""
-    opts = S.run_options(d)
-    lab = os.environ.get("SENTINEL_ALLOW_UNGUARDED") == "1"
-    if opts.controls != S.ALL_CONTROLS and not lab:
+    """Options for the authoritative evaluate routes. A caller may request an evaluation; it
+    may not weaken one. Every what-if switch (``unguarded``, ``options.controls``,
+    ``options.policy_version``, ``options.risk_model``) is refused here with 403 -- an older
+    policy or risk model is not an authorization (v1 of dispute-refund has no double-refund
+    rule; txn-1.0 lacks the burst signals). The attack simulator, scenario runs and replay
+    accept them, and the engine never records those runs as decisions."""
+    used = S.what_if_keys(d)
+    if used:
         raise ApiError(
             403,
-            "reduced controls are not accepted on evaluate routes; use /v1/attacks/simulate or "
-            "/v1/replay, or start the server with SENTINEL_ALLOW_UNGUARDED=1 for lab use",
+            f"{', '.join(used)} are what-if switches and are not accepted on evaluate routes: "
+            "the authoritative path always runs every control, the active policy and the "
+            "active risk model. Use /v1/replay, /v1/attacks/simulate or /v1/scenarios/{key}/run "
+            "for what-if analysis; their results are never recorded as decisions.",
         )
-    if (opts.policy_version is not None or opts.risk_model is not None) and not lab:
-        # An older policy version or risk model is a what-if, not an authorization: v1 of
-        # dispute-refund has no double-refund rule and txn-1.0 lacks the burst signals, so
-        # letting a caller pick them would be a policy / risk bypass by request parameter.
-        raise ApiError(
-            403,
-            "policy_version and risk_model overrides are not accepted on evaluate routes: the "
-            "authoritative path always runs the latest policy and the default risk model; use "
-            "/v1/replay for what-if analysis, or start the server with SENTINEL_ALLOW_UNGUARDED=1 "
-            "for lab use",
-        )
-    return opts
+    return S.run_options(d)
 
 
 def build_routes(app: SentinelApp) -> Router:
@@ -282,11 +275,14 @@ def build_routes(app: SentinelApp) -> Router:
 
     def investigation_eval(q: Any, b: Any, p: Any) -> Any:
         d = S.obj(b)
+        if "as_of" in d:  # a past as-of is a backtest, not an authoritative investigation
+            raise ApiError(
+                403, "as_of is a what-if switch; investigations run as of the dataset's now"
+            )
         return to_dict(
             app.evaluate_investigation(
                 S.req_str(d, "account_id", max_len=64),
                 case_notes=S.opt_str_list(d, "case_notes"),
-                as_of=S.opt_str(d, "as_of", None, 40),
                 options=_evaluate_options(d),
             ).decision
         )
@@ -848,6 +844,10 @@ class SentinelHandler(BaseHTTPRequestHandler):
             result, status = _error(e.status, e.message, rid), e.status
         except ApiError as e:
             result, status = _error(e.status, e.message, rid), e.status
+        except ControlDowngrade as e:  # the engine refused to record a downgraded run
+            result, status = _error(403, str(e), rid), 403
+        except ValueError as e:  # e.g. a risk model applied to another surface
+            result, status = _error(400, str(e), rid), 400
         except Exception as e:  # noqa: BLE001 - never leak a stack trace
             _log.warning(
                 "handler failed",

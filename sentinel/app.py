@@ -76,6 +76,15 @@ class SentinelApp:
             provider=provider,
             persist=persist,
         )
+        # What-if runs (reduced controls, a historical policy or risk model) use the same
+        # policies, gateway and provider but never persist: no audit event, no case, no
+        # stored decision (sentinel.decision.authority).
+        self.what_if_runtime = Runtime(
+            policies=self.runtime.policies,
+            gateway=self.runtime.gateway,
+            provider=provider,
+            persist=False,
+        )
         self.replay_engine = ReplayEngine(self.runtime.policies)
         self._world: _World | None = None
         for p in self.runtime.policies.all():
@@ -137,8 +146,11 @@ class SentinelApp:
         return self._world
 
     # ---- persistence of a bundle ------------------------------------------------------------
+    def _rt(self, options: RunOptions) -> Runtime:
+        return self.what_if_runtime if options.what_if else self.runtime
+
     def _persist(self, b: DecisionBundle) -> DecisionBundle:
-        if not self.runtime.persist:
+        if not self.runtime.persist or not b.decision.authoritative:
             return b
         if b.risk is not None:
             self.store.save_risk_assessment(b.risk)
@@ -291,7 +303,7 @@ class SentinelApp:
         acc = self.store.account(t.account_id)
         mprof = self.world.engine.merchant_risk(t.merchant_id, as_of=t.timestamp)
         b = run_transaction(
-            self.runtime,
+            self._rt(options),
             TransactionRequest(
                 t, ctx, acc.status if acc else "unknown", mprof.level.value, untrusted
             ),
@@ -353,7 +365,7 @@ class SentinelApp:
             for x in documents
         )
         b = run_dispute(
-            self.runtime,
+            self._rt(options),
             DisputeRequest(
                 UntrustedContent(narrative, TrustClass.USER_CONTROLLED, source),
                 ledger or {},
@@ -375,7 +387,7 @@ class SentinelApp:
         *,
         options: RunOptions = DEFAULT_OPTIONS,
     ) -> DecisionBundle:
-        s = DisputeSession(self.runtime, ledger, options=options)
+        s = DisputeSession(self._rt(options), ledger, options=options)
         b = None
         for t in turns:
             b = s.add(t)
@@ -413,7 +425,7 @@ class SentinelApp:
             for x in documents
         )
         b = run_kyb(
-            self.runtime,
+            self._rt(options),
             KYBRequest(
                 UntrustedContent(application, TrustClass.MERCHANT_CONTROLLED, "application"),
                 records or {},
@@ -442,7 +454,7 @@ class SentinelApp:
             else None
         )
         b = run_account_security(
-            self.runtime, AccountSecurityRequest(s, ctx, msg, requested_capability), options
+            self._rt(options), AccountSecurityRequest(s, ctx, msg, requested_capability), options
         )
         return self._persist(b)
 
@@ -456,7 +468,7 @@ class SentinelApp:
     ) -> DecisionBundle:
         ctx = self.monitoring_context(account_id, as_of)
         notes = tuple(UntrustedContent(n, TrustClass.UNKNOWN, "case_notes") for n in case_notes)
-        b = run_investigation(self.runtime, InvestigationRequest(ctx, notes), options)
+        b = run_investigation(self._rt(options), InvestigationRequest(ctx, notes), options)
         return self._persist(b)
 
     def evaluate_ai_security(

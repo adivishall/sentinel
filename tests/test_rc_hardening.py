@@ -1,7 +1,8 @@
 """Release-candidate hardening: the findings of the final hostile review, pinned.
 
 1. The authoritative evaluate routes and CLI commands never run an older policy
-   version or a different risk model on request (a what-if is not an authorization).
+   version or a different risk model on request (a what-if is not an authorization);
+   ``tests/test_evaluation_authority.py`` pins the structural rule behind it.
 2. A case is resolved only by a recorded human decision.
 3. The audit chain reports an unreadable record, an inserted record, a broken link
    and tampered index columns; refuses to append onto an inconsistent store; and a
@@ -86,7 +87,8 @@ def _get(url):
 def test_policy_version_override_would_pay_a_second_refund_so_the_api_refuses_it(server, app):
     # The defect: dispute-refund@v1 has no block-already-refunded rule.
     b = app.evaluate_dispute(CLAIM, LEDGER_REFUNDED, options=RunOptions(policy_version=1))
-    assert b.decision.executed_capability is not None  # what the override would do
+    assert b.decision.executed_capability is not None  # what the override would do ...
+    assert not b.decision.authoritative and app.store.decision(b.decision.decision_id) is None
     latest = app.evaluate_dispute(CLAIM, LEDGER_REFUNDED)
     assert latest.decision.final_action.value == "DENY" and not latest.decision.executed
     code, body = _post(
@@ -114,8 +116,7 @@ def test_policy_version_override_would_pay_a_second_refund_so_the_api_refuses_it
     assert code == 200 and body["replayed"]["policy"] == "dispute-refund@v1"
 
 
-def test_cli_authoritative_commands_refuse_what_if_switches(tmp_path, capsys, monkeypatch):
-    monkeypatch.delenv("SENTINEL_ALLOW_UNGUARDED", raising=False)
+def test_cli_authoritative_commands_refuse_what_if_switches(tmp_path, capsys):
     db = str(tmp_path / "s.db")
     assert (
         cli_main(
@@ -138,19 +139,17 @@ def test_cli_authoritative_commands_refuse_what_if_switches(tmp_path, capsys, mo
     )
     tid = SentinelApp.open(db).store.transactions(limit=1)[0].transaction_id
     for flag in (["--policy-version", "1"], ["--risk-model", "txn-1.0"], ["--unguarded"]):
-        with pytest.raises(SystemExit) as e:
+        with pytest.raises(SystemExit) as e:  # the flags do not exist on this command
             cli_main(["--db", db, "transaction", "evaluate", tid, *flag])
-        assert "what-if" in str(e.value)
+        assert e.value.code == 2 and "unrecognized arguments" in capsys.readouterr().err
     assert cli_main(["--db", db, "transaction", "evaluate", tid]) == 0
-    # the simulator keeps the switches (lab feature)
+    # the simulator keeps the switches; its what-if side is never recorded
     assert (
         cli_main(
             ["--db", db, "security", "attack", "--scenario", "direct_injection", "--unguarded"]
         )
         == 0
     )
-    monkeypatch.setenv("SENTINEL_ALLOW_UNGUARDED", "1")
-    assert cli_main(["--db", db, "transaction", "evaluate", tid, "--risk-model", "txn-1.0"]) == 0
 
 
 # ---- 2. only a human resolves a case ------------------------------------------------------------

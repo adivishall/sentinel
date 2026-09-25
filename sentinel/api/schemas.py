@@ -16,6 +16,13 @@ from sentinel.security.provenance import UntrustedContent
 MAX_TEXT = 20_000
 ALL_CONTROLS = composer.FULL | {PROVENANCE}
 
+# USER-CONTROLLABLE: a caller may set these on any route; they change only the model call.
+USER_OPTIONS = frozenset({"hardened", "skip_agent"})
+# SYSTEM-CONTROLLED on the authoritative path: what-if switches. Only the attack simulator,
+# scenario runs and replay accept them, and the engine never records a run that used them
+# (sentinel.decision.authority). The evaluate routes refuse them with 403.
+WHAT_IF_OPTIONS = frozenset({"controls", "unguarded", "policy_version", "risk_model"})
+
 
 class ValidationError(ValueError):
     def __init__(self, message: str, status: int = 400) -> None:
@@ -130,10 +137,23 @@ def untrusted_list(d: dict[str, Any], key: str = "contents") -> tuple[UntrustedC
     return tuple(out)
 
 
+def what_if_keys(d: dict[str, Any]) -> list[str]:
+    """The what-if switches a request body carries (top-level ``unguarded`` included)."""
+    raw = d.get("options")
+    o: dict[str, Any] = raw if isinstance(raw, dict) else {}
+    found = [f"options.{k}" for k in sorted(WHAT_IF_OPTIONS) if k in o]
+    return found + (["unguarded"] if "unguarded" in d else [])
+
+
 def run_options(d: dict[str, Any]) -> RunOptions:
     o = d.get("options", {})
     if not isinstance(o, dict):
         raise ValidationError("'options' must be an object")
+    unknown = set(o) - USER_OPTIONS - WHAT_IF_OPTIONS
+    if unknown:  # fail closed: an option we do not know is not silently ignored
+        raise ValidationError(
+            f"unknown options {sorted(unknown)}; allowed {sorted(USER_OPTIONS | WHAT_IF_OPTIONS)}"
+        )
     controls: frozenset[str] = ALL_CONTROLS
     if "controls" in o:
         c = o["controls"]

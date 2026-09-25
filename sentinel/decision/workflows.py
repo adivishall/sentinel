@@ -21,6 +21,7 @@ from sentinel.agents.providers import LLMProvider
 from sentinel.audit.chain import AuditChain, AuditEvent
 from sentinel.cases.service import CaseService
 from sentinel.decision import composer
+from sentinel.decision.authority import require_authoritative
 from sentinel.decision.composer import DecisionInputs, compose
 from sentinel.domain.cases import Case
 from sentinel.domain.decisions import AIRecommendation, Decision
@@ -41,6 +42,7 @@ from sentinel.policy.loader import DEFAULT_REGISTRY, PolicyRegistry
 from sentinel.risk import (
     account_security,
     monitoring,
+    scoring,
 )
 from sentinel.risk import (
     dispute as dispute_risk,
@@ -76,12 +78,23 @@ class Runtime:
 
 @dataclass(frozen=True)
 class RunOptions:
+    """How to run one evaluation. ``controls``, ``policy_version`` and ``risk_model`` are
+    what-if switches (``sentinel.decision.authority``): any of them makes the run a
+    what-if that is never recorded as a decision. ``hardened`` and ``skip_agent`` only
+    change the model call and are allowed on the authoritative path."""
+
     controls: frozenset[str] = FULL
     policy_version: int | None = None
     risk_model: RiskModel | None = None
     hardened: bool = False
     session_id: str | None = None
     skip_agent: bool = False  # evaluate without calling any model
+
+    @property
+    def what_if(self) -> bool:
+        return (
+            self.controls != FULL or self.policy_version is not None or self.risk_model is not None
+        )
 
 
 DEFAULT_OPTIONS = RunOptions()
@@ -136,7 +149,13 @@ def _finish(
     ai: AIRecommendation | None,
     agent_name: str,
 ) -> DecisionBundle:
+    if rt.persist:
+        # Structural: nothing is audited, cased or stored as authoritative unless it ran
+        # with every control, the active policy and the active risk model.
+        require_authoritative(inputs, rt.policies)
     decision = compose(inputs)
+    if rt.persist:
+        decision = replace(decision, authoritative=True)
     sec = inputs.security
     security_event: SecurityEvent | None = None
     if sec.severity.rank >= Severity.MEDIUM.rank or sec.capability_escalation:
@@ -339,6 +358,7 @@ def run_dispute(
         contradicted=bool(rec.contradictions),
         account_risk_score=req.account_risk_score,
         security_flagged=security.flagged,
+        model=scoring.model_for("dispute", opts.risk_model),
     )
     provider, model = _provider_meta(rt, ai)
     inputs = DecisionInputs(
@@ -388,11 +408,8 @@ def run_transaction(
     rt: Runtime, req: TransactionRequest, opts: RunOptions = DEFAULT_OPTIONS
 ) -> DecisionBundle:
     t = req.transaction
-    model = opts.risk_model
-    risk = (
-        txn_risk.assess_transaction(t, req.context, model)
-        if model
-        else txn_risk.assess_transaction(t, req.context)
+    risk = txn_risk.assess_transaction(
+        t, req.context, scoring.model_for("transaction", opts.risk_model)
     )
     security = (
         _inspect_all(rt, req.untrusted, None)
@@ -493,6 +510,11 @@ class KYBRequest:
 
 
 def run_kyb(rt: Runtime, req: KYBRequest, opts: RunOptions = DEFAULT_OPTIONS) -> DecisionBundle:
+    if opts.risk_model is not None:
+        raise ValueError(
+            f"risk model {opts.risk_model.version} does not apply to merchant onboarding "
+            "(scored by the entity engine, which has no selectable version)"
+        )
     facts = KYBFacts.from_records(req.records)
     merchant_id = req.merchant_id or new_id("MER")
     try:
@@ -568,7 +590,7 @@ def run_account_security(
 ) -> DecisionBundle:
     s = req.session
     risk = account_security.assess_login(
-        s, req.context, opts.risk_model or account_security.scoring.ACCOUNT_SECURITY_V1
+        s, req.context, scoring.model_for("login", opts.risk_model)
     )
     untrusted = (req.message,) if req.message else ()
     security = (
@@ -662,7 +684,7 @@ def run_investigation(
     rt: Runtime, req: InvestigationRequest, opts: RunOptions = DEFAULT_OPTIONS
 ) -> DecisionBundle:
     risk = monitoring.assess_account_activity(
-        req.context, opts.risk_model or monitoring.scoring.MONITORING_V1
+        req.context, scoring.model_for("account", opts.risk_model)
     )
     security = (
         _inspect_all(rt, req.case_notes, None)

@@ -235,6 +235,38 @@ def get_model(version: str) -> RiskModel:
     return MODELS[version]
 
 
+# The risk surface each model scores (``RiskAssessment.entity_type``).
+_SURFACE_BY_PREFIX = {"txn": "transaction", "acct": "login", "mon": "account", "disp": "dispute"}
+
+# The configured ACTIVE model per surface. Authoritative evaluation always scores with
+# these; every other registered version is historical and reachable only in a what-if
+# (the attack simulator, a scenario run, replay). See ``sentinel.decision.authority``.
+ACTIVE: dict[str, RiskModel] = {
+    "transaction": TRANSACTION_DEFAULT,
+    "login": ACCOUNT_SECURITY_V1,
+    "account": MONITORING_V1,
+    "dispute": DISPUTE_V1,
+}
+
+
+def surface_of(model: RiskModel) -> str:
+    """Which surface a model scores; a model is only ever applied to its own surface."""
+    return _SURFACE_BY_PREFIX.get(model.version.split("-", 1)[0], "unknown")
+
+
+def model_for(surface: str, requested: RiskModel | None) -> RiskModel:
+    """The model to score ``surface`` with: the active one, or a requested (what-if) model
+    of the same surface. A model for another surface is refused, not silently applied."""
+    if requested is None:
+        return ACTIVE[surface]
+    if surface_of(requested) != surface:
+        raise ValueError(
+            f"risk model {requested.version} scores the {surface_of(requested)} surface, "
+            f"not {surface}"
+        )
+    return requested
+
+
 # A factor rule: (code, label, applies(features, model) -> detail | None)
 Rule = tuple[str, str, Callable[[Features, RiskModel], str | None]]
 

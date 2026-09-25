@@ -90,31 +90,21 @@ def _load_json(path: str) -> dict[str, Any]:
     return data
 
 
-def _options(args: argparse.Namespace, *, authoritative: bool = False) -> Any:
-    """Run options from the flags. ``authoritative`` commands (transaction / dispute /
-    merchant / account / investigation) refuse the what-if switches unless the operator
-    sets SENTINEL_ALLOW_UNGUARDED=1: an older policy version or risk model is not an
-    authorization, and a persisted ALLOW under a weaker policy would be a bypass."""
+def scoring_models() -> list[str]:
+    from sentinel.risk import scoring
+
+    return list(scoring.MODELS)
+
+
+def _options(args: argparse.Namespace) -> Any:
+    """Run options from the flags. The authoritative commands (transaction / dispute /
+    merchant / account / investigation) are not given the what-if flags at all; only
+    ``security attack`` and ``scenario run`` (and ``replay run``) take ``--unguarded``,
+    ``--policy-version`` and ``--risk-model``, and the engine never records those runs as
+    decisions (sentinel.decision.authority)."""
     from sentinel.decision.workflows import RunOptions
     from sentinel.risk import scoring
 
-    if authoritative and os.environ.get("SENTINEL_ALLOW_UNGUARDED") != "1":
-        used = [
-            f
-            for f, present in (
-                ("--unguarded", getattr(args, "unguarded", False)),
-                ("--policy-version", getattr(args, "policy_version", None)),
-                ("--risk-model", getattr(args, "risk_model", None)),
-            )
-            if present
-        ]
-        if used:
-            raise SystemExit(
-                f"error: {', '.join(used)} are what-if switches; the authoritative commands "
-                "always run full controls, the latest policy and the default risk model. Use "
-                "`sentinel replay run` or `sentinel security attack`, or set "
-                "SENTINEL_ALLOW_UNGUARDED=1 for lab use."
-            )
     controls: frozenset[str] | None = frozenset() if getattr(args, "unguarded", False) else None
     kw: dict[str, Any] = {}
     if controls is not None:
@@ -165,11 +155,9 @@ def cmd_transaction(args: argparse.Namespace) -> int:
         data = _load_json(args.target)
         t = S.transaction(data if "transaction" in data else {"transaction": data})
         untrusted = S.untrusted_list(data, "untrusted")
-        b = app.evaluate_transaction(
-            t, untrusted=untrusted, options=_options(args, authoritative=True)
-        )
+        b = app.evaluate_transaction(t, untrusted=untrusted, options=_options(args))
     else:
-        b = app.evaluate_transaction(args.target, options=_options(args, authoritative=True))
+        b = app.evaluate_transaction(args.target, options=_options(args))
     _out(
         args,
         to_dict(b.decision),
@@ -189,7 +177,7 @@ def cmd_transaction(args: argparse.Namespace) -> int:
 def cmd_dispute(args: argparse.Namespace) -> int:
     app = _app(args)
     if args.id:
-        b = app.evaluate_dispute("", dispute_id=args.id, options=_options(args, authoritative=True))
+        b = app.evaluate_dispute("", dispute_id=args.id, options=_options(args))
     else:
         data = _load_json(args.file)
         docs = tuple(data.get("documents", [])) + (
@@ -197,14 +185,14 @@ def cmd_dispute(args: argparse.Namespace) -> int:
         )
         if data.get("messages"):
             b = app.evaluate_dispute_conversation(
-                tuple(data["messages"]), data["ledger"], options=_options(args, authoritative=True)
+                tuple(data["messages"]), data["ledger"], options=_options(args)
             )
         else:
             b = app.evaluate_dispute(
                 data.get("narrative", data.get("submission", "")),
                 data["ledger"],
                 documents=docs,
-                options=_options(args, authoritative=True),
+                options=_options(args),
             )
     _out(
         args,
@@ -217,9 +205,7 @@ def cmd_dispute(args: argparse.Namespace) -> int:
 def cmd_merchant(args: argparse.Namespace) -> int:
     app = _app(args)
     if args.id:
-        b = app.evaluate_merchant(
-            "", application_id=args.id, options=_options(args, authoritative=True)
-        )
+        b = app.evaluate_merchant("", application_id=args.id, options=_options(args))
     else:
         data = _load_json(args.file)
         docs = tuple(data.get("documents", [])) + (
@@ -230,7 +216,7 @@ def cmd_merchant(args: argparse.Namespace) -> int:
             data["records"],
             merchant_id=data.get("merchant_id", ""),
             documents=docs,
-            options=_options(args, authoritative=True),
+            options=_options(args),
         )
     _out(
         args,
@@ -251,12 +237,10 @@ def cmd_account(args: argparse.Namespace) -> int:
             s,
             message=data.get("message"),
             requested_capability=S.capability(data, "requested_capability"),
-            options=_options(args, authoritative=True),
+            options=_options(args),
         )
     else:
-        b = app.evaluate_account(
-            args.target, message=args.message, options=_options(args, authoritative=True)
-        )
+        b = app.evaluate_account(args.target, message=args.message, options=_options(args))
     _out(args, to_dict(b.decision), _decision_text(b.decision))
     return 0
 
@@ -266,7 +250,7 @@ def cmd_investigation(args: argparse.Namespace) -> int:
     b = app.evaluate_investigation(
         args.account_id,
         case_notes=tuple(args.note or ()),
-        options=_options(args, authoritative=True),
+        options=_options(args),
     )
     _out(
         args,
@@ -706,14 +690,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", help="machine-readable output")
     sub = p.add_subparsers(dest="command", required=True)
 
-    def opts(sp: argparse.ArgumentParser) -> None:
-        sp.add_argument(
-            "--unguarded", action="store_true", help="disable all controls (baseline behaviour)"
-        )
+    def opts(sp: argparse.ArgumentParser, *, what_if: bool = False) -> None:
+        """User-controllable flags everywhere; what-if flags only where ``what_if``."""
         sp.add_argument("--hardened", action="store_true", help="use the hardened-prompt agent")
         sp.add_argument("--no-agent", action="store_true", help="skip the model call")
-        sp.add_argument("--policy-version", type=int)
-        sp.add_argument("--risk-model")
+        if what_if:
+            sp.add_argument(
+                "--unguarded",
+                action="store_true",
+                help="what-if: disable all controls (never recorded as a decision)",
+            )
+            sp.add_argument("--policy-version", type=int, help="what-if: a historical version")
+            sp.add_argument(
+                "--risk-model", choices=sorted(scoring_models()), help="what-if: a historical model"
+            )
 
     d = sub.add_parser("data", help="synthetic dataset").add_subparsers(
         dest="data_command", required=True
@@ -791,7 +781,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="run the same input WITHOUT (simulated agent, no controls) and WITH Sentinel",
     )
-    opts(at)
+    opts(at, what_if=True)
     se = sec.add_parser("evaluate")
     se.add_argument("text")
     se.add_argument("--agent", default="dispute")
@@ -870,7 +860,7 @@ def build_parser() -> argparse.ArgumentParser:
     sc.add_parser("list")
     sr = sc.add_parser("run")
     sr.add_argument("key")
-    opts(sr)
+    opts(sr, what_if=True)
 
     ev = sub.add_parser("eval").add_subparsers(dest="eval_command", required=True).add_parser("run")
     ev.add_argument(

@@ -89,6 +89,8 @@ class PolicyRegistry:
         return sorted(v for (pid, v) in self._policies if pid == policy_id)
 
     def get(self, policy_id: str, version: int | None = None) -> Policy:
+        """``version=None`` is the active version. Naming a version is a historical lookup,
+        which only replay and what-if runs make (``sentinel.decision.authority``)."""
         versions = self.versions(policy_id)
         if not versions:
             raise KeyError(f"unknown policy {policy_id!r}")
@@ -97,6 +99,15 @@ class PolicyRegistry:
             return self._policies[(policy_id, v)]
         except KeyError:
             raise KeyError(f"policy {policy_id!r} has no version {v}; have {versions}") from None
+
+    def active(self, policy_id: str) -> Policy:
+        """The configured active version: the highest version shipped. Authoritative
+        evaluation always uses it; no request parameter selects another."""
+        return self.get(policy_id)
+
+    def historical(self, policy_id: str) -> list[int]:
+        """Versions kept only so recorded decisions can be replayed and compared."""
+        return self.versions(policy_id)[:-1]
 
     def all(self) -> list[Policy]:
         return sorted(self._policies.values(), key=lambda p: (p.policy_id, p.version))
