@@ -1035,6 +1035,7 @@ class SqliteCaseRepository:
             p.get("opened_by_rule", ""),
             p.get("resolution"),
             tuple(p.get("audit_event_ids", [])),
+            p.get("required_authorization", "HUMAN_REVIEWER"),
         )
 
     def get(self, case_id: str) -> Case | None:

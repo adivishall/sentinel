@@ -25,6 +25,7 @@ class HumanDecision:
     outcome: str  # approve | deny | escalate
     note: str
     created_at: str
+    role: str = "HUMAN_REVIEWER"  # declared by the reviewer; see LIMITATIONS (no identity)
 
 
 @dataclass(frozen=True)
@@ -48,3 +49,6 @@ class Case:
     opened_by_rule: str = ""
     resolution: str | None = None
     audit_event_ids: tuple[str, ...] = field(default_factory=tuple)
+    # Who may approve: derived from the capability registry when the case is opened
+    # (HUMAN_REVIEWER | SENIOR_REVIEWER | NOBODY). Denying or escalating needs any human.
+    required_authorization: str = "HUMAN_REVIEWER"

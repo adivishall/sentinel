@@ -37,7 +37,7 @@ from urllib.parse import parse_qs, urlparse
 from sentinel import __version__
 from sentinel.api import schemas as S
 from sentinel.app import SentinelApp
-from sentinel.cases.service import InvalidTransition
+from sentinel.cases.service import InvalidTransition, ReviewerNotAuthorized
 from sentinel.decision.authority import ControlDowngrade
 from sentinel.domain.enums import CasePriority, CaseStatus, Workflow
 from sentinel.domain.serialization import to_dict
@@ -455,8 +455,11 @@ def build_routes(app: SentinelApp) -> Router:
                     reviewer=S.req_str(d, "reviewer", max_len=60),
                     outcome=S.req_str(d, "outcome", max_len=20),
                     note=S.opt_str(d, "note", "", 500) or "",
+                    role=S.opt_str(d, "role", "HUMAN_REVIEWER", 20) or "HUMAN_REVIEWER",
                 )
             )
+        except ReviewerNotAuthorized as e:
+            raise ApiError(403, str(e)) from None
         except InvalidTransition as e:
             raise ApiError(409, str(e)) from None
         except ValueError as e:

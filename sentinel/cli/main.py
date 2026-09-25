@@ -423,16 +423,25 @@ def cmd_case(args: argparse.Namespace) -> int:
             f"  audit    {len(pk['audit_history'])} event(s); human decisions: {len(pk['human_decisions'])}"
         )
         print(f"  {pk['principle']}")
-    elif args.case_command == "transition":
-        c = app.runtime.cases.transition(
-            args.case_id, CaseStatus(args.status), actor=args.actor, note=args.note or ""
-        )
-        print(f"{c.case_id} -> {c.status.value}")
-    elif args.case_command == "decide":
-        c = app.runtime.cases.record_human_decision(
-            args.case_id, reviewer=args.actor, outcome=args.outcome, note=args.note or ""
-        )
-        print(f"{c.case_id} -> {c.status.value} ({c.resolution})")
+    elif args.case_command in ("transition", "decide"):
+        try:
+            if args.case_command == "transition":
+                c = app.runtime.cases.transition(
+                    args.case_id, CaseStatus(args.status), actor=args.actor, note=args.note or ""
+                )
+                print(f"{c.case_id} -> {c.status.value}")
+            else:
+                c = app.runtime.cases.record_human_decision(
+                    args.case_id,
+                    reviewer=args.actor,
+                    outcome=args.outcome,
+                    note=args.note or "",
+                    role=args.role,
+                )
+                print(f"{c.case_id} -> {c.status.value} ({c.resolution})")
+        except (ValueError, KeyError) as e:  # InvalidTransition / ReviewerNotAuthorized
+            print(f"error: {e}", file=sys.stderr)
+            return 1
     return 0
 
 
@@ -814,6 +823,12 @@ def build_parser() -> argparse.ArgumentParser:
     cd.add_argument("case_id")
     cd.add_argument("outcome", choices=["approve", "deny", "escalate"])
     cd.add_argument("--actor", default="reviewer")
+    cd.add_argument(
+        "--role",
+        default="HUMAN_REVIEWER",
+        choices=["HUMAN_REVIEWER", "SENIOR_REVIEWER"],
+        help="the reviewer's declared level (no identity system; see LIMITATIONS)",
+    )
     cd.add_argument("--note")
 
     po = sub.add_parser("policy").add_subparsers(dest="policy_command", required=True)
