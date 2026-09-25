@@ -50,7 +50,7 @@ def test_future_events_never_change_a_historical_decision(world, offsets):
             app.monitoring_context(t.account_id, t.timestamp)
         )
         pert = SentinelApp(persist=False)
-        pert.load_dataset(temporal.perturb(ds, t.account_id, t.timestamp, offsets))
+        pert.load_dataset(temporal.perturb_all(ds, t.account_id, t.timestamp, offsets))
         assert _txn_view(pert, t) == ref, (t.transaction_id, offsets)
         mon = monitoring.assess_account_activity(pert.monitoring_context(t.account_id, t.timestamp))
         assert (mon.score, mon.factors) == (mon_ref.score, mon_ref.factors), (
@@ -58,7 +58,7 @@ def test_future_events_never_change_a_historical_decision(world, offsets):
             offsets,
         )
         # the future events ARE visible once the clock moves past them
-        later = pert.store.transaction("TX-FUTURE-0-3")
+        later = pert.store.transaction("TX-FUTURE-device_burst-0-3")
         assert later is not None and later.label == "future:perturbation"
         after = txn_risk.assess_transaction(later, pert.transaction_context(later))
         assert {"new_device", "rapid_fire"} <= {f.code for f in after.factors}
@@ -74,7 +74,7 @@ def test_entity_profiles_as_of_are_unaffected_by_future_records(world):
             eng.device_risk(t.device_id, as_of=t.timestamp),
         )
         pert = SentinelApp(persist=False)
-        pert.load_dataset(temporal.perturb(ds, t.account_id, t.timestamp, (1, 30)))
+        pert.load_dataset(temporal.perturb_all(ds, t.account_id, t.timestamp, (1, 30)))
         peng = pert.world.engine
         after = (
             peng.merchant_risk(t.merchant_id, as_of=t.timestamp),
