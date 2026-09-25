@@ -29,6 +29,7 @@ class TransactionContext:
     last_country: str | None = None
     last_country_ts: str | None = None
     device_shared_accounts: int = 0
+    device_first_used: str | None = None  # when this device was first seen on the account
 
 
 def extract_features(txn: Transaction, ctx: TransactionContext) -> dict[str, object]:
@@ -45,6 +46,9 @@ def extract_features(txn: Transaction, ctx: TransactionContext) -> dict[str, obj
     if ctx.last_country and ctx.last_country_ts and ctx.last_country != txn.country:
         hours = (ts - parse_ts(ctx.last_country_ts)).total_seconds() / 3600
         impossible = 0 <= hours < 2
+    device_age_hours: float | None = None
+    if ctx.device_first_used and ctx.device_first_used <= txn.timestamp:
+        device_age_hours = round((ts - parse_ts(ctx.device_first_used)).total_seconds() / 3600, 2)
     return {
         "amount": txn.amount,
         "amount_z": b.amount_z(txn.amount),
@@ -56,8 +60,9 @@ def extract_features(txn: Transaction, ctx: TransactionContext) -> dict[str, obj
         "same_merchant_1h": len(same_merchant_1h),
         "is_new_device": txn.device_id not in ctx.known_devices
         and not b.knows_device(txn.device_id),
+        "device_age_hours": device_age_hours,
         "device_shared_accounts": ctx.device_shared_accounts,
-        "is_new_country": not b.knows_country(txn.country) and (ctx.account is None or True),
+        "is_new_country": not b.knows_country(txn.country),
         "impossible_travel": impossible,
         "merchant_mcc_risk": ctx.merchant.mcc_risk if ctx.merchant else "unknown",
         "merchant_risk_score": ctx.merchant_risk_score,
@@ -155,7 +160,15 @@ RULES: tuple[Rule, ...] = (
     (
         "new_device",
         "New device",
-        lambda f, m: "device never seen on this account" if f.get("is_new_device") else None,
+        lambda f, m: (
+            (
+                "device never seen on this account"
+                if f.get("device_age_hours") is None
+                else f"device first seen on this account {_num(f, 'device_age_hours'):.1f}h ago"
+            )
+            if f.get("is_new_device")
+            else None
+        ),
     ),
     ("young_account_shared_device", "Young account on a shared device", _young_shared),
     (

@@ -49,3 +49,4 @@ class EntityRiskProfile:
     factors: tuple[RiskFactor, ...]
     linked_entities: tuple[str, ...] = field(default_factory=tuple)
     model_version: str = ""
+    as_of: str = ""  # the profile is point-in-time: only records at or before this moment

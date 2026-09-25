@@ -158,11 +158,17 @@ class SentinelApp:
         ]
         baseline = BehavioralBaseline.from_history(t.account_id, prior, disputes)
         recent = tuple(x for x in prior if parse_ts(x.timestamp) >= ts - timedelta(hours=24))
-        known = frozenset(self.store.account_devices(t.account_id)) | frozenset(
-            x.device_id for x in prior
+        at = t.timestamp
+        # A device is "known" on the account once it has been registered or used for at
+        # least 24 hours before this transaction (as of the graph at that moment).
+        known = frozenset(
+            d
+            for d in w.graph.devices_for_account(t.account_id, as_of=at)
+            if (first := w.graph.device_first_used(t.account_id, d)) is None
+            or (ts - parse_ts(first)).total_seconds() >= 24 * 3600
         )
-        mprof = w.engine.merchant_risk(t.merchant_id)
-        linked, who = w.engine.linked_entity_risk(t.account_id, t.device_id)
+        mprof = w.engine.merchant_risk(t.merchant_id, as_of=at)
+        linked, who = w.engine.linked_entity_risk(t.account_id, t.device_id, as_of=at)
         last = prior[-1] if prior else None
         return txn_risk.TransactionContext(
             baseline=baseline,
@@ -176,7 +182,8 @@ class SentinelApp:
             linked_entity_ids=who,
             last_country=last.country if last else None,
             last_country_ts=last.timestamp if last else None,
-            device_shared_accounts=len(w.graph.accounts_sharing_device(t.device_id)),
+            device_shared_accounts=len(w.graph.accounts_sharing_device(t.device_id, as_of=at)),
+            device_first_used=w.graph.device_first_used(t.account_id, t.device_id),
         )
 
     def account_security_context(self, s: LoginSession) -> account_security.AccountSecurityContext:
@@ -215,20 +222,22 @@ class SentinelApp:
         self, account_id: str, as_of: str | None = None
     ) -> monitoring.MonitoringContext:
         w = self.world
-        txns = tuple(self.store.transactions(account_id=account_id, limit=100_000, order="ASC"))
-        base_hist = [
+        at = as_of or w.dataset.as_of
+        # Point-in-time: nothing after ``at`` is visible to the monitor.
+        txns = tuple(
             t
-            for t in txns
-            if parse_ts(t.timestamp) < parse_ts(as_of or w.dataset.as_of) - timedelta(days=30)
-        ]
-        linked = tuple(sorted(w.graph.linked_accounts(account_id)))
-        linked_risk = max((w.engine.account_risk(a).score for a in linked), default=0)
-        for dev in w.graph.devices_for_account(account_id):
-            linked_risk = max(linked_risk, w.engine.device_risk(dev).score)
+            for t in self.store.transactions(account_id=account_id, limit=100_000, order="ASC")
+            if t.timestamp <= at
+        )
+        base_hist = [t for t in txns if parse_ts(t.timestamp) < parse_ts(at) - timedelta(days=30)]
+        linked = tuple(sorted(w.graph.linked_accounts(account_id, as_of=at)))
+        linked_risk = max((w.engine.account_risk(a, as_of=at).score for a in linked), default=0)
+        for dev in w.graph.devices_for_account(account_id, as_of=at):
+            linked_risk = max(linked_risk, w.engine.device_risk(dev, as_of=at).score)
         shared = max(
             (
-                len(w.graph.accounts_sharing_device(d))
-                for d in w.graph.devices_for_account(account_id)
+                len(w.graph.accounts_sharing_device(d, as_of=at))
+                for d in w.graph.devices_for_account(account_id, as_of=at)
             ),
             default=0,
         )
@@ -238,8 +247,8 @@ class SentinelApp:
             BehavioralBaseline.from_history(account_id, base_hist),
             w.index["merchant"],
             w.graph,
-            as_of or w.dataset.as_of,
-            inbound=tuple(self.store.inbound_transfers(account_id)),
+            at,
+            inbound=tuple(x for x in self.store.inbound_transfers(account_id) if x.timestamp <= at),
             linked_accounts=linked,
             linked_risk=linked_risk,
             shared_device_accounts=shared,
@@ -259,7 +268,7 @@ class SentinelApp:
             raise KeyError(f"unknown transaction {transaction}")
         ctx = self.transaction_context(t)
         acc = self.store.account(t.account_id)
-        mprof = self.world.engine.merchant_risk(t.merchant_id)
+        mprof = self.world.engine.merchant_risk(t.merchant_id, as_of=t.timestamp)
         b = run_transaction(
             self.runtime,
             TransactionRequest(
@@ -309,7 +318,7 @@ class SentinelApp:
             if not documents and texts.get("document"):
                 documents = (texts["document"],)
             account_id = d.account_id
-            account_risk = self.world.engine.account_risk(d.account_id).score
+            account_risk = self.world.engine.account_risk(d.account_id, as_of=d.submitted_at).score
         docs = tuple(
             UntrustedContent(x, TrustClass.DOCUMENT_CONTROLLED, "uploaded_document", "document")
             for x in documents
@@ -684,14 +693,17 @@ class SentinelApp:
         }
         return st
 
-    def entity_risk(self, entity_type: str, entity_id: str) -> dict[str, Any]:
+    def entity_risk(
+        self, entity_type: str, entity_id: str, as_of: str | None = None
+    ) -> dict[str, Any]:
+        """An entity's profile as of ``as_of`` (default: the dataset's now)."""
         if entity_type == "transaction":
             t = self.store.transaction(entity_id)
             if t is None:
                 raise KeyError(entity_id)
             ra = txn_risk.assess_transaction(t, self.transaction_context(t))
             return to_dict(ra)
-        prof: EntityRiskProfile = self.world.engine.profile(entity_type, entity_id)
+        prof: EntityRiskProfile = self.world.engine.profile(entity_type, entity_id, as_of)
         return to_dict(prof)
 
     def graph_for(self, entity_type: str, entity_id: str, depth: int = 2) -> dict[str, Any]:
@@ -715,10 +727,10 @@ class SentinelApp:
             "device": to_dict(self.store.device(t.device_id)),
             "baseline": ctx.baseline.to_dict(),
             "risk": to_dict(txn_risk.assess_transaction(t, ctx)),
-            "entity_risk": {
-                "account": to_dict(w.engine.account_risk(t.account_id)),
-                "merchant": to_dict(w.engine.merchant_risk(t.merchant_id)),
-                "device": to_dict(w.engine.device_risk(t.device_id)),
+            "entity_risk": {  # as of the transaction, i.e. what the decision path saw
+                "account": to_dict(w.engine.account_risk(t.account_id, as_of=t.timestamp)),
+                "merchant": to_dict(w.engine.merchant_risk(t.merchant_id, as_of=t.timestamp)),
+                "device": to_dict(w.engine.device_risk(t.device_id, as_of=t.timestamp)),
             },
             "graph": w.graph.to_dict(Node("transaction", transaction_id), 2),
             "decision": latest,
