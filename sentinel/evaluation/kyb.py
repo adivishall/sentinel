@@ -19,6 +19,7 @@ from sentinel.decision.workflows import FULL, NONE, DecisionBundle
 from sentinel.domain.enums import Capability
 from sentinel.evaluation.attacks import kyb_corpus
 from sentinel.evaluation.common import pct, run_kyb_case, runtime, write_json
+from sentinel.evaluation.methodology import methodology
 from sentinel.security import capabilities
 
 
@@ -136,6 +137,7 @@ def main(out_dir: str = "results") -> dict[str, Any]:
     r = run()
     rows = r.pop("rows")
     write_json(out_dir, "kyb_rows.json", rows)
+    r["methodology"] = methodology("kyb", r)
     write_json(out_dir, "kyb.json", r)
     c = r["corpus"]
     print(

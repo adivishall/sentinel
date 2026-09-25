@@ -24,6 +24,7 @@ from sentinel.evaluation.common import (
     runtime,
     write_json,
 )
+from sentinel.evaluation.methodology import methodology
 
 
 def run(cases: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
@@ -137,6 +138,7 @@ def main(out_dir: str = "results") -> dict[str, Any]:
     s = summarize(rows)
     s["seconds"] = round(time.time() - t0, 2)
     write_json(out_dir, "security_rows.json", rows)
+    s["methodology"] = methodology("security", s)
     write_json(out_dir, "security.json", s)
     print(f"[security] {s['n_attacks']} attacks / {s['n_controls']} controls in {s['seconds']}s")
     print(f"  ASR unguarded          {pct(s['asr_unguarded'])}")

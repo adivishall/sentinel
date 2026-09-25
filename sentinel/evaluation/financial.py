@@ -31,6 +31,7 @@ from sentinel.app import SentinelApp
 from sentinel.decision.workflows import RunOptions
 from sentinel.domain.enums import RiskLevel
 from sentinel.evaluation.common import pct, write_json
+from sentinel.evaluation.methodology import methodology
 from sentinel.risk import monitoring, scoring
 from sentinel.risk import transaction as txn_risk
 
@@ -390,6 +391,7 @@ def main(out_dir: str = "results", full: bool = False) -> dict[str, Any]:
     t0 = time.time()
     r = run(customers=400, merchants=60, transactions=12000) if full else run()
     r["seconds"] = round(time.time() - t0, 1)
+    r["methodology"] = methodology("financial", r)
     write_json(out_dir, "financial.json", r)
     print(
         f"[financial] {r['dataset']['transactions']} synthetic transactions, model {r['risk_model']} ({r['seconds']}s)"

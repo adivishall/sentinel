@@ -20,6 +20,7 @@ from sentinel.evaluation.common import (
     runtime,
     write_json,
 )
+from sentinel.evaluation.methodology import methodology
 
 
 def run(cases: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -49,6 +50,7 @@ def run(cases: list[dict[str, Any]] | None = None) -> dict[str, Any]:
 
 def main(out_dir: str = "results") -> dict[str, Any]:
     r = run()
+    r["methodology"] = methodology("ablation", r)
     write_json(out_dir, "ablation.json", r)
     print("[ablation] configuration                ASR      FP     off-surface executed")
     for k, v in r.items():

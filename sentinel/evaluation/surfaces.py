@@ -20,6 +20,7 @@ from sentinel.decision.workflows import FULL, NONE, DecisionBundle, RunOptions
 from sentinel.domain.enums import Capability, TrustClass
 from sentinel.evaluation.attacks import surfaces
 from sentinel.evaluation.common import pct, write_json
+from sentinel.evaluation.methodology import methodology
 from sentinel.security import capabilities
 from sentinel.security.provenance import UntrustedContent
 
@@ -176,6 +177,7 @@ def main(out_dir: str = "results") -> dict[str, Any]:
     s = summarize(rows)
     s["seconds"] = round(time.time() - t0, 2)
     write_json(out_dir, "surfaces_rows.json", rows)
+    s["methodology"] = methodology("surfaces", s)
     write_json(out_dir, "surfaces.json", s)
     print(
         f"[surfaces] {s['n_attacks']} attacks on transaction / account-security / investigation in {s['seconds']}s"

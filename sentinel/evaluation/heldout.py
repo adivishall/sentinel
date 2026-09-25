@@ -7,6 +7,7 @@ from typing import Any
 from sentinel.evaluation import harness
 from sentinel.evaluation.attacks import heldout
 from sentinel.evaluation.common import pct, write_json
+from sentinel.evaluation.methodology import methodology
 
 
 def run() -> dict[str, Any]:
@@ -21,6 +22,7 @@ def main(out_dir: str = "results") -> dict[str, Any]:
     s = run()
     rows = s.pop("rows")
     write_json(out_dir, "heldout_rows.json", rows)
+    s["methodology"] = methodology("heldout", s)
     write_json(out_dir, "heldout.json", s)
     print(
         f"[held-out] {s['n_attacks']} independent attacks, {s['n_deserved_controls']} deserved controls"

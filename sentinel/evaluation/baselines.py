@@ -7,6 +7,7 @@ from typing import Any
 from sentinel.decision.workflows import FULL, NONE
 from sentinel.evaluation.attacks import corpus
 from sentinel.evaluation.common import breach, pct, run_case, runtime, write_json
+from sentinel.evaluation.methodology import methodology
 
 
 def run(cases: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -31,6 +32,7 @@ def run(cases: list[dict[str, Any]] | None = None) -> dict[str, Any]:
 
 def main(out_dir: str = "results") -> dict[str, Any]:
     r = run()
+    r["methodology"] = methodology("baselines", r)
     write_json(out_dir, "baselines.json", r)
     print(
         f"[baselines] no defence {pct(r['no_defence'])}   hardened prompt {pct(r['hardened_prompt'])}   Sentinel {pct(r['sentinel'])}"

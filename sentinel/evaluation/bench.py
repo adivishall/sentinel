@@ -21,6 +21,7 @@ from sentinel.domain.decisions import AIRecommendation
 from sentinel.domain.entities import Account, Merchant, PaymentInstrument, Transaction
 from sentinel.domain.enums import Capability, Workflow
 from sentinel.evaluation.common import percentiles, write_json
+from sentinel.evaluation.methodology import methodology
 from sentinel.evidence.reconcile import reconcile_dispute
 from sentinel.policy import DEFAULT_REGISTRY, evaluate
 from sentinel.risk import transaction as txn_risk
@@ -140,6 +141,7 @@ def run(n: int = 1000, e2e: int = 500) -> dict[str, Any]:
 
 def main(out_dir: str = "results") -> dict[str, Any]:
     r = run()
+    r["methodology"] = methodology("performance", r)
     write_json(out_dir, "performance.json", r)
     print(f"[performance] {r['platform']} python {r['python']}")
     print(f"  {'component':26} {'p50 ms':>9} {'p95 ms':>9} {'p99 ms':>9} {'ops/s':>9}")

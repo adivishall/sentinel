@@ -21,6 +21,17 @@ class AnthropicProvider:
     def __init__(self, model: str | None = None) -> None:
         self.model = model or os.environ.get("SENTINEL_MODEL", DEFAULT_MODEL)
         self._client: Any = None
+        self._input_tokens = 0
+        self._output_tokens = 0
+        self._calls = 0
+
+    def usage(self) -> dict[str, int]:
+        """Token totals over every call so far (the SDK reports usage per response)."""
+        return {
+            "input_tokens": self._input_tokens,
+            "output_tokens": self._output_tokens,
+            "calls": self._calls,
+        }
 
     def _client_or_raise(self) -> Any:
         if self._client is None:
@@ -45,6 +56,9 @@ class AnthropicProvider:
         )
         text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
         usage = getattr(resp, "usage", None)
+        self._calls += 1
+        self._input_tokens += int(getattr(usage, "input_tokens", 0) or 0)
+        self._output_tokens += int(getattr(usage, "output_tokens", 0) or 0)
         return Completion(
             text,
             self.name,
