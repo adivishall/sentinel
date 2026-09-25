@@ -160,7 +160,8 @@ def _evaluate_options(d: dict[str, Any]) -> Any:
     if used:
         raise ApiError(
             403,
-            f"{', '.join(used)} are what-if switches and are not accepted on evaluate routes: "
+            f"{', '.join(used)} {'is a what-if switch' if len(used) == 1 else 'are what-if switches'} "
+            "and not accepted on evaluate routes: "
             "the authoritative path always runs every control, the active policy and the "
             "active risk model. Use /v1/replay, /v1/attacks/simulate or /v1/scenarios/{key}/run "
             "for what-if analysis; their results are never recorded as decisions.",
