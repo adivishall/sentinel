@@ -803,6 +803,55 @@ class SentinelApp:
     def graph_for(self, entity_type: str, entity_id: str, depth: int = 2) -> dict[str, Any]:
         return self.world.graph.to_dict(Node(entity_type, entity_id), depth)
 
+    def timeline(self, account_id: str, around: str, days: int = 7) -> list[dict[str, Any]]:
+        """Trusted account activity around a moment: transactions, sessions and disputes
+        within +/- ``days``, in time order, each tagged with its kind and what the
+        risk engine could see at that moment (point-in-time)."""
+        centre = parse_ts(around)
+        lo, hi = centre - timedelta(days=days), centre + timedelta(days=days)
+        items: list[dict[str, Any]] = []
+        for t in self.store.transactions(account_id=account_id, limit=100_000, order="ASC"):
+            ts = parse_ts(t.timestamp)
+            if lo <= ts <= hi:
+                items.append(
+                    {
+                        "at": t.timestamp,
+                        "kind": "transaction",
+                        "id": t.transaction_id,
+                        "summary": f"₹{t.amount:,} at {t.merchant_id} · {t.channel} · {t.country} · {t.auth_strength} · device {t.device_id}",
+                        "amount": t.amount,
+                        "label": t.label,
+                        "future": ts > centre,
+                    }
+                )
+        for s in self.store.sessions(account_id=account_id, limit=500):
+            ts = parse_ts(s.started_at)
+            if lo <= ts <= hi:
+                items.append(
+                    {
+                        "at": s.started_at,
+                        "kind": "session",
+                        "id": s.session_id,
+                        "summary": f"login from {s.country} on {s.device_id} · mfa {'passed' if s.mfa_passed else 'FAILED'}"
+                        + (f" · events: {', '.join(s.events)}" if s.events else ""),
+                        "future": ts > centre,
+                    }
+                )
+        for d in self.store.disputes(account_id=account_id, limit=500):
+            ts = parse_ts(d.submitted_at)
+            if lo <= ts <= hi:
+                items.append(
+                    {
+                        "at": d.submitted_at,
+                        "kind": "dispute",
+                        "id": d.dispute_id,
+                        "summary": f"dispute on {d.transaction_id} · claims {d.claim_type_declared} · ₹{d.amount:,} · refund {d.refund_state} · merchant {d.merchant_response}",
+                        "future": ts > centre,
+                    }
+                )
+        items.sort(key=lambda x: x["at"])
+        return items
+
     def transaction_view(self, transaction_id: str) -> dict[str, Any]:
         t = self.store.transaction(transaction_id)
         if t is None:
@@ -830,6 +879,10 @@ class SentinelApp:
             "decision": latest,
             "evidence": self.store.evidence_for(latest["decision_id"]) if latest else [],
             "audit_event": self.audit_event(latest["decision_id"]) if latest else None,
+            "security_events": (
+                self.store.security_events_for_decision(latest["decision_id"]) if latest else []
+            ),
+            "timeline": self.timeline(t.account_id, t.timestamp),
             "decisions": decisions,
         }
 

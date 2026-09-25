@@ -46,6 +46,7 @@ from sentinel.policy.engine import PolicyEvaluationError
 from sentinel.policy.models import FIELD_CATALOG
 from sentinel.presets import ATTACKS, SCENARIOS
 from sentinel.replay.engine import ReplayOverrides
+from sentinel.risk import monitoring
 from sentinel.security.gateway import Conversation
 from sentinel.security.provenance import UntrustedContent
 
@@ -761,6 +762,7 @@ def _account_view(app: SentinelApp, aid: str) -> Any:
     from sentinel.risk.graph import Node
 
     txns = app.store.transactions(account_id=aid, limit=25)
+    linked = sorted(app.world.graph.linked_accounts(aid))
     return {
         "account": to_dict(a),
         "customer": to_dict(app.store.customer(a.customer_id)),
@@ -770,7 +772,10 @@ def _account_view(app: SentinelApp, aid: str) -> Any:
         "sessions": [to_dict(s) for s in app.store.sessions(account_id=aid, limit=10)],
         "disputes": [to_dict(d) for d in app.store.disputes(account_id=aid, limit=10)],
         "decisions": app.store.decisions(subject_id=aid, limit=10),
-        "linked_accounts": sorted(app.world.graph.linked_accounts(aid)),
+        "linked_accounts": linked,
+        "linked_risk": {x: to_dict(app.world.engine.account_risk(x)) for x in linked[:6]},
+        "risk_evolution": app.store.risk_evolution(aid),
+        "monitoring": (to_dict(monitoring.assess_account_activity(app.monitoring_context(aid)))),
     }
 
 

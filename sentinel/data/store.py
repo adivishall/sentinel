@@ -624,6 +624,34 @@ class SentinelStore:
         r = self._one("SELECT payload FROM security_events WHERE event_id = ?", (eid,))
         return json.loads(r["payload"]) if r else None
 
+    def security_events_for_decision(self, did: str) -> list[dict[str, Any]]:
+        return [
+            json.loads(r["payload"])
+            for r in self._rows(
+                "SELECT payload FROM security_events WHERE decision_id = ? ORDER BY created_at",
+                (did,),
+            )
+        ]
+
+    def risk_evolution(self, account_id: str, limit: int = 60) -> list[dict[str, Any]]:
+        """Risk over time for an account: every stored transaction decision on the
+        account's transactions plus the account-level investigations, ordered by the
+        event time the decision was about (the transaction time, or the decision time
+        for investigations)."""
+        rows = self._rows(
+            "SELECT d.decision_id, d.subject_type, d.subject_id, d.risk_score, d.risk_level, "
+            "d.final_action, d.created_at, t.timestamp AS event_time, t.amount AS amount "
+            "FROM decisions d JOIN transactions t ON t.transaction_id = d.subject_id "
+            "WHERE d.workflow = 'transaction' AND t.account_id = ? "
+            "UNION ALL "
+            "SELECT decision_id, subject_type, subject_id, risk_score, risk_level, final_action, "
+            "created_at, created_at AS event_time, amount FROM decisions "
+            "WHERE workflow = 'investigation' AND subject_id = ? "
+            "ORDER BY event_time DESC LIMIT ?",
+            (account_id, account_id, limit),
+        )
+        return [dict(r) for r in rows][::-1]
+
     def save_decision(
         self, d: Decision, snapshot: dict[str, Any], evidence: list[dict[str, Any]]
     ) -> None:

@@ -238,10 +238,30 @@ class EntityGraph:
     def edge_count(self) -> int:
         return sum(1 for edges in self._adj.values() for e in edges if not e.rel.startswith("~"))
 
-    def to_dict(self, node: Node, depth: int = 2) -> dict[str, object]:
-        nodes, edges = self.neighborhood(node, depth)
+    def to_dict(self, node: Node, depth: int = 2, max_nodes: int = 80) -> dict[str, object]:
+        """Serialise the ``depth``-hop neighbourhood for the console. Large
+        neighbourhoods are bounded to ``max_nodes``: the root and structural
+        entities (accounts, devices, instruments, merchants, customers, owners)
+        are kept before event nodes (transactions, sessions), so the picture that
+        survives truncation is the relationship structure, not the traffic."""
+        all_nodes, all_edges = self.neighborhood(node, depth)
+        total = len(all_nodes)
+        truncated = total > max_nodes
+        if truncated:
+            event_kinds = {"transaction", "session"}
+            ranked = sorted(
+                all_nodes,
+                key=lambda n: (n != node, n.kind in event_kinds, n.key),
+            )
+            keep = set(ranked[:max_nodes])
+            nodes = [n for n in all_nodes if n in keep]
+            edges = [e for e in all_edges if e.src in keep and e.dst in keep]
+        else:
+            nodes, edges = all_nodes, all_edges
         return {
             "root": node.key,
+            "total_nodes": total,
+            "truncated": truncated,
             "nodes": [
                 {
                     "key": n.key,

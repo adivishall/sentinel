@@ -50,6 +50,21 @@ def test_transaction_view_is_complete(app):
     assert v["graph"]["root"] == f"transaction:{t.transaction_id}"
 
 
+def test_transaction_view_has_timeline_and_security_events(app):
+    t = app.store.transactions(limit=1)[0]
+    v = app.transaction_view(t.transaction_id)
+    tl = v["timeline"]
+    assert tl and any(x["id"] == t.transaction_id for x in tl)
+    assert all(x["at"] <= y["at"] for x, y in zip(tl, tl[1:], strict=False))  # time-ordered
+    assert {x["kind"] for x in tl} <= {"transaction", "session", "dispute"}
+    me = next(x for x in tl if x["id"] == t.transaction_id)
+    assert me["future"] is False and all(x["future"] == (x["at"] > t.timestamp) for x in tl)
+    assert isinstance(v["security_events"], list)
+    acc = app.store.account(t.account_id)
+    evo = app.store.risk_evolution(acc.account_id)
+    assert all(e["event_time"] <= f["event_time"] for e, f in zip(evo, evo[1:], strict=False))
+
+
 def test_entity_risk_and_graph_queries(app):
     t = app.store.transactions(limit=1)[0]
     for kind, ident in (
@@ -93,7 +108,7 @@ def test_attack_compare_mode_labels_both_paths(app):
     cmp = app.simulate_attack("capability_escalation", compare=True)
     assert cmp["target_workflow"] == "dispute" and cmp["target_capability"] == "UNFREEZE_ACCOUNT"
     wo, wi = cmp["without_sentinel"], cmp["with_sentinel"]
-    assert wo["label"].startswith("WITHOUT SENTINEL") and "simulated" in wo["caveat"]
+    assert wo["label"].startswith("WITHOUT SENTINEL") and "simulator" in wo["caveat"]
     assert wi["label"].startswith("WITH SENTINEL") and wi["controls"]
     assert wo["decision"]["executed_capability"] == "UNFREEZE_ACCOUNT" and wo["controls"] == []
     assert (
