@@ -187,6 +187,10 @@ def _evaluate(
     signal_hits: dict[str, Counter[str]] = defaultdict(Counter)
     signal_hits_missed: dict[str, Counter[str]] = defaultdict(Counter)
     fp_rows: list[dict[str, Any]] = []
+    # per-signal statistics: how often each factor fires on fraud vs legitimate transactions
+    sig_fraud: Counter[str] = Counter()
+    sig_legit: Counter[str] = Counter()
+    n_fraud_total = n_legit_total = 0
     for t, ra in rows:
         fraud = t.label in TXN_SCENARIOS
         positive = ra.level.rank >= RiskLevel.HIGH.rank
@@ -198,6 +202,14 @@ def _evaluate(
             fp += 1
         else:
             tn += 1
+        if fraud:
+            n_fraud_total += 1
+            for f in ra.factors:
+                sig_fraud[f.code] += 1
+        else:
+            n_legit_total += 1
+            for f in ra.factors:
+                sig_legit[f.code] += 1
         if fraud:
             per_scn[t.label][1] += 1
             per_scn[t.label][0] += int(positive)
@@ -242,6 +254,32 @@ def _evaluate(
         for f in ra.factors:
             factor_counts[f.code] += 1
     n = len(rows)
+    groups = scoring.FACTOR_GROUPS
+    signal_stats: dict[str, dict[str, Any]] = {}
+    for code in sorted(
+        set(sig_fraud) | set(sig_legit), key=lambda c: -(sig_fraud[c] + sig_legit[c])
+    ):
+        f_, l_ = sig_fraud[code], sig_legit[code]
+        signal_stats[code] = {
+            "family": groups.get(code, "other"),
+            "points": m.w(code),
+            "fired_on_fraud": f_,
+            "fired_on_legit": l_,
+            "fraud_fire_rate": round(f_ / max(1, n_fraud_total), 4),
+            "legit_fire_rate": round(l_ / max(1, n_legit_total), 4),
+            "precision_when_fired": round(f_ / max(1, f_ + l_), 3),
+        }
+    family_stats: dict[str, dict[str, Any]] = {}
+    for fam in dict.fromkeys(groups.values()):
+        codes = [c for c, g in groups.items() if g == fam]
+        ff = sum(sig_fraud[c] for c in codes)
+        ll = sum(sig_legit[c] for c in codes)
+        family_stats[fam] = {
+            "factors": codes,
+            "fired_on_fraud": ff,
+            "fired_on_legit": ll,
+            "precision_when_fired": round(ff / max(1, ff + ll), 3),
+        }
 
     def _grp(d: dict[str, list[int]]) -> dict[str, Any]:
         return {
@@ -350,6 +388,10 @@ def _evaluate(
             },
             "missed_examples": missed_rows[:40],
             "false_positive_examples": fp_rows[:20],
+            "signal_stats": signal_stats,
+            "family_stats": family_stats,
+            "fraud_n": n_fraud_total,
+            "legit_n": n_legit_total,
         },
         "account_level": {
             **_prf(atp, afp, afn, atn),
