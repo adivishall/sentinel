@@ -154,6 +154,11 @@ class CaseService:
     # ---- lifecycle ---------------------------------------------------------------------
     def transition(self, case_id: str, to: CaseStatus, *, actor: str, note: str = "") -> Case:
         case = self._require(case_id)
+        if to is CaseStatus.RESOLVED:
+            raise InvalidTransition(
+                "a case is resolved only by a recorded human decision (record_human_decision); "
+                "a status transition cannot close it"
+            )
         if to not in TRANSITIONS[case.status]:
             raise InvalidTransition(f"{case.status.value} -> {to.value} is not allowed")
         now = now_iso()
