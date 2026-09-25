@@ -120,7 +120,12 @@ MONITORING_V1 = RiskModel(
         "shared_device_ring": 20,
         "linked_entity_risk": 20,
     },
-    thresholds={"reporting_threshold": 50_000, "structuring_band": 0.8, "dormant_days": 90},
+    thresholds={
+        "reporting_threshold": 50_000,
+        "structuring_band": 0.8,
+        "dormant_days": 90,
+        "cycle_window_days": 30,  # every hop of a circular transfer must fall in this window
+    },
     description="Single strong pattern -> HIGH; combinations -> CRITICAL. Sentinel demo values.",
 )
 

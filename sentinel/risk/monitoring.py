@@ -99,8 +99,13 @@ def extract_features(
     )
     exposure = hi / spend if spend else 0.0
 
-    # circular transfers through the transfer graph
-    cycles = ctx.graph.find_cycles_from(Node("account", ctx.account_id), "TRANSFERRED_TO")
+    # circular transfers through the transfer graph, bounded to a window: every hop
+    # of the cycle must have happened within ``cycle_window_days`` before as_of
+    cycle_days = int(model.t("cycle_window_days", ctx.window_days))
+    cycle_since = (as_of - timedelta(days=cycle_days)).isoformat()
+    cycles = ctx.graph.find_cycles_from(
+        Node("account", ctx.account_id), "TRANSFERRED_TO", since=cycle_since, until=ctx.as_of
+    )
 
     # dormant activation: >= dormant_days of silence, then >=5 txns in 3 days
     dormant = False
@@ -125,6 +130,7 @@ def extract_features(
         "countries": dict(Counter(t.country for t in window)),
         "high_risk_exposure": round(exposure, 3),
         "circular_cycles": [[n.id for n in c] for c in cycles[:3]],
+        "cycle_window_days": cycle_days,
         "dormant_activation": dormant,
         "linked_accounts": list(ctx.linked_accounts),
         "linked_risk": ctx.linked_risk,
