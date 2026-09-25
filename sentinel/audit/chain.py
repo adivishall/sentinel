@@ -315,38 +315,43 @@ class JsonlBackend:
 
 def verify_records(records: list[dict[str, object]]) -> ChainVerification:
     """Recompute the chain from genesis. Detects modification (hash mismatch),
-    deletion / insertion (sequence gap), and reordering (previous-hash mismatch)."""
+    deletion / insertion (sequence gap), reordering (previous-hash mismatch) and
+    unreadable records (malformed JSON, truncated line, missing field). Verification
+    continues past an unreadable record, so every later problem is reported too; the
+    link from an unreadable record to the next cannot be checked and is not assumed."""
     problems: list[str] = []
-    prev = GENESIS
+    prev: str | None = GENESIS
     first_bad: int | None = None
+
+    def bad(i: int, msg: str) -> None:
+        nonlocal first_bad
+        problems.append(f"record {i}: {msg}")
+        if first_bad is None:
+            first_bad = i
+
     for i, rec in enumerate(records):
         if UNREADABLE in rec:
-            problems.append(f"record {i}: unreadable ({rec[UNREADABLE]})")
-            first_bad = first_bad if first_bad is not None else i
-            break
+            bad(i, f"unreadable ({rec[UNREADABLE]})")
+            prev = None
+            continue
         try:
             ev = AuditEvent.from_dict(rec)
-        except (KeyError, ValueError, TypeError) as e:
-            problems.append(f"record {i}: unreadable ({e})")
-            first_bad = first_bad if first_bad is not None else i
-            break
-        seq_ok = ev.sequence == i
-        link_ok = ev.previous_hash == prev
-        hash_ok = chain_hash(ev.body(), ev.previous_hash) == ev.event_hash
-        if not seq_ok:
-            problems.append(
-                f"record {i}: sequence {ev.sequence} != {i} (record deleted, inserted or reordered)"
-            )
-        if not link_ok:
-            problems.append(
-                f"record {i}: previous_hash does not match the prior event (chain broken)"
-            )
-        if not hash_ok:
-            problems.append(f"record {i}: event_hash mismatch (content modified)")
-        if not (seq_ok and link_ok and hash_ok) and first_bad is None:
-            first_bad = i
+        except KeyError as e:
+            bad(i, f"unreadable (missing field {e})")
+            prev = None
+            continue
+        except (ValueError, TypeError) as e:
+            bad(i, f"unreadable ({e})")
+            prev = None
+            continue
+        if ev.sequence != i:
+            bad(i, f"sequence {ev.sequence} != {i} (record deleted, inserted or reordered)")
+        if prev is not None and ev.previous_hash != prev:
+            bad(i, "previous_hash does not match the prior event (chain broken)")
+        if chain_hash(ev.body(), ev.previous_hash) != ev.event_hash:
+            bad(i, "event_hash mismatch (content modified)")
         prev = ev.event_hash
-    return ChainVerification(not problems, len(records), tuple(problems), first_bad, prev)
+    return ChainVerification(not problems, len(records), tuple(problems), first_bad, prev or "")
 
 
 @dataclass(frozen=True)

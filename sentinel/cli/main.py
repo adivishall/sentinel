@@ -521,10 +521,38 @@ def cmd_capability(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_audit(args: argparse.Namespace) -> int:
-    app = _app(args)
-    from sentinel.audit.chain import Checkpoint, checkpoint_key
+def _verify_report(what: str, v: Any, args: argparse.Namespace) -> int:
+    """One report for every verification: OK, or AUDIT INTEGRITY ERROR with the problems
+    (capped) and the first bad record, exit code 2. Never a traceback."""
+    shown = list(v.problems[:12])
+    more = len(v.problems) - len(shown)
+    if more > 0:
+        shown.append(f"… and {more} more")
+    head = f"head={v.head_hash[:16]}…" if v.head_hash else "head=unknown"
+    status = (
+        "OK"
+        if v.ok
+        else f"AUDIT INTEGRITY ERROR ({len(v.problems)} problem(s); first bad record "
+        f"#{v.first_bad_sequence})"
+    )
+    _out(
+        args,
+        to_dict(v),
+        f"audit {what}: {status}  length={v.length}  {head}"
+        + ("" if v.ok else "\n  " + "\n  ".join(shown)),
+    )
+    return 0 if v.ok else 2
 
+
+def cmd_audit(args: argparse.Namespace) -> int:
+    from sentinel.audit.chain import Checkpoint, JsonlBackend, checkpoint_key, verify_records
+
+    if args.audit_command == "verify" and getattr(args, "file", None):
+        if not os.path.exists(args.file):
+            raise FileNotFoundError(args.file)
+        v = verify_records(JsonlBackend(args.file).read_all())
+        return _verify_report(f"file {args.file}", v, args)
+    app = _app(args)
     if args.audit_command == "verify":
         if getattr(args, "checkpoint", None):
             cp = Checkpoint.from_dict(_load_json(args.checkpoint))
@@ -535,17 +563,7 @@ def cmd_audit(args: argparse.Namespace) -> int:
         else:
             v = app.verify_audit()
             what = "chain"
-        shown = list(v.problems[:12])
-        more = len(v.problems) - len(shown)
-        if more > 0:
-            shown.append(f"… and {more} more (first bad record: #{v.first_bad_sequence})")
-        _out(
-            args,
-            to_dict(v),
-            f"audit {what}: {'OK' if v.ok else 'TAMPERED'}  length={v.length}  head={v.head_hash[:16]}…"
-            + ("" if v.ok else "\n  " + "\n  ".join(shown)),
-        )
-        return 0 if v.ok else 2
+        return _verify_report(what, v, args)
     if args.audit_command == "checkpoint":
         cp = app.runtime.audit.checkpoint(checkpoint_key())
         with open(args.out, "w", encoding="utf-8") as fh:
@@ -861,6 +879,7 @@ def build_parser() -> argparse.ArgumentParser:
     au = sub.add_parser("audit").add_subparsers(dest="audit_command", required=True)
     av = au.add_parser("verify")
     av.add_argument("--checkpoint", help="also verify against an exported checkpoint file")
+    av.add_argument("--file", help="verify an exported JSONL chain (sentinel audit export)")
     au.add_parser("checkpoint").add_argument(
         "--out", default="audit-checkpoint.json", help="write {length, head_hash[, signature]}"
     )
@@ -971,7 +990,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 1
     except AuditIntegrityError as e:
-        print(f"error: {e}", file=sys.stderr)
+        print(f"AUDIT INTEGRITY ERROR: {e}", file=sys.stderr)
         return 2
     except (ValueError, FileNotFoundError) as e:
         print(f"error: {e}", file=sys.stderr)

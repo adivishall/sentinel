@@ -337,7 +337,7 @@ def test_cli_and_api_report_tampering(tmp_path, capsys, server, app):
     c.commit()
     c.close()
     assert cli_main(["--db", db, "audit", "verify"]) == 2
-    assert "TAMPERED" in capsys.readouterr().out
+    assert "AUDIT INTEGRITY ERROR" in capsys.readouterr().out
     # API: the shared demo app is intact
     s, body = _get(server + "/v1/audit/verify")
     assert s == 200 and body["ok"] is True and body["first_bad_sequence"] is None
