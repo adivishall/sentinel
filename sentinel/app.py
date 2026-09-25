@@ -320,6 +320,9 @@ class SentinelApp:
                 and parse_ts(x.submitted_at) < submitted
                 and (submitted - parse_ts(x.submitted_at)).days <= 90
             ]
+            acc = self.store.account(d.account_id)
+            cust = self.store.customer(acc.customer_id) if acc else None
+            tenure = max(0, (submitted - parse_ts(cust.created_at)).days) if cust else 0
             ledger = {
                 "amount": d.amount,
                 "merchant": t.merchant_id if t else "unknown",
@@ -327,6 +330,11 @@ class SentinelApp:
                 "prior_disputes_90d": len(prior_90d),
                 "policy_auto_limit": 50_000,
                 "cardholder_present": True,
+                "refund_state": d.refund_state,
+                "transaction_status": t.status if t else "settled",
+                "merchant_response": d.merchant_response,
+                "auth_strength": t.auth_strength if t else "unknown",
+                "customer_tenure_days": tenure,
             }
             narrative = narrative or texts.get("narrative", "")
             if not documents and texts.get("document"):

@@ -44,9 +44,9 @@ def _doc(**over):
 
 def test_builtin_policies_load_and_validate():
     keys = [p.key for p in DEFAULT_REGISTRY.all()]
-    assert "dispute-refund@v1" in keys and "dispute-refund@v2" in keys
-    assert DEFAULT_REGISTRY.versions("dispute-refund") == [1, 2]
-    assert DEFAULT_REGISTRY.get("dispute-refund").version == 2  # latest by default
+    assert {"dispute-refund@v1", "dispute-refund@v2", "dispute-refund@v3"} <= set(keys)
+    assert DEFAULT_REGISTRY.versions("dispute-refund") == [1, 2, 3]
+    assert DEFAULT_REGISTRY.get("dispute-refund").version == 3  # latest by default
     for wf in Workflow:
         if wf is Workflow.AI_SECURITY:
             continue

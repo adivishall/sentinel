@@ -88,6 +88,7 @@ class Transaction:
     delivery_status: str = "delivered"
     counterparty_account_id: str | None = None  # for transfers
     label: str = "legit"  # synthetic ground truth (evaluation only)
+    status: str = "settled"  # settled | pending | reversed
 
 
 @dataclass(frozen=True)
@@ -99,6 +100,8 @@ class Dispute:
     submitted_at: str
     claim_type_declared: str = "unspecified"
     label: str = "legit"
+    refund_state: str = "none"  # none | pending | refunded
+    merchant_response: str = "none"  # none | accepted | contested
 
 
 @dataclass(frozen=True)

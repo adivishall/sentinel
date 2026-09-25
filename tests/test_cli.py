@@ -173,6 +173,11 @@ def test_case_policy_audit_replay_scenario(db, capsys, tmp_path):
                 "risk_score": 5,
                 "policy_auto_limit": 50000,
                 "prior_disputes_90d": 0,
+                "refund_state": "none",
+                "transaction_status": "settled",
+                "merchant_response": "none",
+                "auth_strength": "otp",
+                "claim_type": "non_receipt",
             }
         )
     )

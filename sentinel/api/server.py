@@ -111,6 +111,24 @@ class Router:
         return None
 
 
+def _adjudication(b: Any) -> dict[str, Any]:
+    """The explicit claim / trusted evidence / contradiction / adjudication objects a
+    reviewer needs, separate from the decision they fed."""
+    rec = b.reconciliation
+    return {
+        "claim": to_dict(rec.claim) if rec.claim else None,
+        "trusted_evidence": [to_dict(e) for e in rec.evidence.verified()],
+        "untrusted_claims": [to_dict(e) for e in rec.evidence.claims()],
+        "contradictions": [to_dict(c) for c in rec.contradictions],
+        "verdict": rec.verdict.value,
+        "explanation": rec.explanation,
+        "ai_recommendation": to_dict(b.ai) if b.ai else None,
+        "policy": to_dict(b.decision.policy),
+        "authorization": to_dict(b.decision.authorization),
+        "final_action": b.decision.final_action.value,
+    }
+
+
 def _evaluate_options(d: dict[str, Any]) -> Any:
     """Options for the authoritative evaluate routes. Ablation controls (``unguarded``,
     ``options.controls``) are a lab feature: they are accepted here only when the operator
@@ -177,15 +195,14 @@ def build_routes(app: SentinelApp) -> Router:
             )
         narrative = S.req_str(d, "narrative", alt="submission")
         ledger = S.req_obj(d, "ledger")
-        return to_dict(
-            app.evaluate_dispute(
-                narrative,
-                ledger,
-                documents=docs,
-                source=S.opt_str(d, "source", "cardholder") or "cardholder",
-                options=opts,
-            ).decision
+        b = app.evaluate_dispute(
+            narrative,
+            ledger,
+            documents=docs,
+            source=S.opt_str(d, "source", "cardholder") or "cardholder",
+            options=opts,
         )
+        return {**to_dict(b.decision), "adjudication": _adjudication(b)}
 
     def merchant_eval(q: Any, b: Any, p: Any) -> Any:
         d = S.obj(b)

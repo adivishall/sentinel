@@ -161,12 +161,17 @@ class DisputeFacts(TrustedFacts):
 
     amount: int = 0
     merchant: str = "unknown"
-    delivery_status: str = "unknown"
+    delivery_status: str = "unknown"  # delivered | not_delivered | in_transit | returned | lost
     prior_disputes_90d: int = 0
     policy_auto_limit: int = 50_000
     duplicate_confirmed: bool = False
     cancellation_confirmed: bool = False
     cardholder_present: bool = True
+    refund_state: str = "none"  # none | pending | refunded  (has money already gone back?)
+    transaction_status: str = "settled"  # settled | pending | reversed
+    merchant_response: str = "none"  # none | accepted | contested
+    auth_strength: str = "unknown"  # none | password | otp | biometric (from the switch record)
+    customer_tenure_days: int = 0
 
     SOURCE: ClassVar[str] = "payment_ledger"
 
@@ -182,6 +187,11 @@ class DisputeFacts(TrustedFacts):
             duplicate_confirmed=bool(g("duplicate_confirmed", False)),
             cancellation_confirmed=bool(g("cancellation_confirmed", False)),
             cardholder_present=bool(g("cardholder_present", True)),
+            refund_state=str(g("refund_state", "none")),
+            transaction_status=str(g("transaction_status", "settled")),
+            merchant_response=str(g("merchant_response", "none")),
+            auth_strength=str(g("auth_strength", "unknown")),
+            customer_tenure_days=as_int(g("customer_tenure_days", 0)),
         )
 
     # Which trusted field each claim type is checked against, and which values
@@ -212,6 +222,10 @@ class DisputeFacts(TrustedFacts):
             "delivery_status": self.delivery_status,
             "prior_disputes_90d": self.prior_disputes_90d,
             "policy_auto_limit": self.policy_auto_limit,
+            "refund_state": self.refund_state,
+            "transaction_status": self.transaction_status,
+            "merchant_response": self.merchant_response,
+            "auth_strength": self.auth_strength,
             "claimed_reason": claim.value,
             "evidence_supports_claim": self.supports(claim),
         }

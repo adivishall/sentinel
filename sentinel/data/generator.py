@@ -476,6 +476,10 @@ class _Gen:
                             if t.delivery_status != "delivered" or claim != "non_receipt"
                             else "fraud:dispute_fraud"
                         ),
+                        refund_state="pending" if r.random() < 0.05 else "none",
+                        merchant_response=r.choices(
+                            ["none", "accepted", "contested"], [0.6, 0.25, 0.15]
+                        )[0],
                     )
                 )
                 self.ds.narratives[did] = {
@@ -647,8 +651,9 @@ class _Gen:
             for t in self.ds.transactions
             if t.delivery_status == "delivered" and t.label == "legit"
         ]
-        for t in r.sample(delivered, min(12, len(delivered))):
+        for k, t in enumerate(r.sample(delivered, min(12, len(delivered)))):
             did = self.nid("DSP")
+            # every fourth one is a double-dip: the ledger already shows a refund
             self.ds.disputes.append(
                 Dispute(
                     did,
@@ -663,6 +668,8 @@ class _Gen:
                     ),
                     "non_receipt",
                     "fraud:dispute_fraud",
+                    refund_state="refunded" if k % 4 == 3 else "none",
+                    merchant_response="contested" if k % 4 == 1 else "none",
                 )
             )
             self.ds.narratives[did] = {"narrative": r.choice(_GAMING).format(amt=f"{t.amount:,}")}

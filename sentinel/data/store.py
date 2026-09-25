@@ -39,11 +39,11 @@ CREATE TABLE IF NOT EXISTS devices (device_id TEXT PRIMARY KEY, fingerprint TEXT
 CREATE TABLE IF NOT EXISTS account_devices (account_id TEXT, device_id TEXT, PRIMARY KEY (account_id, device_id));
 CREATE TABLE IF NOT EXISTS payment_instruments (instrument_id TEXT PRIMARY KEY, account_id TEXT, kind TEXT, last4 TEXT, added_at TEXT, country TEXT, external_ref TEXT);
 CREATE INDEX IF NOT EXISTS ix_instr_ref ON payment_instruments(external_ref);
-CREATE TABLE IF NOT EXISTS transactions (transaction_id TEXT PRIMARY KEY, account_id TEXT, merchant_id TEXT, instrument_id TEXT, device_id TEXT, amount INTEGER, currency TEXT, timestamp TEXT, country TEXT, channel TEXT, auth_strength TEXT, delivery_status TEXT, counterparty_account_id TEXT, label TEXT);
+CREATE TABLE IF NOT EXISTS transactions (transaction_id TEXT PRIMARY KEY, account_id TEXT, merchant_id TEXT, instrument_id TEXT, device_id TEXT, amount INTEGER, currency TEXT, timestamp TEXT, country TEXT, channel TEXT, auth_strength TEXT, delivery_status TEXT, counterparty_account_id TEXT, label TEXT, status TEXT DEFAULT 'settled');
 CREATE INDEX IF NOT EXISTS ix_txn_account ON transactions(account_id, timestamp);
 CREATE INDEX IF NOT EXISTS ix_txn_merchant ON transactions(merchant_id);
 CREATE INDEX IF NOT EXISTS ix_txn_ts ON transactions(timestamp);
-CREATE TABLE IF NOT EXISTS disputes (dispute_id TEXT PRIMARY KEY, transaction_id TEXT, account_id TEXT, amount INTEGER, submitted_at TEXT, claim_type_declared TEXT, label TEXT, narrative TEXT, document TEXT);
+CREATE TABLE IF NOT EXISTS disputes (dispute_id TEXT PRIMARY KEY, transaction_id TEXT, account_id TEXT, amount INTEGER, submitted_at TEXT, claim_type_declared TEXT, label TEXT, narrative TEXT, document TEXT, refund_state TEXT DEFAULT 'none', merchant_response TEXT DEFAULT 'none');
 CREATE TABLE IF NOT EXISTS kyb_applications (application_id TEXT PRIMARY KEY, merchant_id TEXT, submitted_at TEXT, registration_status TEXT, domain_age_days INTEGER, business_age_days INTEGER, prior_flags INTEGER, mcc_risk TEXT, label TEXT, application TEXT, document TEXT);
 CREATE TABLE IF NOT EXISTS login_sessions (session_id TEXT PRIMARY KEY, account_id TEXT, device_id TEXT, ip TEXT, country TEXT, started_at TEXT, mfa_passed INTEGER, events TEXT);
 CREATE TABLE IF NOT EXISTS scenarios (scenario TEXT, label TEXT, entity_ids TEXT, description TEXT);
@@ -176,7 +176,7 @@ class SentinelStore:
             ],
         )
         self._many(
-            "INSERT OR REPLACE INTO transactions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO transactions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
                 (
                     t.transaction_id,
@@ -193,12 +193,13 @@ class SentinelStore:
                     t.delivery_status,
                     t.counterparty_account_id,
                     t.label,
+                    t.status,
                 )
                 for t in ds.transactions
             ],
         )
         self._many(
-            "INSERT OR REPLACE INTO disputes VALUES (?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO disputes VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             [
                 (
                     d.dispute_id,
@@ -210,6 +211,8 @@ class SentinelStore:
                     d.label,
                     ds.narratives.get(d.dispute_id, {}).get("narrative"),
                     ds.narratives.get(d.dispute_id, {}).get("document"),
+                    d.refund_state,
+                    d.merchant_response,
                 )
                 for d in ds.disputes
             ],
@@ -383,6 +386,7 @@ class SentinelStore:
             r["delivery_status"],
             r["counterparty_account_id"],
             r["label"],
+            r["status"] or "settled",
         )
 
     def transaction(self, tid: str) -> Transaction | None:
@@ -450,6 +454,8 @@ class SentinelStore:
             r["submitted_at"],
             r["claim_type_declared"],
             r["label"],
+            r["refund_state"] or "none",
+            r["merchant_response"] or "none",
         )
 
     def dispute(self, did: str) -> tuple[Dispute, dict[str, str]] | None:

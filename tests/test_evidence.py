@@ -113,4 +113,4 @@ def test_kyb_reconciliation():
 
 def test_records_only_reconciliation():
     r = reconcile_records_only(_facts().to_evidence())
-    assert r.verdict is EvidenceVerdict.SUPPORTED and r.claim is None and len(r.evidence) == 8
+    assert r.verdict is EvidenceVerdict.SUPPORTED and r.claim is None and len(r.evidence) == 13

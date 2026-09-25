@@ -192,7 +192,7 @@ def test_replay_detects_policy_content_drift_and_original_drift():
     reg = PolicyRegistry()
     for p in DEFAULT_REGISTRY.all():
         doc = p.to_dict()
-        if p.policy_id == "dispute-refund" and p.version == 2:
+        if p.policy_id == "dispute-refund" and p.version == DEFAULT_REGISTRY.get("dispute-refund").version:
             for r in doc["rules"]:
                 if r["id"] == "review-over-auto-limit":
                     r["when"][0]["value"] = 10_000
@@ -201,7 +201,9 @@ def test_replay_detects_policy_content_drift_and_original_drift():
     assert drifted.policy_drift and "no longer has the content" in drifted.explanation
     assert drifted.replayed["final_action"] == "REQUIRE_HUMAN_REVIEW"
     # explicitly pinning a version is a deliberate choice, not drift
-    pinned = ReplayEngine(reg).replay(b.decision, snap, ReplayOverrides(policy_version=2))
+    pinned = ReplayEngine(reg).replay(
+        b.decision, snap, ReplayOverrides(policy_version=DEFAULT_REGISTRY.get("dispute-refund").version)
+    )
     assert not pinned.policy_drift
     # the recorded outcome disagrees with the re-derivation -> original drift
     od = ReplayEngine(DEFAULT_REGISTRY).replay(
