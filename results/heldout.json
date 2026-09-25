@@ -135,5 +135,16 @@
     "capability_registry": 2,
     "policy:dispute-refund@v3": 7,
     "trusted_evidence": 7
+  },
+  "methodology": {
+    "kind": "synthetic; guarded attack success is structural",
+    "dataset": "independently worded held-out set, disjoint from the development corpus by test",
+    "method": "as the development corpus",
+    "limitations": "small; validates the claim classifier and the platform, not the simulator's realism",
+    "sample": {
+      "n_attacks": 20,
+      "n_controls": 6,
+      "n_deserved_controls": 4
+    }
   }
 }

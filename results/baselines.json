@@ -18,5 +18,12 @@
     "model_output_injection": 0.5,
     "false_evidence": 1.0,
     "synthetic_evidence": 0.0
+  },
+  "methodology": {
+    "kind": "synthetic (offline simulated agent)",
+    "dataset": "development attack corpus",
+    "method": "the naive agent, the same agent with a hardened system prompt, and Sentinel",
+    "limitations": "the hardened prompt's behaviour is the simulator's reading of an instruction, not a measured LLM",
+    "sample": {}
   }
 }

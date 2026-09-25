@@ -2,7 +2,7 @@
   "n_attacks": 170,
   "n_legit": 14,
   "text_influence_permissive_protected": 0.0,
-  "text_influence_any_change_protected": 0.382,
+  "text_influence_any_change_protected": 0.582,
   "legit_plus_injection_loosened": 0.0,
   "legit_plus_injection_tightened": 1.0,
   "legit_plus_injection_n": 84,
@@ -11,8 +11,20 @@
   "text_influence_permissive_unguarded": 0.835,
   "text_beyond_ledger_ceiling": 0.0,
   "executed_without_ledger_support": 0.0,
-  "attack_text_approved_on_supporting_ledger": 0.094,
-  "text_selected_claim_on_supporting_ledger": 0.624,
+  "attack_text_approved_on_supporting_ledger": 0.082,
+  "text_selected_claim_on_supporting_ledger": 0.441,
   "note": "A, B, C and E's first two rates are expected to be 0 BY CONSTRUCTION -- the attack ledgers do not support the claims -- and are regression checks that the implementation honours the design, not empirical detection results. 'any change' counts outcomes that tightened (e.g. DENY -> BLOCK). E shows the true shape of the property: on a ledger that supports the claim, untrusted text selects the claim type (and a deserved refund is approved whatever the prose says) but never exceeds the ledger-supported ceiling.",
-  "seconds": 0.5
+  "seconds": 0.6,
+  "methodology": {
+    "kind": "structural on unsupporting ledgers; by-design rows on supporting ledgers",
+    "dataset": "development + held-out attack texts over fixed ledgers",
+    "method": "the same trusted facts with different untrusted text and different model recommendations; count outcomes above the ledger-supported ceiling and executions without support",
+    "limitations": "a property of the composer, not of any model's robustness",
+    "sample": {
+      "n_attacks": 170,
+      "n_legit": 14,
+      "model_influence_n": 360,
+      "legit_plus_injection_n": 84
+    }
+  }
 }

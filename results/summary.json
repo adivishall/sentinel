@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-25T22:22:02",
-  "seconds": 7.1,
+  "generated_at": "2026-09-26T05:10:55",
+  "seconds": 85.6,
   "security": {
     "n_attacks": 150,
     "n_controls": 21,
@@ -53,44 +53,44 @@
     "full": 0.0
   },
   "financial": {
-    "precision": 0.935,
-    "recall": 0.796,
-    "false_positive_rate": 0.001,
-    "false_negative_rate": 0.204,
-    "prevalence": 0.017,
-    "transactions": 3184,
+    "precision": 0.867,
+    "recall": 0.672,
+    "false_positive_rate": 0.0019,
+    "false_negative_rate": 0.328,
+    "prevalence": 0.0182,
+    "transactions": 3183,
     "seed_range": {
       "transaction_level": {
         "precision": {
-          "min": 0.915,
-          "max": 0.956
+          "min": 0.773,
+          "max": 0.878
         },
         "recall": {
-          "min": 0.768,
-          "max": 0.796
+          "min": 0.654,
+          "max": 0.672
         },
         "false_positive_rate": {
-          "min": 0.0006,
-          "max": 0.0013
+          "min": 0.0016,
+          "max": 0.0032
         }
       },
       "account_level": {
         "precision": {
-          "min": 1.0,
+          "min": 0.9,
           "max": 1.0
         },
         "recall": {
-          "min": 0.8,
-          "max": 0.9
+          "min": 0.9,
+          "max": 1.0
         },
         "false_positive_rate": {
           "min": 0.0,
-          "max": 0.0
+          "max": 0.0068
         }
       },
       "merchant_level": {
         "precision": {
-          "min": 0.5,
+          "min": 0.75,
           "max": 1.0
         },
         "recall": {
@@ -99,7 +99,7 @@
         },
         "false_positive_rate": {
           "min": 0.0,
-          "max": 0.0741
+          "max": 0.037
         }
       }
     }
@@ -111,24 +111,36 @@
     "text_influence_permissive_unguarded": 0.835,
     "text_beyond_ledger_ceiling": 0.0,
     "executed_without_ledger_support": 0.0,
-    "attack_text_approved_on_supporting_ledger": 0.094
+    "attack_text_approved_on_supporting_ledger": 0.082
   },
   "temporal": {
+    "decisions_tested": 3648,
+    "leakage_count": 0,
+    "leakage_rate": 0.0,
+    "leakage_upper_95": 0.0008208614486580057,
     "truncation_mismatch_rate": 0.0,
     "perturbation_transaction_change_rate": 0.0,
     "perturbation_monitoring_change_rate": 0.0
   },
   "performance": {
-    "normalize": 0.0185,
-    "gateway_inspect": 0.242,
-    "claim_classify": 0.0188,
-    "evidence_reconcile": 0.0358,
+    "normalize": 0.0183,
+    "gateway_inspect": 0.2359,
+    "claim_classify": 0.2619,
+    "evidence_reconcile": 0.0352,
     "risk_score_transaction": 0.015,
-    "graph_linked_accounts": 0.0047,
-    "graph_neighborhood_d2": 0.1317,
-    "policy_evaluate": 0.014,
-    "decision_compose": 0.0391,
-    "audit_append": 0.0104,
-    "e2e_dispute_pipeline": 0.5047
+    "graph_linked_accounts": 0.004,
+    "graph_neighborhood_d2": 0.0565,
+    "policy_evaluate": 0.0149,
+    "decision_compose": 0.039,
+    "audit_append": 0.0101,
+    "e2e_dispute_pipeline": 0.727
+  },
+  "claims": {
+    "n": 117,
+    "coverage": 1.0,
+    "false_positive_rate": 0.0,
+    "misclassification_rate": 0.0,
+    "abstain_rate": 0.222,
+    "adversarial_wrong_type_rate": 0.0
   }
 }

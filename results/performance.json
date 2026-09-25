@@ -4,101 +4,116 @@
   "components": {
     "normalize": {
       "n": 1000,
-      "mean_ms": 0.0178,
-      "p50_ms": 0.0176,
-      "p95_ms": 0.0182,
-      "p99_ms": 0.0243,
-      "throughput_per_sec": 56195
+      "mean_ms": 0.0176,
+      "p50_ms": 0.0178,
+      "p95_ms": 0.0184,
+      "p99_ms": 0.0187,
+      "throughput_per_sec": 56809
     },
     "gateway_inspect": {
       "n": 1000,
-      "mean_ms": 0.2232,
-      "p50_ms": 0.2223,
-      "p95_ms": 0.2308,
-      "p99_ms": 0.246,
-      "throughput_per_sec": 4481
+      "mean_ms": 0.2227,
+      "p50_ms": 0.2226,
+      "p95_ms": 0.2258,
+      "p99_ms": 0.2295,
+      "throughput_per_sec": 4490
     },
     "claim_classify": {
       "n": 1000,
-      "mean_ms": 0.0188,
-      "p50_ms": 0.0186,
-      "p95_ms": 0.0189,
-      "p99_ms": 0.0228,
-      "throughput_per_sec": 53282
+      "mean_ms": 0.256,
+      "p50_ms": 0.2557,
+      "p95_ms": 0.26,
+      "p99_ms": 0.2672,
+      "throughput_per_sec": 3907
     },
     "evidence_reconcile": {
       "n": 1000,
-      "mean_ms": 0.0347,
-      "p50_ms": 0.0343,
-      "p95_ms": 0.0357,
-      "p99_ms": 0.0424,
-      "throughput_per_sec": 28793
+      "mean_ms": 0.0345,
+      "p50_ms": 0.0342,
+      "p95_ms": 0.0347,
+      "p99_ms": 0.0391,
+      "throughput_per_sec": 28995
     },
     "risk_score_transaction": {
       "n": 1000,
-      "mean_ms": 0.0149,
+      "mean_ms": 0.0146,
       "p50_ms": 0.0145,
-      "p95_ms": 0.0152,
-      "p99_ms": 0.0205,
-      "throughput_per_sec": 67001
+      "p95_ms": 0.0147,
+      "p99_ms": 0.0168,
+      "throughput_per_sec": 68335
     },
     "graph_linked_accounts": {
       "n": 1000,
-      "mean_ms": 0.0046,
-      "p50_ms": 0.0045,
-      "p95_ms": 0.0046,
-      "p99_ms": 0.0047,
-      "throughput_per_sec": 218168
+      "mean_ms": 0.004,
+      "p50_ms": 0.0039,
+      "p95_ms": 0.004,
+      "p99_ms": 0.0041,
+      "throughput_per_sec": 250753
     },
     "graph_neighborhood_d2": {
       "n": 200,
-      "mean_ms": 0.1224,
-      "p50_ms": 0.1205,
-      "p95_ms": 0.1261,
-      "p99_ms": 0.1577,
-      "throughput_per_sec": 8171
+      "mean_ms": 0.0539,
+      "p50_ms": 0.053,
+      "p95_ms": 0.0555,
+      "p99_ms": 0.0586,
+      "throughput_per_sec": 18562
     },
     "policy_evaluate": {
       "n": 1000,
-      "mean_ms": 0.0142,
-      "p50_ms": 0.0132,
-      "p95_ms": 0.0135,
-      "p99_ms": 0.0169,
-      "throughput_per_sec": 70650
+      "mean_ms": 0.0152,
+      "p50_ms": 0.0145,
+      "p95_ms": 0.0147,
+      "p99_ms": 0.0174,
+      "throughput_per_sec": 65707
     },
     "decision_compose": {
       "n": 1000,
-      "mean_ms": 0.0369,
-      "p50_ms": 0.0366,
-      "p95_ms": 0.038,
-      "p99_ms": 0.0441,
-      "throughput_per_sec": 27088
+      "mean_ms": 0.0375,
+      "p50_ms": 0.0372,
+      "p95_ms": 0.0385,
+      "p99_ms": 0.0431,
+      "throughput_per_sec": 26672
     },
     "audit_append": {
       "n": 1000,
-      "mean_ms": 0.0091,
-      "p50_ms": 0.0088,
-      "p95_ms": 0.0101,
-      "p99_ms": 0.0132,
-      "throughput_per_sec": 110118
+      "mean_ms": 0.0088,
+      "p50_ms": 0.0086,
+      "p95_ms": 0.0098,
+      "p99_ms": 0.0107,
+      "throughput_per_sec": 113888
     },
     "e2e_dispute_pipeline": {
       "n": 500,
-      "mean_ms": 0.4879,
-      "p50_ms": 0.4847,
-      "p95_ms": 0.5025,
-      "p99_ms": 0.526,
-      "throughput_per_sec": 2050
+      "mean_ms": 0.7182,
+      "p50_ms": 0.7163,
+      "p95_ms": 0.7267,
+      "p99_ms": 0.7677,
+      "throughput_per_sec": 1392
     }
   },
   "workloads": {
     "text_chars": 310,
     "baseline_transactions": 40,
-    "graph_nodes": 8219,
-    "graph_edges": 14824,
+    "graph_nodes": 8403,
+    "graph_edges": 14638,
     "policy_rules": 14,
     "policy_context_fields": 26,
     "e2e_iterations": 500,
     "note": "offline agent; a live LLM call (hundreds of ms) dominates real latency"
+  },
+  "methodology": {
+    "kind": "empirical, machine-dependent",
+    "dataset": "fixed workloads (narrative, baseline, graph, policy) on the local machine",
+    "method": "sequential single-threaded loops; percentiles over n iterations; persistence excluded",
+    "limitations": "the platform's own overhead only; a live model call dominates real latency",
+    "sample": {
+      "text_chars": 310,
+      "baseline_transactions": 40,
+      "graph_nodes": 8403,
+      "graph_edges": 14638,
+      "policy_rules": 14,
+      "policy_context_fields": 26,
+      "e2e_iterations": 500
+    }
   }
 }

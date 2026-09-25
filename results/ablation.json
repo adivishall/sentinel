@@ -74,5 +74,12 @@
       "risk"
     ],
     "hardened": false
+  },
+  "methodology": {
+    "kind": "synthetic; the 0% rows are structural",
+    "dataset": "development attack corpus",
+    "method": "eight control configurations of the same composer over the same cases",
+    "limitations": "configurations that believe the model's verdict inherit the simulator's behaviour",
+    "sample": {}
   }
 }

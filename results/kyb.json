@@ -107,5 +107,21 @@
     "fp_rate_benign_input": "empirical",
     "fn_rate": "empirical",
     "manual_review_rate": "empirical"
+  },
+  "methodology": {
+    "kind": "synthetic; guarded attack success is structural; false positives are empirical",
+    "dataset": "balanced onboarding applications across eight categories with records-only ground truth",
+    "method": "outcomes compared with what the acquirer records alone imply (approve / review / reject)",
+    "limitations": "records are synthetic; a clean merchant with a hostile upload is held by design and counted in the any-input false-positive rate",
+    "sample": {
+      "attacks": 24,
+      "controls": 23,
+      "corpus_cases": 47,
+      "corpus_attacks": 24,
+      "corpus_controls": 23,
+      "corpus_records_approve": 19,
+      "corpus_records_reject": 12,
+      "corpus_records_review": 16
+    }
   }
 }

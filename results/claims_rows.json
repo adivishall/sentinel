@@ -1,0 +1,46 @@
+[
+  {
+    "category": "uncommon_legitimate",
+    "text": "I have received nothing for this payment.",
+    "expected": "non_receipt",
+    "got": "abstain",
+    "kind": "abstain",
+    "confidence": 0.0,
+    "signals": [],
+    "reason": "no recognisable claim",
+    "correct": false
+  },
+  {
+    "category": "uncommon_legitimate",
+    "text": "My card got hit twice for the same thing.",
+    "expected": "duplicate",
+    "got": "abstain",
+    "kind": "abstain",
+    "confidence": 0.0,
+    "signals": [],
+    "reason": "no recognisable claim",
+    "correct": false
+  },
+  {
+    "category": "uncommon_legitimate",
+    "text": "Same charge appears 2x on my account for a single order",
+    "expected": "duplicate",
+    "got": "abstain",
+    "kind": "abstain",
+    "confidence": 0.0,
+    "signals": [],
+    "reason": "no recognisable claim",
+    "correct": false
+  },
+  {
+    "category": "uncommon_legitimate",
+    "text": "This debit wasn't done by me or anyone in my family.",
+    "expected": "unauthorized",
+    "got": "abstain",
+    "kind": "abstain",
+    "confidence": 0.0,
+    "signals": [],
+    "reason": "no recognisable claim",
+    "correct": false
+  }
+]

@@ -1,0 +1,171 @@
+{
+  "benchmark": "claim-classifier",
+  "n": 117,
+  "by_category": {
+    "legitimate_paraphrase": {
+      "n": 35,
+      "correct": 35,
+      "accuracy": 1.0,
+      "claim": 35,
+      "non_claim": 0,
+      "abstain": 0,
+      "abstain_rate": 0.0,
+      "misclassified": 0
+    },
+    "ambiguous": {
+      "n": 12,
+      "correct": 12,
+      "accuracy": 1.0,
+      "claim": 0,
+      "non_claim": 0,
+      "abstain": 12,
+      "abstain_rate": 1.0,
+      "misclassified": 0
+    },
+    "unsupported": {
+      "n": 10,
+      "correct": 10,
+      "accuracy": 1.0,
+      "claim": 0,
+      "non_claim": 10,
+      "abstain": 0,
+      "abstain_rate": 0.0,
+      "misclassified": 0
+    },
+    "adversarial": {
+      "n": 12,
+      "correct": 12,
+      "accuracy": 1.0,
+      "claim": 9,
+      "non_claim": 0,
+      "abstain": 3,
+      "abstain_rate": 0.25,
+      "misclassified": 0
+    },
+    "contradictory": {
+      "n": 6,
+      "correct": 6,
+      "accuracy": 1.0,
+      "claim": 0,
+      "non_claim": 0,
+      "abstain": 6,
+      "abstain_rate": 1.0,
+      "misclassified": 0
+    },
+    "uncommon_legitimate": {
+      "n": 21,
+      "correct": 17,
+      "accuracy": 0.81,
+      "claim": 17,
+      "non_claim": 0,
+      "abstain": 4,
+      "abstain_rate": 0.19,
+      "misclassified": 0
+    },
+    "development": {
+      "n": 21,
+      "correct": 21,
+      "accuracy": 1.0,
+      "claim": 19,
+      "non_claim": 1,
+      "abstain": 1,
+      "abstain_rate": 0.048,
+      "misclassified": 0
+    }
+  },
+  "coverage": 1.0,
+  "uncommon_coverage": 0.81,
+  "uncommon_recognised": 17,
+  "uncommon_n": 21,
+  "legit_misclassification_rate": 0.0,
+  "false_negatives": 4,
+  "false_negative_rate": 0.071,
+  "false_negative_n": 56,
+  "false_positives": 0,
+  "false_positive_rate": 0.0,
+  "false_positive_n": 28,
+  "misclassification_rate": 0.0,
+  "abstain_rate": 0.222,
+  "adversarial_wrong_type_rate": 0.0,
+  "confusion": {
+    "abstain->abstain": 22,
+    "cancellation->cancellation": 15,
+    "duplicate->abstain": 2,
+    "duplicate->duplicate": 15,
+    "in_transit->in_transit": 8,
+    "non_claim->non_claim": 11,
+    "non_receipt->abstain": 1,
+    "non_receipt->non_receipt": 27,
+    "unauthorized->abstain": 1,
+    "unauthorized->unauthorized": 15
+  },
+  "failures": [
+    {
+      "category": "uncommon_legitimate",
+      "text": "I have received nothing for this payment.",
+      "expected": "non_receipt",
+      "got": "abstain",
+      "kind": "abstain",
+      "confidence": 0.0,
+      "signals": [],
+      "reason": "no recognisable claim",
+      "correct": false
+    },
+    {
+      "category": "uncommon_legitimate",
+      "text": "My card got hit twice for the same thing.",
+      "expected": "duplicate",
+      "got": "abstain",
+      "kind": "abstain",
+      "confidence": 0.0,
+      "signals": [],
+      "reason": "no recognisable claim",
+      "correct": false
+    },
+    {
+      "category": "uncommon_legitimate",
+      "text": "Same charge appears 2x on my account for a single order",
+      "expected": "duplicate",
+      "got": "abstain",
+      "kind": "abstain",
+      "confidence": 0.0,
+      "signals": [],
+      "reason": "no recognisable claim",
+      "correct": false
+    },
+    {
+      "category": "uncommon_legitimate",
+      "text": "This debit wasn't done by me or anyone in my family.",
+      "expected": "unauthorized",
+      "got": "abstain",
+      "kind": "abstain",
+      "confidence": 0.0,
+      "signals": [],
+      "reason": "no recognisable claim",
+      "correct": false
+    }
+  ],
+  "definitions": {
+    "coverage": "legitimate paraphrases read as a claim (any type)",
+    "uncommon_coverage": "held-out uncommon legitimate wording read as its own type (written and labelled before the classifier was run on it; see the category note)",
+    "false_negative_rate": "legitimate claims (paraphrases + held-out uncommon wording) NOT read as their own type: abstained (held for a human) or misread",
+    "false_positive_rate": "ambiguous, unsupported and contradictory messages read confidently as a claim",
+    "misclassification_rate": "of every message read as a claim, the share read as a type other than the labelled one (incl. claims where an abstain or non-claim was expected)",
+    "abstain_rate": "share of all messages on which the classifier abstained (fail-safe to a human)",
+    "adversarial_wrong_type_rate": "attack prose read as a claim type other than the one it asserts"
+  },
+  "kinds": {
+    "all": "synthetic (hand-authored phrasings; the benchmark and the classifier share an author)"
+  },
+  "category_notes": {
+    "uncommon_legitimate": "held-out: written and labelled in the 2.2.0 review before the classifier was run on it. First run, with the classifier as of commit 9693433: 7/21 recognised, 14 abstained, 0 misread. The patterns were then extended against the separate development set, by an author who had seen those 14 misses, so the current number is optimistic; the remaining misses were deliberately not fitted",
+    "development": "written after the held-out run and used to extend the patterns: a fit, not an estimate"
+  },
+  "methodology": {
+    "kind": "synthetic",
+    "sample": 117,
+    "method": "each phrasing is classified once; a claim is correct when its type matches the label, an abstain or non-claim when the label expects it",
+    "limitations": "hand-authored phrasings; regression floor, not a generalisation claim; no ledger is involved and the composer's guarantee does not depend on the classifier"
+  },
+  "seconds": 0.01
+}
