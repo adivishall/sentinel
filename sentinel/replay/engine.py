@@ -356,7 +356,12 @@ class ReplayEngine:
             )
         return ReplayResult(
             new_id("REPLAY"),
-            original.decision_id,
+            # the recorded decision's id: ``original`` is a re-derivation with a fresh id
+            (
+                str(recorded.get("decision_id") or original.decision_id)
+                if recorded is not None
+                else original.decision_id
+            ),
             overrides.describe(),
             before,
             after,

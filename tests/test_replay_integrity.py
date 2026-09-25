@@ -54,6 +54,8 @@ def _rewrite(app, did, *, payload=None, snapshot=None):
 def test_same_inputs_no_diff_and_every_version_named(app):
     did = app.evaluate_dispute(CLAIM, SUPPORTED).decision.decision_id
     r = app.replay(did, ReplayOverrides())
+    assert r.decision_id == did  # the recorded decision, not the re-derivation's fresh id
+    assert app.store.replays(1)[0]["decision_id"] == did
     assert r.decision_diff == [] and not r.changed and r.record_verified
     assert not r.engine_drift and not r.policy_drift
     assert r.versions["engine"] == {"recorded": __version__, "replay": __version__}
