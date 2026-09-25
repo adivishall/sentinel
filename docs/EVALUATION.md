@@ -461,5 +461,5 @@ make eval                      # everything above (200 attacks over three corpor
 make docs                      # re-render this file and every generated block from results/ and the code
 sentinel eval run --suite security|heldout|surfaces|kyb|baselines|ablation|financial|integrity|temporal|performance|models|charts
 sentinel eval run --suite financial --full     # larger dataset (400 customers / 12k transactions)
-make test                      # 326 tests, incl. tests/test_results_regression.py which recomputes the headline claims
+make test                      # 327 tests, incl. tests/test_results_regression.py which recomputes the headline claims
 ```

@@ -55,7 +55,7 @@ customers, real transactions, financial savings or regulatory claims are made.
   modified, deleted or reordered record, and exports HMAC-signed checkpoints.
 - **Engineering.** Standard-library-only core (SQLite, http.server), one
   application layer behind a versioned API, a CLI and an API-backed console
-  with no decision logic; 326 tests including property-tested security
+  with no decision logic; 327 tests including property-tested security
   invariants and end-to-end hostile vectors; CI with lint, types, coverage,
   evaluation smoke and Docker; protected pipeline p95 ≈ 0.5025 ms offline.
 
