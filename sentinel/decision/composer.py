@@ -222,8 +222,9 @@ def _decide(
     return pol, auth, action, reason, context
 
 
-def compose(inputs: DecisionInputs) -> Decision:
-    # ---- 1. build the trusted view: the model's wish is deliberately absent ----
+def _trusted_view(inputs: DecisionInputs) -> _TrustedView:
+    """The view the decision is computed from. The model's wish is deliberately
+    absent unless the ADJUDICATION control is ablated away."""
     if ADJUDICATION in inputs.controls:
         verdict = inputs.reconciliation.verdict
         candidate = inputs.candidate_capability
@@ -248,6 +249,19 @@ def compose(inputs: DecisionInputs) -> Decision:
         controls=inputs.controls,
         claim_type=inputs.claim_type,
     )
+    return view
+
+
+def policy_context(inputs: DecisionInputs) -> dict[str, object]:
+    """The exact flat context the policy engine evaluates for ``inputs``
+    (used by the benchmark and the CLI so no context is ever hand-typed)."""
+    return build_policy_context(_trusted_view(inputs))
+
+
+def compose(inputs: DecisionInputs) -> Decision:
+    # ---- 1. build the trusted view: the model's wish is deliberately absent ----
+    view = _trusted_view(inputs)
+    candidate = view.candidate_capability
     pol, auth, action, reason, context = _decide(view)
 
     # ---- 2. explain -------------------------------------------------------------
@@ -381,7 +395,7 @@ def compose(inputs: DecisionInputs) -> Decision:
         risk_assessment_id=inputs.risk.assessment_id if inputs.risk else None,
         ai_recommendation=ai,
         evidence_verdict=(
-            inputs.reconciliation.verdict if ADJUDICATION in inputs.controls else verdict
+            inputs.reconciliation.verdict if ADJUDICATION in inputs.controls else view.verdict
         ),
         evidence_ids=inputs.reconciliation.evidence.ids(),
         contradiction_count=len(inputs.reconciliation.contradictions),

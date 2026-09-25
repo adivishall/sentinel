@@ -213,6 +213,20 @@ class DisputeFacts(TrustedFacts):
         fld, supporting = mapping
         return getattr(self, fld) in supporting
 
+    def as_policy_facts(self) -> dict[str, object]:
+        """The trusted fields the dispute policy may read. The composer adds the
+        context fields it always provides; the workflow adds the account's risk."""
+        return {
+            "policy_auto_limit": self.policy_auto_limit,
+            "prior_disputes_90d": self.prior_disputes_90d,
+            "delivery_status": self.delivery_status,
+            "refund_state": self.refund_state,
+            "transaction_status": self.transaction_status,
+            "merchant_response": self.merchant_response,
+            "auth_strength": self.auth_strength,
+            "customer_tenure_days": self.customer_tenure_days,
+        }
+
     def as_adjudicator_input(self, claim: ClaimType) -> dict[str, object]:
         """The exact JSON object handed to the adjudicator. No prose -- only
         verified fields plus the coarse claim label and the trusted-only verdict."""

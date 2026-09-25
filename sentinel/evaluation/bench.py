@@ -3,7 +3,7 @@
 Workloads are documented in the output so the numbers are interpretable:
 normalisation and gateway inspection run over a ~400-char injected narrative;
 risk scoring over a 40-transaction baseline; graph traversal over the demo
-dataset; policy evaluation over a 20-field context; the end-to-end figure is
+dataset; policy evaluation over the composer-built policy context (its field count is recorded in the output); the end-to-end figure is
 the full dispute pipeline with the offline agent. Machine-dependent."""
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import Any
 
 from sentinel.audit.chain import AuditChain
 from sentinel.data.generator import generate
-from sentinel.decision.composer import FULL, DecisionInputs, compose
+from sentinel.decision.composer import FULL, DecisionInputs, compose, policy_context
 from sentinel.decision.workflows import DisputeRequest, Runtime, run_dispute
 from sentinel.domain.decisions import AIRecommendation
 from sentinel.domain.entities import Account, Merchant, PaymentInstrument, Transaction
@@ -90,7 +90,7 @@ def run(n: int = 1000, e2e: int = 500) -> dict[str, Any]:
         "D",
         18000,
         Capability.APPROVE_REFUND,
-        {"policy_auto_limit": 50000, "prior_disputes_90d": 0},
+        {**facts.as_policy_facts(), "account_risk_score": 0},
         rec,
         sec,
         policy,
@@ -100,18 +100,7 @@ def run(n: int = 1000, e2e: int = 500) -> dict[str, Any]:
         input_hash="h",
         claim_type=claim.claim_type.value,
     )
-    pctx = {
-        "amount": 18000,
-        "evidence_verdict": "CONTRADICTED",
-        "security_severity": "HIGH",
-        "risk_score": 40,
-        "policy_auto_limit": 50000,
-        "prior_disputes_90d": 0,
-        "risk_level": "MEDIUM",
-        "claim_type": "non_receipt",
-        "capability_escalation": False,
-        "workflow": "dispute",
-    }
+    pctx = policy_context(inputs)  # the real context, never a hand-typed one
     chain = AuditChain()
     rt = Runtime(persist=False)
     req = DisputeRequest(UntrustedContent(TEXT), LEDGER, "D-1")
@@ -142,6 +131,7 @@ def run(n: int = 1000, e2e: int = 500) -> dict[str, Any]:
         "graph_nodes": graph.node_count,
         "graph_edges": graph.edge_count,
         "policy_rules": len(policy.rules),
+        "policy_context_fields": len(pctx),
         "e2e_iterations": e2e,
         "note": "offline agent; a live LLM call (hundreds of ms) dominates real latency",
     }
