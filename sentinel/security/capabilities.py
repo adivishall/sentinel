@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
 from sentinel.domain.decisions import Authorization
 from sentinel.domain.enums import (
@@ -255,6 +256,42 @@ CONSEQUENTIAL: frozenset[Capability] = frozenset(c for c, s in REGISTRY.items() 
 
 def spec(capability: Capability) -> CapabilitySpec:
     return REGISTRY[capability]
+
+
+def matrix() -> list[dict[str, Any]]:
+    """The security boundary as data: one row per capability with its risk,
+    irreversibility, monetary impact, allowed actors, required authorization,
+    human-review threshold and the policy conditions that gate it. Rendered into
+    docs/SECURITY_MODEL.md, GET /v1/capabilities and `sentinel capability list`."""
+    from sentinel.policy.loader import DEFAULT_REGISTRY
+
+    gates: dict[str, set[str]] = {}
+    for p in DEFAULT_REGISTRY.all():
+        for r in p.rules:
+            for c in r.when:
+                if c.field == "requested_capability":
+                    vals = c.value if isinstance(c.value, (list, tuple)) else [c.value]
+                    for v in vals:
+                        gates.setdefault(str(v), set()).add(f"{p.key}:{r.rule_id}")
+    rows: list[dict[str, Any]] = []
+    for cap, s in REGISTRY.items():
+        rows.append(
+            {
+                "capability": cap.value,
+                "risk": s.risk.value,
+                "irreversible": s.irreversible,
+                "financial_effect": s.financial_effect,
+                "consequential": s.consequential,
+                "allowed_actors": sorted(a.value for a in s.allowed_actors),
+                "ai_agent_allowed": ActorKind.AI_AGENT in s.allowed_actors,
+                "required_authorization": s.required_authorization.value,
+                "human_review_threshold": s.human_review_threshold,
+                "requires_verified_evidence": s.consequential,
+                "policy_gates": sorted(gates.get(cap.value, ())),
+                "description": s.description,
+            }
+        )
+    return rows
 
 
 def is_consequential(capability: Capability | None) -> bool:
