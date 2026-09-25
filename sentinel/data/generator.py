@@ -757,7 +757,8 @@ class _Gen:
             self._txn(aid, when=when, country=home)
             # The attacker's device is NOT registered on the account: it is first seen
             # at the takeover login itself, which is exactly what ``new_device`` must detect.
-            login = when + timedelta(minutes=30)
+            # the attacker logs in some time after the owner's last purchase (not a fixed gap)
+            login = when + timedelta(minutes=r.randint(10, 360), seconds=r.randint(0, 59))
             new_dev = self._device(login, exact=True)
             country = r.choice([c for c in (*_FOREIGN, "RO") if c != home])
             self.ds.sessions.append(
@@ -779,9 +780,9 @@ class _Gen:
                 )
             )
             mean = math.exp(float(p["mu"]))  # type: ignore[arg-type]
-            at = when + timedelta(minutes=r.randint(35, 60))
+            at = login + timedelta(minutes=r.randint(3, 45), seconds=r.randint(0, 59))
             ids = []
-            for _ in range(2):
+            for _ in range(r.randint(1, 4)):
                 ids.append(
                     self._txn(
                         aid,
@@ -829,7 +830,7 @@ class _Gen:
         for m in r.sample(hi, min(pf.abused_merchants, len(hi))):
             ids = []
             newest = max(1, min(60, (AS_OF - self._mreg[m.merchant_id]).days - 1))
-            for _ in range(60):
+            for _ in range(r.randint(40, 80)):
                 aid = r.choice(accounts)
                 t = self._txn(
                     aid,
@@ -982,7 +983,8 @@ class _Gen:
                 seconds=r.randint(0, 59),
             )
             ids = []
-            for _ in range(4):  # gaps of 12-48 h keep all four inside a week
+            n_transfers = r.randint(3, 5)
+            for _ in range(n_transfers):  # gaps of 10-36 h keep them inside about a week
                 ids.append(
                     self._txn(
                         aid,
@@ -993,25 +995,28 @@ class _Gen:
                         label="fraud:structuring",
                     ).transaction_id
                 )
-                when += timedelta(seconds=r.randint(12 * 3600, 48 * 3600))
+                when += timedelta(seconds=r.randint(10 * 3600, 36 * 3600))
             self.ds.scenarios.append(
                 ScenarioTag(
                     "structuring_like",
                     "fraud:structuring",
                     (aid, cp, *ids),
-                    "Four transfers just below the ₹50,000 threshold within a week.",
+                    f"{n_transfers} transfers just below the ₹50,000 threshold in about a week.",
                 )
             )
 
-        # AML: dormant activation -- silence then a burst
-        cutoff = _iso(AS_OF - timedelta(days=120))
+        # AML: dormant activation -- silence (100-200 days, beyond the monitor's 90) then a
+        # burst of 4-8 transactions
+        longest = _iso(AS_OF - timedelta(days=200))
         # an account that received a scenario transfer during the silence cannot be silent
         hot = {
             t.counterparty_account_id
             for t in self.ds.transactions
-            if t.counterparty_account_id and t.label != "legit" and t.timestamp > cutoff
+            if t.counterparty_account_id and t.label != "legit" and t.timestamp > longest
         }
-        for aid in pick(pf.dormant, lambda a: opened_before(150)(a) and a not in hot):
+        for aid in pick(pf.dormant, lambda a: opened_before(230)(a) and a not in hot):
+            silence = r.randint(100, 200)
+            cutoff = _iso(AS_OF - timedelta(days=silence))
             # The silence: the account's own activity after the cutoff goes, and so do the
             # legitimate transfers into it and its logins; only the activation remains.
             removed = {
@@ -1048,7 +1053,7 @@ class _Gen:
                 if not (s.account_id == aid and cutoff < s.started_at < _iso(when))
             ]
             ids = []
-            for _ in range(6):
+            for _ in range(r.randint(4, 8)):
                 ids.append(
                     self._txn(aid, when=when, label="fraud:dormant_activation").transaction_id
                 )
@@ -1058,7 +1063,7 @@ class _Gen:
                     "dormant_activation",
                     "fraud:dormant_activation",
                     (aid, *ids),
-                    "120 days of silence followed by six transactions in two days.",
+                    f"{silence} days of silence followed by {len(ids)} transactions within a few days.",
                 )
             )
 
@@ -1067,8 +1072,8 @@ class _Gen:
     def _ring(self, hi: list[Merchant], ring_no: int) -> None:
         r = self.rng
         t0 = AS_OF - timedelta(days=18, seconds=r.randint(0, 86399))  # the ring is set up
-        opened = t0 + timedelta(days=1)
-        shared_dev = self._device(t0 - timedelta(days=2), exact=True)
+        opened = t0 + timedelta(hours=r.randint(4, 60), seconds=r.randint(0, 3599))
+        shared_dev = self._device(t0 - timedelta(hours=r.randint(12, 96)), exact=True)
         # Three accounts, three instrument records, ONE underlying bank account: the
         # shared payout destination is the ring's tell -- by identity, not by look.
         payout_last4, payout_ref = f"{r.randint(1000, 9999)}", f"BANK-{r.getrandbits(32):08x}"
