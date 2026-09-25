@@ -26,6 +26,7 @@ from typing import ClassVar
 from sentinel.domain.enums import ClaimType, EvidenceKind, TrustClass
 from sentinel.domain.evidence import Claim, Evidence
 from sentinel.domain.ids import content_hash
+from sentinel.security.claims import ClaimClassification, classify
 
 
 def as_int(value: object, default: int = 0) -> int:
@@ -55,44 +56,6 @@ def as_int(value: object, default: int = 0) -> int:
     return default
 
 
-_CLAIM_PATTERNS: tuple[tuple[ClaimType, re.Pattern[str]], ...] = (
-    (
-        ClaimType.NON_RECEIPT,
-        re.compile(
-            r"never (arrived|received|delivered|reached|came|turned up|showed up)"
-            r"|not delivered|non[- ]?receipt"
-            r"|(has ?n'?t|have ?n'?t|had ?n'?t|did ?n'?t|has not|have not|still (has|had) not)"
-            r".{0,15}(arriv|reach|deliver|came|come|turn(ed)? up|show(ed)? up)"
-        ),
-    ),
-    (ClaimType.IN_TRANSIT, re.compile(r"in transit|still (on the way|coming)|not (yet )?arrived")),
-    (
-        ClaimType.DUPLICATE,
-        re.compile(
-            r"duplicate|charged (me )?twice|billed .{0,15}(twice|two times)"
-            r"|(two|2|double|multiple) .{0,12}(charges|times|entries|debits)"
-            r"|charged .{0,12}(twice|two times|multiple times)"
-        ),
-    ),
-    (
-        ClaimType.CANCELLATION,
-        re.compile(
-            r"cancel(l)?(ed|ation)?.{0,25}(order|booking|purchase|subscription|payment|it|within)"
-            r"|(order|booking|purchase|subscription).{0,25}cancel"
-            r"|call(ed)? (it |the \w+ |my \w+ )?off"
-            r"|withdrew (the |my )?(order|booking|purchase)"
-        ),
-    ),
-    (
-        ClaimType.UNAUTHORIZED,
-        re.compile(
-            r"fraud|didn'?t (make|authori[sz]e)|unauthori[sz]ed|don'?t recognis"
-            r"|not mine|card with me|never (made|authori)|never left my wallet"
-        ),
-    ),
-)
-
-
 @dataclass(frozen=True)
 class UntrustedText:
     """A span of attacker-controllable text.
@@ -112,18 +75,28 @@ class UntrustedText:
     def sha256(self) -> str:
         return content_hash(self.text, length=64)
 
+    def classify_detailed(self) -> ClaimClassification:
+        """The classifier's full reading: type, kind (claim / non_claim / abstain),
+        confidence and the signals that fired. This is the *only* value derived
+        from prose (``security/claims.py``)."""
+        return classify(self.text)
+
     def classify(self) -> ClaimType:
-        """Coarse claim label. This is the *only* value derived from prose.
-        Order matters: a clear 'never arrived' is non-receipt even if the same
-        message also mentions 'in transit' tracking."""
-        t = self.text.lower()
-        for claim_type, rx in _CLAIM_PATTERNS:
-            if rx.search(t):
-                return claim_type
-        return ClaimType.UNSPECIFIED
+        """Coarse claim label; UNSPECIFIED when the classifier abstains or reads a
+        recognised non-claim."""
+        return self.classify_detailed().claim_type
 
     def claim(self) -> Claim:
-        return Claim(self.classify(), self.source, self.trust, content_hash(self.text))
+        c = self.classify_detailed()
+        return Claim(
+            c.claim_type,
+            self.source,
+            self.trust,
+            content_hash(self.text),
+            c.confidence,
+            c.kind,
+            c.signals,
+        )
 
 
 @dataclass(frozen=True)

@@ -9,10 +9,15 @@ Untrusted text DOES select which trusted fact is checked (the claim type), so
 on a ledger that supports the claim, "my order never arrived" is approved and a
 neutral "following up" is not -- that is the design, not a leak. What text can
 never do is push the outcome above the *ledger-supported ceiling*, or execute a
-capability the ledger does not support. On the attack corpora every ledger is
-unsupporting, so the protected-path rates below are expected to be 0 by
-construction; they are a regression check that the implementation honours the
-design, and the unguarded contrast (D) is what makes them informative.
+capability the ledger does not support. On an unsupporting ledger the ceiling
+is a human review: a message the classifier cannot read is INSUFFICIENT and
+held, a readable false claim is denied, and nothing executes. On the attack
+corpora every ledger is unsupporting, so the protected-path rates below are
+expected to be 0 by construction; they are a regression check that the
+implementation honours the design, and the unguarded contrast (D) is what
+makes them informative. The neutral narrative is deliberately one the
+classifier abstains on, so "more permissive than neutral" means "above a
+human review".
 
   A. Text influence, unsupporting ledgers: attack text vs a neutral narrative
      over the same (unsupporting) ledger; count outcomes made more permissive.
@@ -38,6 +43,7 @@ from sentinel.decision.workflows import FULL, NONE, DisputeRequest, RunOptions, 
 from sentinel.domain.enums import Capability
 from sentinel.evaluation.attacks import corpus, heldout
 from sentinel.evaluation.common import dispute_request, pct, runtime, write_json
+from sentinel.evaluation.methodology import methodology
 from sentinel.policy import DEFAULT_REGISTRY
 from sentinel.replay.engine import ReplayEngine, ReplayOverrides
 from sentinel.security.provenance import UntrustedContent
@@ -183,6 +189,7 @@ def main(out_dir: str = "results") -> dict[str, Any]:
     t0 = time.time()
     r = run()
     r["seconds"] = round(time.time() - t0, 1)
+    r["methodology"] = methodology("integrity", r)
     write_json(out_dir, "integrity.json", r)
     print(
         f"[integrity] {r['n_attacks']} attacks, {r['n_legit']} deserved controls ({r['seconds']}s)"

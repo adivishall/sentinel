@@ -97,10 +97,18 @@ class Claim:
     source: str
     trust: TrustClass
     text_hash: str
+    confidence: float = 1.0
+    kind: str = "claim"  # claim | non_claim | abstain  (see security/claims.py)
+    signals: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.trust.is_trusted:
             raise ValueError("a Claim is by definition untrusted")
+
+    @property
+    def abstained(self) -> bool:
+        """The classifier could not read a claim: reconciliation fails safe to a human."""
+        return self.kind == "abstain"
 
 
 @dataclass(frozen=True)

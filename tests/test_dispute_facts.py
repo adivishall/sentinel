@@ -152,7 +152,8 @@ def test_adversarial_constancy_under_fixed_trusted_records():
     """For a fixed ledger, the set of reachable final actions across every attack
     text in both corpora and every model recommendation is bounded: on a
     supporting ledger nothing exceeds the plain claim's outcome and only APPROVE_REFUND
-    ever executes; on an unsupporting ledger nothing executes at all."""
+    ever executes; on an unsupporting ledger nothing executes at all and nothing rises
+    above a human review (an unreadable message is INSUFFICIENT)."""
     rt = Runtime(persist=False)
     for ledger in (SUPPORTED_LEDGER, {**SUPPORTED_LEDGER, "delivery_status": "delivered"}):
         ceiling = run_dispute(
@@ -166,9 +167,13 @@ def test_adversarial_constancy_under_fixed_trusted_records():
                 snapshot(b.inputs),
                 ReplayOverrides(ai_recommendation=rec, ai_capability=cap),
             )
+            limit = max(
+                ceiling.final_action.permissiveness,
+                FinalAction.REQUIRE_HUMAN_REVIEW.permissiveness,
+            )
             for d in (b.decision, replayed.replayed_decision):
                 seen.add(d.final_action.value)
-                assert d.final_action.permissiveness <= ceiling.final_action.permissiveness
+                assert d.final_action.permissiveness <= limit
                 assert d.executed_capability in (None, Capability.APPROVE_REFUND)
                 if ledger["delivery_status"] == "delivered":
                     assert not d.executed

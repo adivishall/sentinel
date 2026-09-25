@@ -19,7 +19,14 @@ from sentinel.decision.composer import FULL, DecisionInputs, compose
 from sentinel.decision.snapshot import restore, snapshot
 from sentinel.decision.workflows import DisputeRequest, RunOptions, Runtime, run_dispute
 from sentinel.domain.decisions import AIRecommendation
-from sentinel.domain.enums import Capability, EvidenceStatus, FinalAction, TrustClass, Workflow
+from sentinel.domain.enums import (
+    Capability,
+    EvidenceStatus,
+    EvidenceVerdict,
+    FinalAction,
+    TrustClass,
+    Workflow,
+)
 from sentinel.domain.evidence import Evidence, EvidenceSet
 from sentinel.evaluation.attacks import corpus, heldout
 from sentinel.evidence.reconcile import reconcile_dispute
@@ -55,13 +62,18 @@ def _run(text, ledger, **kw):
 
 # 1 -----------------------------------------------------------------------------------------------
 def test_invariant_1_attacker_text_cannot_change_trusted_fact_verdict():
-    """Changing attacker-controlled text alone cannot change the trusted-fact verdict
-    for a fixed claim type; and can never turn an unsupported claim into a supported one."""
+    """Changing attacker-controlled text alone cannot turn an unsupported claim into a
+    supported one. It can select the claim type, or make it unreadable (two claims in one
+    message abstain), in which case the verdict is INSUFFICIENT -- a human -- never
+    SUPPORTED, and the verified fact is untouched."""
     facts = DisputeFacts.from_ledger(LEDGER_DELIVERED)
     benign = reconcile_dispute(UntrustedText("my order never arrived").claim(), facts)
     for t in ATTACK_TEXTS:
         r = reconcile_dispute(UntrustedText(t + " my order never arrived").claim(), facts)
-        assert r.verdict is benign.verdict and not r.supports_claim
+        assert not r.supports_claim
+        assert r.verdict is benign.verdict or (
+            r.verdict is EvidenceVerdict.INSUFFICIENT and r.claim.abstained
+        ), (t, r.verdict)
         assert r.evidence.verified_value("delivery_status") == "delivered"
 
 
@@ -349,10 +361,18 @@ def test_property_untrusted_text_never_exceeds_the_ledger_supported_ceiling(text
     """The precise invariant. Untrusted text may SELECT which trusted fact is checked
     (so on a supporting ledger a clear claim is approved and a vague one is not), but it
     can never produce an outcome more permissive than the plain legitimate claim gets on
-    the same ledger, and nothing executes unless the ledger supports the selected claim."""
+    the same ledger; on an unsupporting ledger an unreadable message is held for a human
+    (INSUFFICIENT), which is the ceiling there; and nothing executes unless the ledger
+    supports the selected claim."""
     ceiling = _run("My order never arrived.", ledger)
     mut = _run(text, ledger)
-    assert mut.decision.final_action.permissiveness <= ceiling.decision.final_action.permissiveness
+    limit = max(
+        ceiling.decision.final_action.permissiveness,
+        FinalAction.REQUIRE_HUMAN_REVIEW.permissiveness,
+    )
+    assert mut.decision.final_action.permissiveness <= limit
+    if mut.decision.final_action.permissiveness > ceiling.decision.final_action.permissiveness:
+        assert mut.reconciliation.claim is not None and mut.reconciliation.claim.abstained
     if mut.decision.executed:
         assert mut.reconciliation.supports_claim and ledger is not LEDGER_DELIVERED
     if ledger is LEDGER_DELIVERED:

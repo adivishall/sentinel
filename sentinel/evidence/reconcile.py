@@ -74,10 +74,15 @@ def reconcile_dispute(
     contradictions = find_contradictions(evidence)
 
     ct = claim.claim_type
-    if ct is ClaimType.UNSPECIFIED:
+    if ct is ClaimType.UNSPECIFIED and claim.abstained:
+        verdict, why = (
+            EvidenceVerdict.INSUFFICIENT,
+            "the claim could not be read from the submission; held for a human",
+        )
+    elif ct is ClaimType.UNSPECIFIED:
         verdict, why = (
             EvidenceVerdict.UNSUPPORTED,
-            "no recognisable claim to verify against the ledger",
+            "no refundable claim is asserted (recognised non-claim)",
         )
     elif ct is ClaimType.IN_TRANSIT:
         if facts.delivery_status == "delivered":
