@@ -14,6 +14,7 @@ import os
 import sys
 import uuid
 from collections import Counter
+from datetime import UTC, datetime
 from typing import Any
 
 trace_id: contextvars.ContextVar[str | None] = contextvars.ContextVar("trace_id", default=None)
@@ -23,6 +24,7 @@ request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar("request
 class _JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
+            "timestamp": datetime.now(UTC).isoformat(timespec="milliseconds"),
             "level": record.levelname,
             "logger": record.name,
             "msg": record.getMessage(),
@@ -58,16 +60,32 @@ def log_decision(logger: logging.Logger, decision: Any) -> None:
         extra={
             "detail": {
                 "decision_id": decision.decision_id,
+                "case_id": decision.case_id,
                 "workflow": decision.workflow.value,
                 "entity_id": decision.subject_id,
+                "entity_type": decision.subject_type,
                 "risk_score": decision.risk_score,
+                "risk_level": decision.risk_level.value,
                 "policy_version": f"{decision.policy.policy_id}@v{decision.policy.version}",
+                "policy_hash": decision.policy.policy_hash,
+                "policy_outcome": decision.policy.outcome.value,
                 "capability": (
                     decision.requested_capability.value if decision.requested_capability else None
                 ),
+                "executed_capability": (
+                    decision.executed_capability.value if decision.executed_capability else None
+                ),
                 "action": decision.final_action.value,
                 "security_event": decision.security_event_id,
+                "security_severity": decision.security_severity.value,
+                "evidence_verdict": decision.evidence_verdict.value,
+                "ai_recommendation": (
+                    decision.ai_recommendation.recommended_action
+                    if decision.ai_recommendation
+                    else None
+                ),
                 "input_hash": decision.input_hash,
+                "timestamp": decision.created_at,
             }
         },
     )
