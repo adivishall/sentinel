@@ -46,7 +46,6 @@ def test_narrative_never_reaches_the_policy_context_or_audit():
         inp.actor,
         inp.controls,
         inp.claim_type,
-        inp.extra_context,
     )
     ctx = build_policy_context(view)
     assert "TOTALLY-UNIQUE" not in str(ctx)

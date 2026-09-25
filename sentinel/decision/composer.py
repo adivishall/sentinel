@@ -18,7 +18,7 @@ model's stated verdict is believed). The protected path is always ``FULL``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from sentinel.domain.decisions import (
     AIRecommendation,
@@ -78,12 +78,13 @@ class DecisionInputs:
     provider: str = "offline"
     model: str = "offline-simulator"
     claim_type: str | None = None
-    extra_context: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class _TrustedView:
-    """Everything ``_decide`` may look at. Note: no AIRecommendation field."""
+    """Everything ``_decide`` may look at. Note: no AIRecommendation field, and no
+    free-form context: every policy input is either computed here from trusted
+    inputs or is a named trusted fact from the workflow."""
 
     workflow: Workflow
     amount: int
@@ -97,7 +98,6 @@ class _TrustedView:
     actor: ActorKind
     controls: frozenset[str]
     claim_type: str | None
-    extra_context: dict[str, object]
 
 
 _NO_SECURITY = SecurityAssessment(
@@ -131,9 +131,7 @@ def build_policy_context(v: _TrustedView) -> dict[str, object]:
         "threat_classes": [t.value for t in sec.threat_classes],
     }
     for k, val in v.facts.items():
-        ctx.setdefault(k, val)
-    for k, val in v.extra_context.items():
-        ctx.setdefault(k, val)
+        ctx.setdefault(k, val)  # a fact can never overwrite a computed field
     return ctx
 
 
@@ -249,7 +247,6 @@ def compose(inputs: DecisionInputs) -> Decision:
         actor=inputs.actor,
         controls=inputs.controls,
         claim_type=inputs.claim_type,
-        extra_context=inputs.extra_context,
     )
     pol, auth, action, reason, context = _decide(view)
 

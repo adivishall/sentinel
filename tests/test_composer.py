@@ -203,7 +203,6 @@ def test_policy_context_never_contains_model_output():
         inp.actor,
         inp.controls,
         inp.claim_type,
-        {},
     )
     ctx = composer.build_policy_context(view)
     assert not any(("recommend" in k) or ("model" in k) or k.startswith("ai_") for k in ctx)

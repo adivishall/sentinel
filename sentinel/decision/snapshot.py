@@ -171,5 +171,4 @@ def restore(
         provider=d.get("provider", "offline"),
         model=d.get("model", "offline-simulator"),
         claim_type=d.get("claim_type"),
-        extra_context=dict(d.get("extra_context", {})),
     )

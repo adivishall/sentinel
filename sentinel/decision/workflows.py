@@ -768,11 +768,6 @@ def run_investigation(
         session_id=opts.session_id,
         provider=provider,
         model=model,
-        extra_context={
-            "requested_capability": (
-                ai.requested_capability.value if (ai and ai.requested_capability) else "NONE"
-            )
-        },
     )
     return _finish(
         rt,
