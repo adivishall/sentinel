@@ -35,7 +35,7 @@ from sentinel.domain.serialization import to_dict
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS customers (customer_id TEXT PRIMARY KEY, name TEXT, home_country TEXT, segment TEXT, created_at TEXT, risk_level TEXT);
-CREATE TABLE IF NOT EXISTS accounts (account_id TEXT PRIMARY KEY, customer_id TEXT, opened_at TEXT, status TEXT, payout_instrument_id TEXT, mfa_enabled INTEGER);
+CREATE TABLE IF NOT EXISTS accounts (account_id TEXT PRIMARY KEY, customer_id TEXT, opened_at TEXT, status TEXT, payout_instrument_id TEXT, mfa_enabled INTEGER, status_since TEXT);
 CREATE TABLE IF NOT EXISTS merchants (merchant_id TEXT PRIMARY KEY, name TEXT, mcc TEXT, mcc_risk TEXT, country TEXT, owner_id TEXT, domain TEXT, registered_at TEXT, registration_status TEXT, prior_flags INTEGER);
 CREATE TABLE IF NOT EXISTS devices (device_id TEXT PRIMARY KEY, fingerprint TEXT, first_seen TEXT, platform TEXT);
 CREATE TABLE IF NOT EXISTS account_devices (account_id TEXT, device_id TEXT, PRIMARY KEY (account_id, device_id));
@@ -80,6 +80,9 @@ class SentinelStore:
         self._lock = threading.RLock()
         with self._lock:
             self._conn.executescript(SCHEMA)
+            cols = {r[1] for r in self._conn.execute("PRAGMA table_info(accounts)")}
+            if "status_since" not in cols:  # a store created before 2.2.0
+                self._conn.execute("ALTER TABLE accounts ADD COLUMN status_since TEXT")
             self._conn.commit()
 
     # ---- generic ------------------------------------------------------------------
@@ -123,7 +126,7 @@ class SentinelStore:
             ],
         )
         self._many(
-            "INSERT OR REPLACE INTO accounts VALUES (?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO accounts VALUES (?,?,?,?,?,?,?)",
             [
                 (
                     a.account_id,
@@ -132,6 +135,7 @@ class SentinelStore:
                     a.status,
                     a.payout_instrument_id,
                     int(a.mfa_enabled),
+                    a.status_since,
                 )
                 for a in ds.accounts
             ],
@@ -285,6 +289,7 @@ class SentinelStore:
                 r["status"],
                 r["payout_instrument_id"],
                 bool(r["mfa_enabled"]),
+                r["status_since"],
             )
             if r
             else None
@@ -299,6 +304,7 @@ class SentinelStore:
                 r["status"],
                 r["payout_instrument_id"],
                 bool(r["mfa_enabled"]),
+                r["status_since"],
             )
             for r in self._rows("SELECT * FROM accounts")
         ]
@@ -371,6 +377,15 @@ class SentinelStore:
 
     def instruments(self) -> list[PaymentInstrument]:
         return [self._instrument(r) for r in self._rows("SELECT * FROM payment_instruments")]
+
+    def instruments_for(self, account_id: str) -> list[PaymentInstrument]:
+        return [
+            self._instrument(r)
+            for r in self._rows(
+                "SELECT * FROM payment_instruments WHERE account_id = ? ORDER BY added_at",
+                (account_id,),
+            )
+        ]
 
     @staticmethod
     def _txn(r: sqlite3.Row) -> Transaction:

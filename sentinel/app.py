@@ -208,12 +208,16 @@ class SentinelApp:
             for s in self.store.sessions(account_id=t.account_id, limit=500)
             if s.started_at <= at and parse_ts(s.started_at) >= ts - timedelta(hours=24)
         )
-        acc = self.store.account(t.account_id)
-        payout_shared = 0
-        if acc and acc.payout_instrument_id:
-            payout = self.store.instrument(acc.payout_instrument_id)
-            if payout and payout.added_at <= at:
-                payout_shared = len(w.graph.accounts_sharing_instrument(payout.identity, as_of=at))
+        # Payout sharing as of T: the bank accounts this account held at T, each looked up by
+        # identity. Not the account's CURRENT payout field, which a later change would move.
+        payout_shared = max(
+            (
+                len(w.graph.accounts_sharing_instrument(i.identity, as_of=at))
+                for i in self.store.instruments_for(t.account_id)
+                if i.kind == "bank_account" and i.added_at <= at
+            ),
+            default=0,
+        )
         return txn_risk.TransactionContext(
             baseline=baseline,
             account=self.store.account(t.account_id),
@@ -261,7 +265,7 @@ class SentinelApp:
             hours,
             len(recent),
             max(1, len(known_dev)),
-            bool(acc and acc.status == "frozen"),
+            bool(acc and acc.status_at(s.started_at) == "frozen"),
         )
 
     def monitoring_context(
@@ -318,7 +322,11 @@ class SentinelApp:
         b = run_transaction(
             self._rt(options),
             TransactionRequest(
-                t, ctx, acc.status if acc else "unknown", mprof.level.value, untrusted
+                t,
+                ctx,
+                acc.status_at(t.timestamp) if acc else "unknown",
+                mprof.level.value,
+                untrusted,
             ),
             options,
         )

@@ -30,6 +30,16 @@ class Account:
     status: str = "active"  # active | frozen | closed
     payout_instrument_id: str | None = None
     mfa_enabled: bool = True
+    # When ``status`` took effect. Point-in-time reads use ``status_at``: before this
+    # moment the account was active. ``None`` = the status has no recorded start (legacy
+    # data) and is read as current state (docs/LIMITATIONS.md).
+    status_since: str | None = None
+
+    def status_at(self, at: str) -> str:
+        """The account's status as of ``at``."""
+        if self.status != "active" and self.status_since is not None and self.status_since > at:
+            return "active"
+        return self.status
 
 
 @dataclass(frozen=True)

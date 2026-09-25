@@ -179,6 +179,10 @@ def run_suite(
             "temporal": {
                 k2: tl.get(k2)
                 for k2 in (
+                    "decisions_tested",
+                    "leakage_count",
+                    "leakage_rate",
+                    "leakage_upper_95",
                     "truncation_mismatch_rate",
                     "perturbation_transaction_change_rate",
                     "perturbation_monitoring_change_rate",

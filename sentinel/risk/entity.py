@@ -10,10 +10,11 @@ transactions, disputes, device links and instrument links that existed at that
 moment are read, and ages are measured to that moment. A transaction scored at
 T1 therefore sees the merchant and device the way they looked at T1, and a
 dispute filed a week later cannot change how T1 was scored. The default
-``as_of`` is the dataset's "now". Two things are *not* historised because the
-records carry no history for them: an account's ``status`` (frozen / active)
-and a merchant's ``prior_flags`` -- both are current-state fields, and that is
-documented in ``docs/RISK_ENGINE.md``.
+``as_of`` is the dataset's "now". An account's ``status`` is read as of the time
+(``Account.status_at``: a freeze counts from ``status_since``). A merchant's
+``prior_flags`` are the flags the acquirer reported at registration, a static
+attribute; a flag raised later would need its own dated record, which the data
+model does not have (``docs/LIMITATIONS.md``).
 
 A transaction's ``linked_entity_risk`` reads the *precomputed* device / account
 profiles at the same as-of, which never depend on the transaction being scored.
@@ -117,7 +118,9 @@ class EntityRiskEngine:
                     f"{len(accts)} accounts use this device",
                 )
             )
-        frozen = [a for a in accts if self.accounts.get(a) and self.accounts[a].status == "frozen"]
+        frozen = [
+            a for a in accts if self.accounts.get(a) and self.accounts[a].status_at(at) == "frozen"
+        ]
         if frozen:
             factors.append(
                 RiskFactor(
@@ -254,7 +257,7 @@ class EntityRiskEngine:
             )
         if _days_between(a.opened_at, at) < 30:
             factors.append(RiskFactor("account_young", "Account opened < 30 days ago", 10))
-        if a.status == "frozen":
+        if a.status_at(at) == "frozen":
             factors.append(RiskFactor("account_frozen", "Account is frozen", 30))
         dev_scores = [
             self.device_risk(d, at).score for d in self.graph.devices_for_account(account_id, at)

@@ -99,8 +99,36 @@ def test_generator_never_dates_a_record_before_its_account_or_device_existed():
         assert s.started_at >= opened[s.account_id] and s.started_at >= seen[s.device_id]
 
 
-def test_benchmark_reports_zero_leakage():
-    r = temporal.run(seed=3, sample=10)
-    assert r["truncation_mismatch_rate"] == 0.0, r["truncation_mismatches"]
-    assert r["perturbation_transaction_change_rate"] == 0.0
-    assert r["perturbation_monitoring_change_rate"] == 0.0
+def test_benchmark_reports_zero_leakage_over_every_kind():
+    r = temporal.run(seeds=(3,), sample=10)
+    assert r["leakage_count"] == 0, r["perturbation_examples"] + r["truncation_mismatches"]
+    assert set(r["perturbation_by_kind"]) == set(temporal.KINDS)
+    assert r["decisions_tested"] == 10 + 2 * 10 * len(temporal.KINDS)
+    assert 0 < r["leakage_upper_95"] < 0.02  # exact 95% bound for 0 leaks in 190 decisions
+
+
+@pytest.mark.parametrize("kind", ["account_status", "payout_change"])
+def test_current_state_fields_are_read_as_of_the_decision(world, kind):
+    """The two leaks the extended benchmark found (2.2.0): a freeze and a payout change
+    after T1 changed T1's transaction features (linked-entity risk, payout sharing) and
+    the monitor's linked risk, because both read the account's CURRENT fields."""
+    ds, app, picked = world
+    for t in picked:
+        ref = _txn_view(app, t)
+        mon_ref = monitoring.assess_account_activity(
+            app.monitoring_context(t.account_id, t.timestamp)
+        )
+        pds, _ = temporal.perturb(ds, t.account_id, t.timestamp, (1, 30), kind)
+        pert = SentinelApp(persist=False)
+        pert.load_dataset(pds)
+        assert _txn_view(pert, t) == ref, (kind, t.transaction_id)
+        mon = monitoring.assess_account_activity(pert.monitoring_context(t.account_id, t.timestamp))
+        assert (mon.score, mon.features) == (mon_ref.score, mon_ref.features)
+        if kind == "account_status":  # and the freeze IS visible after it happened
+            acc = pert.store.account(t.account_id)
+            assert acc.status_at(t.timestamp) == "active" and acc.status_at(ds.as_of) == "frozen"
+
+
+def test_upper_bound_is_exact_for_zero_failures():
+    assert temporal.upper_95(0, 3000) == pytest.approx(1 - 0.05 ** (1 / 3000))
+    assert temporal.upper_95(1, 3000) is None and temporal.upper_95(0, 0) is None
