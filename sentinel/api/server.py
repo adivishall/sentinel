@@ -569,13 +569,23 @@ def build_routes(app: SentinelApp) -> Router:
     r.add("POST", "/v1/policies/validate", policy_validate)
 
     def policy_lint(q: Any, b: Any, p: Any) -> Any:
+        """Lint a policy document, or a shipped policy named by ``{policy_id, version?}``."""
         from sentinel.policy import lint
         from sentinel.policy.loader import policy_from_dict
 
-        try:
-            pol = policy_from_dict(S.obj(b))
-        except PolicyValidationError as e:
-            raise S.ValidationError(str(e)) from None
+        d = S.obj(b)
+        if "rules" not in d and "policy_id" in d:
+            pid = S.req_str(d, "policy_id", max_len=60)
+            ver = d.get("version")
+            try:
+                pol = app.runtime.policies.get(pid, int(ver) if ver is not None else None)
+            except (KeyError, ValueError, TypeError) as e:
+                raise ApiError(404, str(e)) from None
+        else:
+            try:
+                pol = policy_from_dict(d)
+            except PolicyValidationError as e:
+                raise S.ValidationError(str(e)) from None
         findings = lint(pol)
         return {"valid": True, "clean": not findings, "findings": findings, "policy": pol.key}
 

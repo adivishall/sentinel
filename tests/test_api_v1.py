@@ -302,6 +302,12 @@ def test_capability_matrix_policy_lint_and_review_packet(server, app):
     assert not any(r["ai_agent_allowed"] for r in rows.values() if r["consequential"])
     assert rows["SKIP_REVIEW"]["allowed_actors"] == [] and rows["CLOSE_CASE"]["consequential"]
     assert any("account-security" in g for g in rows["UNFREEZE_ACCOUNT"]["policy_gates"])
+    s, byid = _post(server + "/v1/policies/lint", {"policy_id": "dispute-refund", "version": 3})
+    assert s == 200 and byid["clean"] and byid["policy"] == "dispute-refund@v3"
+    s, latest = _post(server + "/v1/policies/lint", {"policy_id": "dispute-refund"})
+    assert s == 200 and latest["policy"] == "dispute-refund@v3"
+    code, missing = _err(_post, server + "/v1/policies/lint", {"policy_id": "no-such-policy"})
+    assert code == 404 and missing["code"] == "not_found"
     s, lint = _post(
         server + "/v1/policies/lint",
         {

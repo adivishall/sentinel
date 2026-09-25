@@ -111,6 +111,8 @@ def test_attack_compare_mode_labels_both_paths(app):
     assert wo["label"].startswith("WITHOUT SENTINEL") and "simulator" in wo["caveat"]
     assert wi["label"].startswith("WITH SENTINEL") and wi["controls"]
     assert wo["decision"]["executed_capability"] == "UNFREEZE_ACCOUNT" and wo["controls"] == []
+    assert wo["headline"].startswith("UNFREEZE_ACCOUNT executed on a claim the trusted records")
+    assert wi["headline"].startswith("The AI was persuaded")
     assert (
         wi["decision"]["executed_capability"] is None and wi["decision"]["final_action"] == "BLOCK"
     )
