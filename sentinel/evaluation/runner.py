@@ -16,6 +16,7 @@ from sentinel.evaluation import (
     integrity,
     kyb,
     models,
+    temporal,
 )
 from sentinel.evaluation.attacks import corpus
 from sentinel.evaluation.common import write_json
@@ -28,6 +29,7 @@ SUITES = (
     "ablation",
     "financial",
     "integrity",
+    "temporal",
     "performance",
     "models",
     "charts",
@@ -55,6 +57,8 @@ def run_suite(name: str = "full", out_dir: str = "results", full: bool = False) 
             results[n] = financial.main(out_dir, full=full)
         elif n == "integrity":
             results[n] = integrity.main(out_dir)
+        elif n == "temporal":
+            results[n] = temporal.main(out_dir)
         elif n == "performance":
             results[n] = bench.main(out_dir)
         elif n == "models":
@@ -64,7 +68,7 @@ def run_suite(name: str = "full", out_dir: str = "results", full: bool = False) 
         else:
             raise SystemExit(f"unknown suite {n!r}; choose from full, {', '.join(SUITES)}")
     if name == "full":
-        s, h, k, b, a, f, i, p = (
+        s, h, k, b, a, f, i, p, tl = (
             results.get(x, {})
             for x in (
                 "security",
@@ -75,6 +79,7 @@ def run_suite(name: str = "full", out_dir: str = "results", full: bool = False) 
                 "financial",
                 "integrity",
                 "performance",
+                "temporal",
             )
         )
         summary = {
@@ -131,6 +136,14 @@ def run_suite(name: str = "full", out_dir: str = "results", full: bool = False) 
                     "text_beyond_ledger_ceiling",
                     "executed_without_ledger_support",
                     "attack_text_approved_on_supporting_ledger",
+                )
+            },
+            "temporal": {
+                k2: tl.get(k2)
+                for k2 in (
+                    "truncation_mismatch_rate",
+                    "perturbation_transaction_change_rate",
+                    "perturbation_monitoring_change_rate",
                 )
             },
             "performance": {k2: v.get("p95_ms") for k2, v in p.get("components", {}).items()},

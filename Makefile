@@ -40,7 +40,7 @@ ui: api           ## alias: the console is served by the API
 snapshot:         ## static console snapshot (GitHub Pages) computed by the real engine
 	$(PY) -m sentinel --db :memory: ui snapshot --out ui/snapshot.json
 
-eval:             ## full evaluation: security · held-out · KYB · baselines · ablation · financial · integrity · performance · models · charts
+eval:             ## full evaluation: security · held-out · KYB · baselines · ablation · financial · integrity · temporal · performance · models · charts
 	$(PY) -m sentinel eval run --suite full
 
 eval-quick:       ## the CI subset
@@ -48,6 +48,7 @@ eval-quick:       ## the CI subset
 	$(PY) -m sentinel eval run --suite heldout
 	$(PY) -m sentinel eval run --suite ablation
 	$(PY) -m sentinel eval run --suite integrity
+	$(PY) -m sentinel eval run --suite temporal
 
 bench:            ## component + end-to-end latency benchmark
 	$(PY) -m sentinel bench

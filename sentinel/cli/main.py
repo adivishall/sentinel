@@ -725,6 +725,7 @@ def build_parser() -> argparse.ArgumentParser:
             "ablation",
             "financial",
             "integrity",
+            "temporal",
             "performance",
             "models",
             "charts",
