@@ -1,4 +1,4 @@
-.PHONY: help install test lint typecheck cov eval bench docs demo api ui snapshot data analyze attack audit-verify replay docker-build docker-run clean live-check
+.PHONY: help install test lint typecheck cov eval bench docs demo api ui snapshot data analyze attack audit-verify audit-checkpoint replay docker-build docker-run clean live-check
 
 PY ?= python3
 DB ?= data/sentinel.db
@@ -57,6 +57,9 @@ docs:             ## re-render docs/EVALUATION.md, docs/PERFORMANCE.md and the R
 
 audit-verify:     ## verify the tamper-evident audit chain in $(DB)
 	$(PY) -m sentinel --db $(DB) audit verify
+
+audit-checkpoint: ## export a (signed, if SENTINEL_AUDIT_KEY is set) checkpoint of the chain head
+	$(PY) -m sentinel --db $(DB) audit checkpoint --out audit-checkpoint.json
 
 live-check:       ## one Claude call to verify the key + model (needs ANTHROPIC_API_KEY)
 	SENTINEL_FORCE_OFFLINE=0 $(PY) scripts/live_check.py

@@ -388,15 +388,34 @@ def cmd_policy(args: argparse.Namespace) -> int:
 
 def cmd_audit(args: argparse.Namespace) -> int:
     app = _app(args)
+    from sentinel.audit.chain import Checkpoint, checkpoint_key
+
     if args.audit_command == "verify":
-        v = app.verify_audit()
+        if getattr(args, "checkpoint", None):
+            cp = Checkpoint.from_dict(_load_json(args.checkpoint))
+            v = app.runtime.audit.verify_checkpoint(cp, checkpoint_key())
+            what = (
+                f"chain + checkpoint ({cp.length} events, {'signed' if cp.signed else 'unsigned'})"
+            )
+        else:
+            v = app.verify_audit()
+            what = "chain"
         _out(
             args,
             to_dict(v),
-            f"audit chain: {'OK' if v.ok else 'TAMPERED'}  length={v.length}  head={v.head_hash[:16]}…"
+            f"audit {what}: {'OK' if v.ok else 'TAMPERED'}  length={v.length}  head={v.head_hash[:16]}…"
             + ("" if v.ok else "\n  " + "\n  ".join(v.problems)),
         )
         return 0 if v.ok else 2
+    if args.audit_command == "checkpoint":
+        cp = app.runtime.audit.checkpoint(checkpoint_key())
+        with open(args.out, "w", encoding="utf-8") as fh:
+            json.dump(cp.to_dict(), fh, indent=2)
+        print(
+            f"checkpoint written -> {args.out}  ({cp.length} events, head {cp.head_hash[:16]}…, "
+            f"{'HMAC-signed' if cp.signed else 'unsigned; set SENTINEL_AUDIT_KEY to sign'})"
+        )
+        return 0
     if args.audit_command == "show":
         ev = app.audit_event(args.id)
         if ev is None:
@@ -409,7 +428,7 @@ def cmd_audit(args: argparse.Namespace) -> int:
                 fh.write(json.dumps(e, sort_keys=True, separators=(",", ":"), default=str) + "\n")
         print(f"exported {len(events)} events -> {args.path}")
     elif args.audit_command == "list":
-        for e in app.runtime.audit.events()[-args.limit :]:
+        for e in app.runtime.audit.tail(args.limit):
             print(
                 f"#{e.sequence:<5} {e.timestamp} {e.workflow:<20} {e.action:<22} {e.decision_id or '-':<20} {e.event_hash[:12]}"
             )
@@ -665,7 +684,11 @@ def build_parser() -> argparse.ArgumentParser:
     po.add_parser("validate").add_argument("file")
 
     au = sub.add_parser("audit").add_subparsers(dest="audit_command", required=True)
-    au.add_parser("verify")
+    av = au.add_parser("verify")
+    av.add_argument("--checkpoint", help="also verify against an exported checkpoint file")
+    au.add_parser("checkpoint").add_argument(
+        "--out", default="audit-checkpoint.json", help="write {length, head_hash[, signature]}"
+    )
     au.add_parser("show").add_argument("id")
     au.add_parser("export").add_argument("path")
     au.add_parser("list").add_argument("--limit", type=int, default=20)

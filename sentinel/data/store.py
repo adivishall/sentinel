@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS ai_recommendations (decision_id TEXT PRIMARY KEY, age
 CREATE TABLE IF NOT EXISTS cases (case_id TEXT PRIMARY KEY, case_type TEXT, status TEXT, priority TEXT, title TEXT, created_at TEXT, updated_at TEXT, opened_by_rule TEXT, payload TEXT);
 CREATE INDEX IF NOT EXISTS ix_cases_status ON cases(status, created_at);
 CREATE TABLE IF NOT EXISTS audit_events (sequence INTEGER PRIMARY KEY, event_id TEXT UNIQUE, decision_id TEXT, previous_hash TEXT, event_hash TEXT, timestamp TEXT, payload TEXT);
+CREATE INDEX IF NOT EXISTS ix_audit_decision ON audit_events(decision_id, sequence);
 CREATE TABLE IF NOT EXISTS replays (replay_id TEXT PRIMARY KEY, decision_id TEXT, changed INTEGER, created_at TEXT, payload TEXT);
 CREATE TABLE IF NOT EXISTS policy_versions (policy_id TEXT, version INTEGER, workflow TEXT, payload TEXT, PRIMARY KEY (policy_id, version));
 """
@@ -900,6 +901,35 @@ class SqliteAuditBackend:
             json.loads(r["payload"])
             for r in self.store._rows("SELECT payload FROM audit_events ORDER BY sequence")
         ]
+
+    def count(self) -> int:
+        return self.store.count("audit_events")
+
+    def at(self, sequence: int) -> dict[str, object] | None:
+        r = self.store._one("SELECT payload FROM audit_events WHERE sequence = ?", (sequence,))
+        return dict(json.loads(r["payload"])) if r else None
+
+    def tail(self, n: int) -> list[dict[str, object]]:
+        rows = self.store._rows(
+            "SELECT payload FROM audit_events ORDER BY sequence DESC LIMIT ?", (max(0, n),)
+        )
+        return [json.loads(r["payload"]) for r in rows][::-1]
+
+    def find(
+        self, event_id: str | None = None, decision_id: str | None = None
+    ) -> dict[str, object] | None:
+        if event_id is not None:
+            r = self.store._one("SELECT payload FROM audit_events WHERE event_id = ?", (event_id,))
+            if r:
+                return dict(json.loads(r["payload"]))
+        if decision_id is not None:
+            r = self.store._one(
+                "SELECT payload FROM audit_events WHERE decision_id = ? ORDER BY sequence LIMIT 1",
+                (decision_id,),
+            )
+            if r:
+                return dict(json.loads(r["payload"]))
+        return None
 
 
 class SqliteCaseRepository:

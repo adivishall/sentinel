@@ -1,8 +1,18 @@
-"""Hash-chained audit events.
+"""Tamper-evident application audit chain.
 
 Each event carries the hash of the previous event; its own hash covers its
-content *and* that previous hash. Modifying, deleting or reordering any
-record breaks every hash after it, and ``verify`` names the first bad record.
+content *and* that previous hash. Modifying, deleting, inserting or reordering
+any record breaks every hash after it, and ``verify`` names the first bad
+record. This is an application-level audit chain -- not a blockchain and not
+an immutable ledger: a party who can rewrite the *whole* store from genesis
+can produce a consistent chain. An exported **checkpoint** (length + head hash,
+optionally HMAC-signed with ``SENTINEL_AUDIT_KEY``) held outside the store is
+what makes that rewrite detectable. ``docs/AUDIT_MODEL.md`` states exactly
+what is and is not protected.
+
+Lookups do not re-read the log: every backend answers ``find`` / ``at`` /
+``tail`` / ``count`` from an index (a dict, a byte-offset map, or SQL).
+Verification necessarily reads everything.
 
 Privacy: the chain stores hashes of untrusted content, never the content. A
 defensive ``redact`` pass hashes any stray raw-text field before it is written.
@@ -11,6 +21,7 @@ defensive ``redact`` pass hashes any stray raw-text field before it is written.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import threading
@@ -145,31 +156,106 @@ class ChainVerification:
 
 
 class AuditBackend(Protocol):
+    """Append-only storage plus indexed reads. ``read_all`` is for verification and
+    export; the other reads must not scan the whole log."""
+
     def append(self, record: dict[str, object]) -> None: ...
     def read_all(self) -> list[dict[str, object]]: ...
+    def count(self) -> int: ...
+    def at(self, sequence: int) -> dict[str, object] | None: ...
+    def tail(self, n: int) -> list[dict[str, object]]: ...
+    def find(
+        self, event_id: str | None = None, decision_id: str | None = None
+    ) -> dict[str, object] | None: ...
 
 
 class MemoryBackend:
     def __init__(self) -> None:
         self._rows: list[dict[str, object]] = []
+        self._by_event: dict[str, int] = {}
+        self._by_decision: dict[str, int] = {}
 
     def append(self, record: dict[str, object]) -> None:
+        i = len(self._rows)
         self._rows.append(record)
+        self._by_event[str(record["event_id"])] = i
+        d = record.get("decision_id")
+        if d is not None:
+            self._by_decision.setdefault(str(d), i)
 
     def read_all(self) -> list[dict[str, object]]:
         return list(self._rows)
 
+    def count(self) -> int:
+        return len(self._rows)
+
+    def at(self, sequence: int) -> dict[str, object] | None:
+        return self._rows[sequence] if 0 <= sequence < len(self._rows) else None
+
+    def tail(self, n: int) -> list[dict[str, object]]:
+        return list(self._rows[-n:]) if n > 0 else []
+
+    def find(
+        self, event_id: str | None = None, decision_id: str | None = None
+    ) -> dict[str, object] | None:
+        i = None
+        if event_id is not None:
+            i = self._by_event.get(event_id)
+        if i is None and decision_id is not None:
+            i = self._by_decision.get(decision_id)
+        return self._rows[i] if i is not None else None
+
 
 class JsonlBackend:
+    """One canonical JSON record per line. A byte-offset index (built lazily on the
+    first read, kept current by ``append``) makes lookups a seek, not a scan."""
+
     def __init__(self, path: str) -> None:
         self.path = path
+        self._offsets: list[int] | None = None  # sequence -> byte offset of its line
+        self._by_event: dict[str, int] = {}
+        self._by_decision: dict[str, int] = {}
+
+    def _ensure_index(self) -> list[int]:
+        if self._offsets is not None:
+            return self._offsets
+        offsets: list[int] = []
+        self._by_event, self._by_decision = {}, {}
+        if os.path.exists(self.path):
+            with open(self.path, "rb") as fh:
+                pos = 0
+                for raw in fh:
+                    ln = raw.strip()
+                    if ln:
+                        rec = json.loads(ln)
+                        self._register(rec, len(offsets))
+                        offsets.append(pos)
+                    pos += len(raw)
+        self._offsets = offsets
+        return offsets
+
+    def _register(self, rec: dict[str, object], seq: int) -> None:
+        self._by_event[str(rec["event_id"])] = seq
+        d = rec.get("decision_id")
+        if d is not None:
+            self._by_decision.setdefault(str(d), seq)
+
+    def _read_at_offset(self, offset: int) -> dict[str, object]:
+        with open(self.path, "rb") as fh:
+            fh.seek(offset)
+            return dict(json.loads(fh.readline()))
 
     def append(self, record: dict[str, object]) -> None:
+        offsets = self._ensure_index()
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-        with open(self.path, "a", encoding="utf-8") as fh:
-            fh.write(canonical(record) + "\n")
+        with open(self.path, "ab") as fh:
+            pos = fh.tell()
+            fh.write((canonical(record) + "\n").encode("utf-8"))
+        self._register(record, len(offsets))
+        offsets.append(pos)
 
     def read_all(self) -> list[dict[str, object]]:
+        self._offsets = None  # verification always re-reads from disk
         if not os.path.exists(self.path):
             return []
         out = []
@@ -179,6 +265,30 @@ class JsonlBackend:
                 if ln:
                     out.append(json.loads(ln))
         return out
+
+    def count(self) -> int:
+        return len(self._ensure_index())
+
+    def at(self, sequence: int) -> dict[str, object] | None:
+        offsets = self._ensure_index()
+        if 0 <= sequence < len(offsets):
+            return self._read_at_offset(offsets[sequence])
+        return None
+
+    def tail(self, n: int) -> list[dict[str, object]]:
+        offsets = self._ensure_index()
+        return [self._read_at_offset(o) for o in offsets[-n:]] if n > 0 else []
+
+    def find(
+        self, event_id: str | None = None, decision_id: str | None = None
+    ) -> dict[str, object] | None:
+        self._ensure_index()
+        seq = None
+        if event_id is not None:
+            seq = self._by_event.get(event_id)
+        if seq is None and decision_id is not None:
+            seq = self._by_decision.get(decision_id)
+        return self.at(seq) if seq is not None else None
 
 
 def verify_records(records: list[dict[str, object]]) -> ChainVerification:
@@ -213,15 +323,61 @@ def verify_records(records: list[dict[str, object]]) -> ChainVerification:
     return ChainVerification(not problems, len(records), tuple(problems), first_bad, prev)
 
 
+@dataclass(frozen=True)
+class Checkpoint:
+    """A statement, meant to be stored *outside* the audit store, that at ``length``
+    events the chain's head hash was ``head_hash``. With a key it is HMAC-signed."""
+
+    length: int
+    head_hash: str
+    created_at: str
+    algorithm: str = "sha256-chain"
+    signature: str | None = None  # HMAC-SHA256 over the canonical body, if a key was given
+
+    def body(self) -> dict[str, object]:
+        return {
+            "length": self.length,
+            "head_hash": self.head_hash,
+            "created_at": self.created_at,
+            "algorithm": self.algorithm,
+        }
+
+    @property
+    def signed(self) -> bool:
+        return self.signature is not None
+
+    def to_dict(self) -> dict[str, object]:
+        return {**self.body(), "signature": self.signature}
+
+    @classmethod
+    def from_dict(cls, d: dict[str, object]) -> Checkpoint:
+        return cls(
+            int(d["length"]),  # type: ignore[call-overload]
+            str(d["head_hash"]),
+            str(d.get("created_at", "")),
+            str(d.get("algorithm", "sha256-chain")),
+            str(d["signature"]) if d.get("signature") else None,
+        )
+
+
+def sign_checkpoint(body: dict[str, object], key: bytes) -> str:
+    return hmac.new(key, canonical(body).encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def checkpoint_key() -> bytes | None:
+    k = os.environ.get("SENTINEL_AUDIT_KEY")
+    return k.encode("utf-8") if k else None
+
+
 class AuditChain:
     """Append-only, hash-chained log over a backend. Thread-safe appends."""
 
     def __init__(self, backend: AuditBackend | None = None) -> None:
         self.backend: AuditBackend = backend or MemoryBackend()
         self._lock = threading.Lock()
-        rows = self.backend.read_all()
-        self._length = len(rows)
-        self._head = str(rows[-1]["event_hash"]) if rows else GENESIS
+        self._length = self.backend.count()
+        last = self.backend.tail(1)
+        self._head = str(last[-1]["event_hash"]) if last else GENESIS
 
     @property
     def head(self) -> str:
@@ -284,13 +440,58 @@ class AuditChain:
             return AuditEvent.from_dict(rec)
 
     def events(self) -> list[AuditEvent]:
+        """Every event (a full read; use ``tail`` for listings)."""
         return [AuditEvent.from_dict(r) for r in self.backend.read_all()]
 
+    def tail(self, n: int) -> list[AuditEvent]:
+        return [AuditEvent.from_dict(r) for r in self.backend.tail(n)]
+
+    def at(self, sequence: int) -> AuditEvent | None:
+        r = self.backend.at(sequence)
+        return AuditEvent.from_dict(r) if r else None
+
     def get(self, event_id: str) -> AuditEvent | None:
-        for r in self.backend.read_all():
-            if r.get("event_id") == event_id or r.get("decision_id") == event_id:
-                return AuditEvent.from_dict(r)
-        return None
+        """By event id, or the first event recorded for a decision id -- indexed."""
+        r = self.backend.find(event_id=event_id, decision_id=event_id)
+        return AuditEvent.from_dict(r) if r else None
 
     def verify(self) -> ChainVerification:
         return verify_records(self.backend.read_all())
+
+    # ---- checkpoints --------------------------------------------------------------
+    def checkpoint(self, key: bytes | None = None) -> Checkpoint:
+        """Export the current (length, head) for storage outside the audit store."""
+        body = {
+            "length": self._length,
+            "head_hash": self._head,
+            "created_at": now_iso(),
+            "algorithm": "sha256-chain",
+        }
+        sig = sign_checkpoint(body, key) if key else None
+        return Checkpoint(self._length, self._head, str(body["created_at"]), "sha256-chain", sig)
+
+    def verify_checkpoint(self, cp: Checkpoint, key: bytes | None = None) -> ChainVerification:
+        """Verify the chain AND that it still contains the checkpointed prefix: the
+        event at ``cp.length - 1`` must hash to ``cp.head_hash``. A consistent rewrite
+        from genesis passes ``verify`` but fails here."""
+        v = self.verify()
+        problems = list(v.problems)
+        if cp.signed:
+            if key is None:
+                problems.append("checkpoint is signed but no key was given (SENTINEL_AUDIT_KEY)")
+            elif not hmac.compare_digest(sign_checkpoint(cp.body(), key), cp.signature or ""):
+                problems.append("checkpoint signature does not verify (wrong key or edited file)")
+        elif key is not None:
+            problems.append("checkpoint is unsigned; it cannot be authenticated with the key")
+        if v.length < cp.length:
+            problems.append(
+                f"chain has {v.length} events but the checkpoint attests {cp.length} (truncated)"
+            )
+        elif cp.length > 0:
+            ev = self.at(cp.length - 1)
+            if ev is None or ev.event_hash != cp.head_hash:
+                problems.append(
+                    f"event #{cp.length - 1} hash does not match the checkpoint head (rewritten history)"
+                )
+        first_bad = v.first_bad_sequence
+        return ChainVerification(not problems, v.length, tuple(problems), first_bad, v.head_hash)

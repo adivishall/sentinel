@@ -87,7 +87,7 @@ def build_snapshot(app: Any, out: str = "ui/snapshot.json") -> str:
         "security_events": {"events": app.store.security_events(100)},
         "policies": {"policies": [p.to_dict() for p in app.runtime.policies.all()]},
         "audit": {
-            "events": [e.to_dict() for e in app.runtime.audit.events()[-100:]][::-1],
+            "events": [e.to_dict() for e in app.runtime.audit.tail(100)][::-1],
             "head": app.runtime.audit.head,
             "length": len(app.runtime.audit),
         },
