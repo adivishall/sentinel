@@ -485,6 +485,11 @@ def build_routes(app: SentinelApp) -> Router:
     )
     r.add("POST", "/v1/cases", case_create)
     r.add("GET", "/v1/cases/(?P<id>[^/]+)", lambda q, b, p: _case_view(app, p["id"]))
+    r.add(
+        "GET",
+        "/v1/cases/(?P<id>[^/]+)/review",
+        lambda q, b, p: _or404(app.review_packet(p["id"]), "case"),
+    )
     r.add("POST", "/v1/cases/(?P<id>[^/]+)/transition", case_transition)
     r.add("POST", "/v1/cases/(?P<id>[^/]+)/decision", case_decide)
 
@@ -543,6 +548,29 @@ def build_routes(app: SentinelApp) -> Router:
     )
     r.add("POST", "/v1/policies/evaluate", policy_eval)
     r.add("POST", "/v1/policies/validate", policy_validate)
+
+    def policy_lint(q: Any, b: Any, p: Any) -> Any:
+        from sentinel.policy import lint
+        from sentinel.policy.loader import policy_from_dict
+
+        try:
+            pol = policy_from_dict(S.obj(b))
+        except PolicyValidationError as e:
+            raise S.ValidationError(str(e)) from None
+        findings = lint(pol)
+        return {"valid": True, "clean": not findings, "findings": findings, "policy": pol.key}
+
+    r.add("POST", "/v1/policies/lint", policy_lint)
+    r.add(
+        "GET",
+        "/v1/capabilities",
+        lambda q, b, p: {
+            "capabilities": __import__(
+                "sentinel.security.capabilities", fromlist=["matrix"]
+            ).matrix(),
+            "invariant": "no AI actor may execute a consequential capability; SKIP_REVIEW has no actor",
+        },
+    )
     r.add(
         "GET",
         "/v1/policies/(?P<id>[^/]+)",

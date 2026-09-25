@@ -106,9 +106,17 @@ class SentinelApp:
         return ds.summary()
 
     def generate_dataset(
-        self, seed: int, customers: int, merchants: int, transactions: int
+        self,
+        seed: int,
+        customers: int,
+        merchants: int,
+        transactions: int,
+        *,
+        profile: str = "balanced",
     ) -> dict[str, object]:
-        return self.load_dataset(generate(seed, customers, merchants, transactions))
+        return self.load_dataset(
+            generate(seed, customers, merchants, transactions, profile=profile)
+        )
 
     @property
     def world(self) -> _World:
@@ -766,6 +774,62 @@ class SentinelApp:
 
     def case(self, case_id: str) -> Case | None:
         return self.runtime.cases.get(case_id)
+
+    def review_packet(self, case_id: str) -> dict[str, Any] | None:
+        """Everything a human reviewer needs, in one object, with the AI recommendation
+        explicitly separated from the trusted evidence and the deterministic decision."""
+        c = self.runtime.cases.get(case_id)
+        if c is None:
+            return None
+        decisions = [d for d in (self.store.decision(x) for x in c.decision_ids) if d]
+        latest = decisions[-1] if decisions else None
+        evidence = self.store.evidence_for(latest["decision_id"]) if latest else []
+        risk = (
+            self.store.risk_assessment(latest["risk_assessment_id"])
+            if latest and latest.get("risk_assessment_id")
+            else None
+        )
+        audit = [self.audit_event(x) for x in c.audit_event_ids]
+        events = [self.store.security_event(x) for x in c.security_event_ids]
+        return {
+            "case": to_dict(c),
+            "why_this_case_exists": {
+                "rule": c.opened_by_rule,
+                "reason": latest["reason"] if latest else "",
+                "human_review_reason": latest["human_review"]["reason"] if latest else "",
+                "final_action": latest["final_action"] if latest else None,
+            },
+            "risk": {
+                "score": latest["risk_score"] if latest else None,
+                "level": latest["risk_level"] if latest else None,
+                "factors": (risk or {}).get("factors", []),
+                "components": (risk or {}).get("components", {}),
+                "model_version": (risk or {}).get("model_version"),
+            },
+            "trusted_evidence": [e for e in evidence if e["status"] == "VERIFIED"],
+            "untrusted_claims": [e for e in evidence if e["status"] != "VERIFIED"],
+            "contradictions": latest["contradiction_count"] if latest else 0,
+            "ai_recommendation": (
+                {
+                    "note": "MODEL_GENERATED -- recorded for context, NOT a decision and NOT evidence",
+                    **(latest["ai_recommendation"] or {}),
+                }
+                if latest and latest.get("ai_recommendation")
+                else None
+            ),
+            "policy": latest["policy"] if latest else None,
+            "capability": {
+                "requested": latest["requested_capability"] if latest else None,
+                "authorization": latest["authorization"] if latest else None,
+                "executed": latest["executed_capability"] if latest else None,
+            },
+            "security_events": [e for e in events if e],
+            "human_decisions": [to_dict(h) for h in c.human_decisions],
+            "timeline": [to_dict(e) for e in c.events],
+            "audit_history": [a for a in audit if a],
+            "decisions": decisions,
+            "principle": "AI recommendation != final decision. Only a human can resolve this case.",
+        }
 
     def audit_event(self, event_or_decision_id: str) -> dict[str, Any] | None:
         ev = self.runtime.audit.get(event_or_decision_id)

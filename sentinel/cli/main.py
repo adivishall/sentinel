@@ -1,7 +1,7 @@
 """``sentinel`` -- the CLI. Every command calls the same SentinelApp the API
 and console use.
 
-    sentinel data generate --seed 42 --customers 500 --merchants 60 --transactions 20000
+    sentinel data generate --seed 42 --customers 500 --merchants 60 --transactions 20000 [--profile fraud-heavy]
     sentinel analyze
     sentinel transaction evaluate TX-000123 | file.json
     sentinel dispute evaluate dispute.json | --id DSP-000001
@@ -13,6 +13,8 @@ and console use.
     sentinel risk explain transaction TX-000123
     sentinel case list | case show CASE-... | case transition CASE-... INVESTIGATING | case decide CASE-... approve
     sentinel policy list | policy show dispute-refund --version 2 | policy evaluate ctx.json --policy dispute-refund
+    sentinel policy validate file.json | policy lint        # configuration problems before activation
+    sentinel capability list                                # the capability security matrix
     sentinel audit verify | audit show ID | audit export audit.jsonl
     sentinel replay run DEC-... --policy-version 2 --risk-model txn-1.1 --rule review-critical-risk=70
     sentinel scenario list | scenario run account_takeover
@@ -111,7 +113,9 @@ def _options(args: argparse.Namespace) -> Any:
 def cmd_data(args: argparse.Namespace) -> int:
     app = _app(args)
     if args.data_command == "generate":
-        summary = app.generate_dataset(args.seed, args.customers, args.merchants, args.transactions)
+        summary = app.generate_dataset(
+            args.seed, args.customers, args.merchants, args.transactions, profile=args.profile
+        )
         _out(args, summary, "\n".join(f"{k:<20} {v}" for k, v in summary.items()))
     elif args.data_command == "summary":
         _out(args, app.overview()["dataset"])
@@ -340,6 +344,51 @@ def cmd_case(args: argparse.Namespace) -> int:
         if c is None:
             raise SystemExit("case not found")
         _out(args, to_dict(c), json.dumps(to_dict(c), indent=2, default=str))
+    elif args.case_command == "review":
+        pk = app.review_packet(args.case_id)
+        if pk is None:
+            raise SystemExit("case not found")
+        if args.json:
+            print(json.dumps(pk, indent=2, default=str))
+            return 0
+        why = pk["why_this_case_exists"]
+        print(
+            f"Case {pk['case']['case_id']}  {pk['case']['priority']} {pk['case']['status']}  -- {pk['case']['title']}"
+        )
+        print(f"  why      {why['rule']}: {why['human_review_reason'] or why['reason']}")
+        print(
+            f"  risk     {pk['risk']['score']}/100 {pk['risk']['level']}  "
+            + "; ".join(f"{f['points']:+d} {f['label']}" for f in pk["risk"]["factors"])
+        )
+        print(
+            "  trusted  "
+            + "; ".join(f"{e['field']}={e['value']}" for e in pk["trusted_evidence"][:8])
+        )
+        print(
+            "  claims   "
+            + (
+                "; ".join(
+                    f"{e['field']}={e['value']} ({e['trust']})" for e in pk["untrusted_claims"]
+                )
+                or "-"
+            )
+        )
+        ai = pk["ai_recommendation"]
+        print(
+            f"  AI       {ai['recommended_action'] if ai else '-'}  (MODEL_GENERATED, not a decision)"
+        )
+        print(
+            f"  policy   {pk['policy']['policy_id']}@v{pk['policy']['version']} -> {pk['policy']['outcome']} {pk['policy']['matched_rules']}"
+            if pk["policy"]
+            else "  policy   -"
+        )
+        print(
+            f"  capability {pk['capability']['requested']} -> {pk['capability']['authorization']['status'] if pk['capability']['authorization'] else '-'}"
+        )
+        print(
+            f"  audit    {len(pk['audit_history'])} event(s); human decisions: {len(pk['human_decisions'])}"
+        )
+        print(f"  {pk['principle']}")
     elif args.case_command == "transition":
         c = app.runtime.cases.transition(
             args.case_id, CaseStatus(args.status), actor=args.actor, note=args.note or ""
@@ -379,10 +428,47 @@ def cmd_policy(args: argparse.Namespace) -> int:
             f"{pol.key} -> {d.outcome.value}\n" + "\n".join("  " + e for e in d.explanations),
         )
     elif args.policy_command == "validate":
-        from sentinel.policy import load_policy
+        from sentinel.policy import lint, load_policy
 
         p = load_policy(args.file)
-        print(f"valid: {p.key} ({len(p.rules)} rules)")
+        findings = lint(p)
+        print(f"valid: {p.key} ({len(p.rules)} rules, content hash {p.content_hash})")
+        for f in findings:
+            print(f"  lint: {f}")
+        return 0 if not findings else 3
+    elif args.policy_command == "lint":
+        from sentinel.policy import lint
+
+        bad = 0
+        for p in reg.all() if not args.policy_id else [reg.get(args.policy_id, args.version)]:
+            findings = lint(p)
+            bad += len(findings)
+            print(f"{p.key:<32} {'clean' if not findings else str(len(findings)) + ' finding(s)'}")
+            for f in findings:
+                print(f"  - {f}")
+        return 0 if not bad else 3
+    return 0
+
+
+def cmd_capability(args: argparse.Namespace) -> int:
+    from sentinel.security.capabilities import matrix
+
+    rows = matrix()
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+    print(
+        f"{'capability':22} {'risk':9} {'irrev':5} {'money':5} {'authorization':16} {'threshold':>10}  actors"
+    )
+    for r in rows:
+        thr = (
+            f"₹{r['human_review_threshold']:,}" if r["human_review_threshold"] is not None else "-"
+        )
+        print(
+            f"{r['capability']:22} {r['risk']:9} {'yes' if r['irreversible'] else 'no':5} {'yes' if r['financial_effect'] else 'no':5} {r['required_authorization']:16} {thr:>10}  {', '.join(r['allowed_actors']) or 'nobody'}"
+        )
+        if r["policy_gates"]:
+            print(f"{'':22} gated by: {', '.join(str(g) for g in r['policy_gates'])}")
     return 0
 
 
@@ -581,6 +667,12 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--customers", type=int, default=500)
     g.add_argument("--merchants", type=int, default=60)
     g.add_argument("--transactions", type=int, default=20000)
+    g.add_argument(
+        "--profile",
+        default="balanced",
+        choices=["balanced", "fraud-heavy", "attack-heavy", "quiet"],
+        help="scenario mix (see sentinel.data.generator.PROFILES)",
+    )
     d.add_parser("summary")
 
     a = sub.add_parser(
@@ -661,6 +753,7 @@ def build_parser() -> argparse.ArgumentParser:
     cl.add_argument("--status")
     cl.add_argument("--limit", type=int, default=50)
     c.add_parser("show").add_argument("case_id")
+    c.add_parser("review", help="the human-review packet").add_argument("case_id")
     ct = c.add_parser("transition")
     ct.add_argument("case_id")
     ct.add_argument("status")
@@ -682,6 +775,12 @@ def build_parser() -> argparse.ArgumentParser:
     pe.add_argument("--policy")
     pe.add_argument("--version", type=int)
     po.add_parser("validate").add_argument("file")
+    pl = po.add_parser("lint", help="report configuration problems in registered policies")
+    pl.add_argument("policy_id", nargs="?")
+    pl.add_argument("--version", type=int)
+
+    cap = sub.add_parser("capability").add_subparsers(dest="cap_command", required=True)
+    cap.add_parser("list", help="the capability security matrix")
 
     au = sub.add_parser("audit").add_subparsers(dest="audit_command", required=True)
     av = au.add_parser("verify")
@@ -766,6 +865,7 @@ COMMANDS = {
     "risk": cmd_risk,
     "case": cmd_case,
     "policy": cmd_policy,
+    "capability": cmd_capability,
     "audit": cmd_audit,
     "replay": cmd_replay,
     "scenario": cmd_scenario,

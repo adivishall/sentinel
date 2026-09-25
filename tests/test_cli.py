@@ -187,6 +187,19 @@ def test_case_policy_audit_replay_scenario(db, capsys, tmp_path):
     assert "REQUIRE_HUMAN_REVIEW" in out
     code, out = _run(capsys, "--db", db, "audit", "verify")
     assert code == 0 and "OK" in out
+    code, out = _run(capsys, "--db", db, "policy", "lint")
+    assert code == 0 and "clean" in out
+    code, out = _run(capsys, "--db", db, "capability", "list")
+    assert code == 0 and "APPROVE_REFUND" in out and "SKIP_REVIEW" in out and "nobody" in out
+    cases = _run(capsys, "--db", db, "--json", "case", "list")[1]
+    cid = json.loads(cases)[0]["case_id"]
+    code, out = _run(capsys, "--db", db, "case", "review", cid)
+    assert code == 0 and "AI recommendation != final decision" in out
+    cp = tmp_path / "cp.json"
+    code, out = _run(capsys, "--db", db, "audit", "checkpoint", "--out", str(cp))
+    assert code == 0 and cp.exists()
+    code, out = _run(capsys, "--db", db, "audit", "verify", "--checkpoint", str(cp))
+    assert code == 0 and "OK" in out
     exp = tmp_path / "audit.jsonl"
     code, out = _run(capsys, "--db", db, "audit", "export", str(exp))
     assert exp.exists() and "exported" in out

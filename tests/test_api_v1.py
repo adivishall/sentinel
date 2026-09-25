@@ -295,6 +295,51 @@ def test_evaluate_routes_reject_reduced_controls_unless_enabled(server, monkeypa
     assert d["final_action"] == "ALLOW" and d["controls"] == []
 
 
+def test_capability_matrix_policy_lint_and_review_packet(server, app):
+    s, m = _get(server + "/v1/capabilities")
+    rows = {r["capability"]: r for r in m["capabilities"]}
+    assert rows["APPROVE_REFUND"]["human_review_threshold"] == 50000
+    assert not any(r["ai_agent_allowed"] for r in rows.values() if r["consequential"])
+    assert rows["SKIP_REVIEW"]["allowed_actors"] == [] and rows["CLOSE_CASE"]["consequential"]
+    assert any("account-security" in g for g in rows["UNFREEZE_ACCOUNT"]["policy_gates"])
+    s, lint = _post(
+        server + "/v1/policies/lint",
+        {
+            "policy_id": "x",
+            "version": 1,
+            "workflow": "dispute",
+            "rules": [
+                {
+                    "id": "r",
+                    "when": [{"field": "risk_level", "op": "==", "value": "SEVERE"}],
+                    "outcome": "BLOCK",
+                }
+            ],
+        },
+    )
+    assert lint["valid"] and not lint["clean"] and any("never equal" in f for f in lint["findings"])
+    cid = next(c.case_id for c in app.cases(limit=50) if c.decision_ids)
+    s, pk = _get(server + f"/v1/cases/{cid}/review")
+    for k in (
+        "why_this_case_exists",
+        "risk",
+        "trusted_evidence",
+        "untrusted_claims",
+        "policy",
+        "capability",
+        "timeline",
+        "audit_history",
+        "principle",
+    ):
+        assert k in pk, k
+    assert all(e["status"] == "VERIFIED" for e in pk["trusted_evidence"])
+    assert all(e["status"] != "VERIFIED" for e in pk["untrusted_claims"])
+    if pk["ai_recommendation"]:
+        assert "NOT a decision" in pk["ai_recommendation"]["note"]
+    code, _ = _err(_get, server + "/v1/cases/CASE-nope/review")
+    assert code == 404
+
+
 def test_attacks_scenarios_evaluations(server):
     s, atk = _get(server + "/v1/attacks")
     assert len(atk["attacks"]) >= 8
