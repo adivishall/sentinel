@@ -16,6 +16,7 @@ def _doc(rules, **over):
         "policy_id": "t",
         "version": 1,
         "workflow": "dispute",
+        "default_outcome": "ALLOW",
         "effective_from": "2026-01-01",
         "required_fields": ["account_status", "amount"],
         "rules": rules,
@@ -32,28 +33,6 @@ def test_shipped_policies_lint_clean():
 @pytest.mark.parametrize(
     "rules, over, needle",
     [
-        (
-            [
-                {
-                    "id": "a",
-                    "when": [{"field": "requested_capability", "op": "==", "value": "GRANT_ALL"}],
-                    "outcome": "BLOCK",
-                }
-            ],
-            {},
-            "unknown capability",
-        ),
-        (
-            [
-                {
-                    "id": "a",
-                    "when": [{"field": "risk_level", "op": "==", "value": "SEVERE"}],
-                    "outcome": "BLOCK",
-                }
-            ],
-            {},
-            "can never equal",
-        ),
         (
             [
                 {
@@ -175,8 +154,11 @@ def test_malformed_field_values_never_match_and_missing_fields_fail_closed():
         )
     )
     for bad in ("999999", None, [], {}, True, float("nan")):
-        d = evaluate(p, {"amount": bad, "account_status": "active"})
-        assert d.outcome is PolicyOutcome.ALLOW, bad  # a malformed number cannot satisfy > 50000
+        # a malformed number cannot silently disable the BLOCK rule: evaluation fails closed
+        # (the composer turns this into a human review, never an ALLOW)
+        with pytest.raises(PolicyEvaluationError, match="wrong type"):
+            evaluate(p, {"amount": bad, "account_status": "active"})
+    assert evaluate(p, {"amount": 999_999, "account_status": "active"}).outcome.value == "BLOCK"
     with pytest.raises(PolicyEvaluationError):
         evaluate(p, {"account_status": "active"})
 

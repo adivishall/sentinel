@@ -65,6 +65,20 @@ def rule_matches(r: Rule, context: Mapping[str, object]) -> bool:
     return all(condition_holds(c, context) for c in r.when)
 
 
+def _type_ok(ftype: str, v: object) -> bool:
+    if ftype == "int":
+        return isinstance(v, int) and not isinstance(v, bool)
+    if ftype == "float":
+        return isinstance(v, (int, float)) and not isinstance(v, bool)
+    if ftype == "bool":
+        return isinstance(v, bool)
+    if ftype == "str":
+        return isinstance(v, str)
+    if ftype == "list":
+        return isinstance(v, (list, tuple))
+    return False
+
+
 def validate(policy: Policy) -> None:
     if not policy.policy_id or policy.version < 1:
         raise PolicyValidationError("policy_id and version >= 1 are required")
@@ -91,6 +105,21 @@ def validate(policy: Policy) -> None:
                 )
             if c.op in ("in", "not_in") and not isinstance(c.value, (list, tuple)):
                 raise PolicyValidationError(f"rule {r.rule_id!r}: {c.op} needs a list value")
+            # A value the field can never take makes a rule that can never fire -- a gate
+            # that silently does nothing. Refused at load, not left to the linter.
+            vals = c.value if isinstance(c.value, (list, tuple)) else [c.value]
+            if c.field in _CAPABILITY_FIELDS and c.op in ("==", "!=", "in", "not_in"):
+                caps = {x.value for x in Capability} | {"NONE"}
+                bad = [v for v in vals if str(v) not in caps]
+                if bad:
+                    raise PolicyValidationError(f"rule {r.rule_id!r}: unknown capability {bad}")
+            if c.field in _ENUM_VALUES and c.op in ("==", "!=", "in", "not_in"):
+                bad = [v for v in vals if str(v) not in _ENUM_VALUES[c.field]]
+                if bad:
+                    raise PolicyValidationError(
+                        f"rule {r.rule_id!r}: {c.field} can never be {bad} "
+                        f"(allowed: {sorted(_ENUM_VALUES[c.field])})"
+                    )
     for f in policy.required_fields:
         if f not in FIELD_CATALOG:
             raise PolicyValidationError(f"required field {f!r} is not in the catalog")
@@ -178,12 +207,20 @@ def lint(policy: Policy) -> list[str]:
 
 
 def evaluate(policy: Policy, context: Mapping[str, object]) -> PolicyDecision:
-    """Fail-closed: every field a rule reads must be present. A missing input can
-    never silently disable a rule."""
+    """Fail-closed: every field a rule reads must be present AND of its catalog type. A
+    missing or mistyped input can never silently disable a rule (a string risk score
+    would otherwise make ``risk_score >= 75`` quietly false)."""
     needed = set(policy.required_fields) | policy.referenced_fields
     missing = sorted(f for f in needed if f not in context)
     if missing:
         raise PolicyEvaluationError(f"{policy.key}: context missing fields {missing}")
+    mistyped = sorted(
+        f"{f}={context[f]!r} (expected {FIELD_CATALOG[f][0]})"
+        for f in needed
+        if f in FIELD_CATALOG and not _type_ok(FIELD_CATALOG[f][0], context[f])
+    )
+    if mistyped:
+        raise PolicyEvaluationError(f"{policy.key}: context fields of the wrong type {mistyped}")
     matched = [r for r in policy.rules if rule_matches(r, context)]
     outcome = policy.default_outcome
     for r in matched:

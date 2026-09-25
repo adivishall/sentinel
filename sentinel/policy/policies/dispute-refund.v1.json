@@ -2,6 +2,7 @@
   "policy_id": "dispute-refund",
   "version": 1,
   "workflow": "dispute",
+  "default_outcome": "ALLOW",
   "effective_from": "2026-09-01",
   "description": "Refund control: evidence decides support; policy decides who may execute.",
   "required_fields": [

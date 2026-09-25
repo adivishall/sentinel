@@ -23,6 +23,7 @@ def _doc(**over):
         "version": 1,
         "workflow": "dispute",
         "description": "x",
+        "default_outcome": "ALLOW",
         "rules": [
             {
                 "id": "r1",
@@ -219,7 +220,7 @@ def test_operators():
         },
     )
     assert set(d.matched_rules) == {"in", "notin", "contains", "false"}
-    # type confusion never matches numerically
+    # type confusion fails closed: a mistyped value cannot silently disable a BLOCK rule
     p2 = Policy(
         "p",
         1,
@@ -227,8 +228,10 @@ def test_operators():
         "",
         (Rule("gt", (Condition("amount", ">", 5),), PolicyOutcome.BLOCK, ""),),
     )
-    assert evaluate(p2, {"amount": "999"}).outcome is PolicyOutcome.ALLOW
-    assert evaluate(p2, {"amount": True}).outcome is PolicyOutcome.ALLOW
+    for bad in ("999", True, None, 9.5):
+        with pytest.raises(PolicyEvaluationError, match="wrong type"):
+            evaluate(p2, {"amount": bad})
+    assert evaluate(p2, {"amount": 999}).outcome is PolicyOutcome.BLOCK
 
 
 def test_load_from_file_and_roundtrip(tmp_path):

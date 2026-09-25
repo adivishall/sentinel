@@ -245,6 +245,7 @@ def test_policies_risk_graph_replay(server, app):
             "policy_id": "x",
             "version": 1,
             "workflow": "dispute",
+            "default_outcome": "ALLOW",
             "rules": [
                 {"id": "r", "when": [{"field": "nope", "op": "==", "value": 1}], "outcome": "BLOCK"}
             ],
@@ -307,12 +308,13 @@ def test_capability_matrix_policy_lint_and_review_packet(server, app):
     assert s == 200 and latest["policy"] == "dispute-refund@v3"
     code, missing = _err(_post, server + "/v1/policies/lint", {"policy_id": "no-such-policy"})
     assert code == 404 and missing["code"] == "not_found"
-    s, lint = _post(
+    doc = {"policy_id": "x", "version": 1, "workflow": "dispute", "default_outcome": "ALLOW"}
+    # a value the field can never take is a gate that never fires: refused, not linted
+    code, bad = _err(
+        _post,
         server + "/v1/policies/lint",
         {
-            "policy_id": "x",
-            "version": 1,
-            "workflow": "dispute",
+            **doc,
             "rules": [
                 {
                     "id": "r",
@@ -322,7 +324,26 @@ def test_capability_matrix_policy_lint_and_review_packet(server, app):
             ],
         },
     )
-    assert lint["valid"] and not lint["clean"] and any("never equal" in f for f in lint["findings"])
+    assert code == 400 and "can never be" in bad["error"]
+    s, lint = _post(
+        server + "/v1/policies/lint",
+        {
+            **doc,
+            "rules": [
+                {
+                    "id": "r",
+                    "when": [
+                        {"field": "risk_level", "op": "==", "value": "HIGH"},
+                        {"field": "risk_level", "op": "==", "value": "LOW"},
+                    ],
+                    "outcome": "BLOCK",
+                }
+            ],
+        },
+    )
+    assert (
+        lint["valid"] and not lint["clean"] and any("contradictory" in f for f in lint["findings"])
+    )
     cid = next(c.case_id for c in app.cases(limit=50) if c.decision_ids)
     s, pk = _get(server + f"/v1/cases/{cid}/review")
     for k in (

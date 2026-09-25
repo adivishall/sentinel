@@ -315,13 +315,17 @@ def authorize(
         return Authorization(
             AuthorizationStatus.GRANTED, None, actor, "no consequential capability requested"
         )
-    s = REGISTRY[capability]
+    s = REGISTRY.get(capability)
+    if s is None:  # fail closed: an unregistered capability is never authorized
+        return Authorization(
+            AuthorizationStatus.DENIED, capability, actor, f"unregistered capability {capability!r}"
+        )
     if actor not in s.allowed_actors:
         return Authorization(
             AuthorizationStatus.DENIED,
             capability,
             actor,
-            f"{actor.value} may not invoke {capability.value} (allowed: "
+            f"{getattr(actor, 'value', actor)} may not invoke {capability.value} (allowed: "
             f"{', '.join(sorted(a.value for a in s.allowed_actors)) or 'nobody'})",
         )
     if policy_outcome is PolicyOutcome.BLOCK:

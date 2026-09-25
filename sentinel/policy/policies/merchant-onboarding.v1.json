@@ -2,6 +2,7 @@
   "policy_id": "merchant-onboarding",
   "version": 1,
   "workflow": "merchant_onboarding",
+  "default_outcome": "ALLOW",
   "effective_from": "2026-09-01",
   "description": "KYB onboarding: acquirer records decide; documents never do.",
   "required_fields": [

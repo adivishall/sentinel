@@ -2,6 +2,7 @@
   "policy_id": "account-security",
   "version": 1,
   "workflow": "account_security",
+  "default_outcome": "ALLOW",
   "effective_from": "2026-09-01",
   "description": "Account security: protective holds are cheap and reversible; unfreezing and payout changes are human-only.",
   "required_fields": [

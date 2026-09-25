@@ -18,6 +18,7 @@ invariant that mypy checks and regression tests prove:
 from __future__ import annotations
 
 import dataclasses
+import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -29,31 +30,53 @@ from sentinel.domain.ids import content_hash
 from sentinel.security.claims import ClaimClassification, classify
 
 
-def as_int(value: object, default: int = 0) -> int:
-    """Coerce a ledger value to int, falling back safely on bad/missing data.
+def parse_int(value: object) -> int | None:
+    """A ledger number as int, or ``None`` when it is not a finite number.
 
-    Handles plain ints, floats, and numeric strings with commas or currency
-    symbols ("₹50,000", "50,000.0"). Anything genuinely unparseable falls back
-    to ``default`` rather than crashing -- and a zero amount is fail-safe (it
-    can never exceed a policy limit)."""
+    Handles plain ints, finite floats, and numeric strings with commas or currency
+    symbols ("₹50,000", "50,000.0")."""
     if isinstance(value, bool):  # bool is an int subclass; treat as not-a-number
-        return default
+        return None
     if isinstance(value, int):
         return value
     if isinstance(value, float):
-        return int(value)
+        return int(value) if math.isfinite(value) else None
     if isinstance(value, str):
         cleaned = re.sub(r"(?i)^\s*(rs\.?|inr|₹|\$)\s*", "", value.strip()).replace(",", "")
-        if not cleaned:
-            return default
         try:
             return int(cleaned)
         except ValueError:
             try:
-                return int(float(cleaned))  # "50000.0" -> 50000
+                f = float(cleaned)
             except ValueError:
-                return default
-    return default
+                return None
+            return int(f) if math.isfinite(f) else None
+    return None
+
+
+def record_problems(
+    record: Mapping[str, object], numeric: tuple[str, ...], required: tuple[str, ...] = ()
+) -> list[str]:
+    """Why a trusted record cannot be used as-is: a required field missing, or a numeric
+    field that is present but not a finite, non-negative number. The workflows fail
+    SAFE on any problem (human review): coercing ``"ten lakh"`` or ``-50000`` to a
+    number would otherwise slip under an auto-approval limit."""
+    out = [f"{k} missing" for k in required if k not in record]
+    for k in numeric:
+        if k in record:
+            v = parse_int(record[k])
+            if v is None:
+                out.append(f"{k}={record[k]!r} is not a number")
+            elif v < 0:
+                out.append(f"{k}={v} is negative")
+    return out
+
+
+def as_int(value: object, default: int = 0) -> int:
+    """Coerce a ledger value to int, or ``default``. Only safe after ``record_problems``
+    has rejected the record: on its own a coerced 0 would pass a limit check."""
+    v = parse_int(value)
+    return default if v is None else v
 
 
 @dataclass(frozen=True)
@@ -144,6 +167,16 @@ class DisputeFacts(TrustedFacts):
     customer_tenure_days: int = 0
 
     SOURCE: ClassVar[str] = "payment_ledger"
+    NUMERIC: ClassVar[tuple[str, ...]] = (
+        "amount",
+        "prior_disputes_90d",
+        "policy_auto_limit",
+        "customer_tenure_days",
+    )
+
+    @classmethod
+    def problems(cls, ledger: Mapping[str, object]) -> list[str]:
+        return record_problems(ledger, cls.NUMERIC, required=("amount",))
 
     @classmethod
     def from_ledger(cls, ledger: Mapping[str, object]) -> DisputeFacts:
@@ -211,6 +244,10 @@ class KYBFacts(TrustedFacts):
     SOURCE: ClassVar[str] = "acquirer_records"
     KIND: ClassVar[EvidenceKind] = EvidenceKind.ACQUIRER_RECORD
     TRUST: ClassVar[TrustClass] = TrustClass.VERIFIED_EXTERNAL
+
+    @classmethod
+    def problems(cls, records: Mapping[str, object]) -> list[str]:
+        return record_problems(records, ("domain_age_days", "business_age_days", "prior_flags"))
 
     @classmethod
     def from_records(cls, records: Mapping[str, object]) -> KYBFacts:

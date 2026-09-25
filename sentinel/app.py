@@ -39,10 +39,11 @@ from sentinel.decision.workflows import (
 from sentinel.domain.cases import Case
 from sentinel.domain.entities import LoginSession, Transaction
 from sentinel.domain.enums import CaseStatus, TrustClass
+from sentinel.domain.ids import content_hash
 from sentinel.domain.risk import EntityRiskProfile
 from sentinel.domain.serialization import to_dict
 from sentinel.observability import METRICS, get_logger, log_decision
-from sentinel.policy.loader import DEFAULT_REGISTRY
+from sentinel.policy.loader import DEFAULT_REGISTRY, PolicyIntegrityError
 from sentinel.presets import ATTACKS, SCENARIOS
 from sentinel.replay.engine import ReplayEngine, ReplayOverrides, ReplayResult
 from sentinel.risk import account_security, monitoring, scoring
@@ -88,7 +89,19 @@ class SentinelApp:
         self.replay_engine = ReplayEngine(self.runtime.policies)
         self._world: _World | None = None
         for p in self.runtime.policies.all():
-            self.store.save_policy_version(p.policy_id, p.version, p.workflow.value, p.to_dict())
+            stored = self.store.policy_payload(p.policy_id, p.version)
+            if stored is None:
+                self.store.save_policy_version(
+                    p.policy_id, p.version, p.workflow.value, p.to_dict()
+                )
+            elif content_hash(stored) != p.content_hash:
+                # This store recorded decisions under this version with other content: the
+                # version was edited in place. Refuse to run rather than mix the two.
+                raise PolicyIntegrityError(
+                    f"{p.key}: the store holds different content for this version "
+                    f"(hash {content_hash(stored)}, loaded {p.content_hash}); a changed "
+                    "policy needs a new version"
+                )
 
     # ---- construction ---------------------------------------------------------------------
     @classmethod

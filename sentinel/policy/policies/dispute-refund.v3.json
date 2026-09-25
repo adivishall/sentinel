@@ -2,6 +2,7 @@
   "policy_id": "dispute-refund",
   "version": 3,
   "workflow": "dispute",
+  "default_outcome": "ALLOW",
   "effective_from": "2026-09-25",
   "description": "Refund control v3: richer trusted facts -- an already-refunded or reversed transaction can never be refunded again; a merchant-contested or strongly-authenticated 'unauthorised' claim needs a human.",
   "required_fields": [

@@ -446,6 +446,12 @@ def cmd_case(args: argparse.Namespace) -> int:
 
 
 def cmd_policy(args: argparse.Namespace) -> int:
+    if args.policy_command == "pin":
+        from sentinel.policy.loader import POLICY_DIR, pin_manifest
+
+        added = pin_manifest(args.dir or POLICY_DIR)
+        print("pinned: " + (", ".join(added) if added else "nothing new"))
+        return 0
     app = _app(args)
     reg = app.runtime.policies
     if args.policy_command == "list":
@@ -844,6 +850,10 @@ def build_parser() -> argparse.ArgumentParser:
     pl = po.add_parser("lint", help="report configuration problems in registered policies")
     pl.add_argument("policy_id", nargs="?")
     pl.add_argument("--version", type=int)
+    pp = po.add_parser(
+        "pin", help="pin new policy versions in MANIFEST.json (a pinned version never changes)"
+    )
+    pp.add_argument("--dir", help="policy directory (default: the shipped policies)")
 
     cap = sub.add_parser("capability").add_subparsers(dest="cap_command", required=True)
     cap.add_parser("list", help="the capability security matrix")

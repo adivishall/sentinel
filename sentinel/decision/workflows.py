@@ -321,6 +321,9 @@ def run_dispute(
     facts = DisputeFacts.from_ledger(req.ledger)
     dispute_id = req.dispute_id or new_id("DSP")
     try:
+        bad = DisputeFacts.problems(req.ledger)
+        if bad:  # an unusable trusted record is never coerced into a decision
+            raise InvalidSubmission("ledger record malformed: " + "; ".join(bad))
         validate(req.narrative.text)
         for d in req.documents:
             validate(d.text)
@@ -524,6 +527,9 @@ def run_kyb(rt: Runtime, req: KYBRequest, opts: RunOptions = DEFAULT_OPTIONS) ->
     facts = KYBFacts.from_records(req.records)
     merchant_id = req.merchant_id or new_id("MER")
     try:
+        bad = KYBFacts.problems(req.records)
+        if bad:
+            raise InvalidSubmission("acquirer record malformed: " + "; ".join(bad))
         validate(req.application.text)
         for d in req.documents:
             validate(d.text)

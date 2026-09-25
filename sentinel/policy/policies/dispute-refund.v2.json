@@ -2,6 +2,7 @@
   "policy_id": "dispute-refund",
   "version": 2,
   "workflow": "dispute",
+  "default_outcome": "ALLOW",
   "effective_from": "2026-09-20",
   "description": "Refund control v2: risk threshold lowered 75 -> 70; medium AI-security findings now hold for review.",
   "required_fields": [

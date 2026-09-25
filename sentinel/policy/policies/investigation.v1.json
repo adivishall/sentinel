@@ -2,6 +2,7 @@
   "policy_id": "investigation",
   "version": 1,
   "workflow": "investigation",
+  "default_outcome": "ALLOW",
   "effective_from": "2026-09-01",
   "description": "Transaction monitoring: structured indicators open cases; a model may summarise, never close (an off-surface CLOSE_CASE request is a capability escalation, blocked by the gateway rule).",
   "required_fields": [

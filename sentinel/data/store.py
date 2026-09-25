@@ -786,6 +786,13 @@ class SentinelStore:
             (policy_id, version, workflow, json.dumps(payload)),
         )
 
+    def policy_payload(self, policy_id: str, version: int) -> dict[str, Any] | None:
+        r = self._one(
+            "SELECT payload FROM policy_versions WHERE policy_id = ? AND version = ?",
+            (policy_id, version),
+        )
+        return json.loads(r["payload"]) if r else None
+
     def to_dataset(self) -> Any:
         """Rebuild an in-memory Dataset (for the graph / entity engine)."""
         from sentinel.data.generator import Dataset, ScenarioTag
