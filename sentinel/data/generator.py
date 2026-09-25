@@ -33,6 +33,69 @@ from sentinel.risk.graph import EntityGraph
 
 AS_OF = datetime(2026, 9, 1, 0, 0)
 
+
+@dataclass(frozen=True)
+class Profile:
+    """How many of each labelled scenario a generated world contains. Counts are
+    scenario instances (accounts / merchants / disputes), not transactions; every
+    other property of the world is unchanged, so profiles are comparable."""
+
+    name: str
+    account_takeovers: int = 3
+    bursts: int = 3
+    abused_merchants: int = 2
+    dispute_frauds: int = 12
+    ai_manipulations: int = 6
+    high_value_legit: int = 4
+    rings: int = 1
+    structuring: int = 2
+    dormant: int = 2
+    kyb_attacks: int = 4
+
+
+PROFILES: dict[str, Profile] = {
+    "balanced": Profile("balanced"),
+    "fraud-heavy": Profile(
+        "fraud-heavy",
+        account_takeovers=8,
+        bursts=8,
+        abused_merchants=4,
+        dispute_frauds=24,
+        ai_manipulations=6,
+        high_value_legit=4,
+        rings=2,
+        structuring=5,
+        dormant=4,
+        kyb_attacks=4,
+    ),
+    "attack-heavy": Profile(
+        "attack-heavy",
+        account_takeovers=3,
+        bursts=3,
+        abused_merchants=2,
+        dispute_frauds=12,
+        ai_manipulations=24,
+        high_value_legit=4,
+        rings=1,
+        structuring=2,
+        dormant=2,
+        kyb_attacks=12,
+    ),
+    "quiet": Profile(
+        "quiet",
+        account_takeovers=1,
+        bursts=1,
+        abused_merchants=1,
+        dispute_frauds=4,
+        ai_manipulations=2,
+        high_value_legit=4,
+        rings=0,
+        structuring=1,
+        dormant=1,
+        kyb_attacks=1,
+    ),
+}
+
 _FIRST = [
     "Aarav",
     "Diya",
@@ -130,6 +193,7 @@ class ScenarioTag:
 class Dataset:
     seed: int
     as_of: str
+    profile: str = "balanced"
     customers: list[Customer] = field(default_factory=list)
     accounts: list[Account] = field(default_factory=list)
     merchants: list[Merchant] = field(default_factory=list)
@@ -177,7 +241,9 @@ class Dataset:
             g.link("merchant", m.merchant_id, "HOSTS", "domain", m.domain)
         for t in sorted(self.transactions, key=lambda x: x.timestamp):
             g.link("account", t.account_id, "MADE", "transaction", t.transaction_id, ts=t.timestamp)
-            g.link("transaction", t.transaction_id, "PAID", "merchant", t.merchant_id, ts=t.timestamp)
+            g.link(
+                "transaction", t.transaction_id, "PAID", "merchant", t.merchant_id, ts=t.timestamp
+            )
             if (t.account_id, t.device_id) not in uses:
                 # first use of an unregistered device: known from this transaction onward
                 g.link("account", t.account_id, "USES", "device", t.device_id, ts=t.timestamp)
@@ -202,6 +268,7 @@ class Dataset:
             labels[t.label] = labels.get(t.label, 0) + 1
         return {
             "seed": self.seed,
+            "profile": self.profile,
             "as_of": self.as_of,
             "customers": len(self.customers),
             "accounts": len(self.accounts),
@@ -224,9 +291,16 @@ def _iso(dt: datetime) -> str:
 
 class _Gen:
     def __init__(
-        self, seed: int, n_customers: int, n_merchants: int, n_txns: int, days: int
+        self,
+        seed: int,
+        n_customers: int,
+        n_merchants: int,
+        n_txns: int,
+        days: int,
+        profile: Profile = PROFILES["balanced"],
     ) -> None:
         self.rng = random.Random(seed)
+        self.profile = profile
         self.n_customers, self.n_merchants, self.n_txns, self.days = (
             max(20, n_customers),
             max(8, n_merchants),
@@ -547,8 +621,9 @@ class _Gen:
             used.update(chosen)
             return chosen
 
+        pf = self.profile
         # B: account takeover
-        for aid in pick(3):
+        for aid in pick(pf.account_takeovers):
             p = self.cust_profile[aid]
             when = AS_OF - timedelta(days=r.randint(1, 5), hours=r.randint(1, 20))
             self._txn(aid, when=when, country=str(p["home"]))
@@ -590,7 +665,7 @@ class _Gen:
             )
 
         # C: transaction burst
-        for aid in pick(3):
+        for aid in pick(pf.bursts):
             when = AS_OF - timedelta(days=r.randint(1, 10), hours=r.randint(1, 20))
             ids = [
                 self._txn(
@@ -609,7 +684,7 @@ class _Gen:
 
         # D: merchant abuse -- two high-risk merchants with heavy dispute ratios
         hi = [m for m in self.ds.merchants if m.mcc_risk == "high"] or self.ds.merchants[:2]
-        for m in r.sample(hi, min(2, len(hi))):
+        for m in r.sample(hi, min(pf.abused_merchants, len(hi))):
             ids = []
             for _ in range(60):
                 aid = r.choice(accounts)
@@ -651,7 +726,7 @@ class _Gen:
             for t in self.ds.transactions
             if t.delivery_status == "delivered" and t.label == "legit"
         ]
-        for k, t in enumerate(r.sample(delivered, min(12, len(delivered)))):
+        for k, t in enumerate(r.sample(delivered, min(pf.dispute_frauds, len(delivered)))):
             did = self.nid("DSP")
             # every fourth one is a double-dip: the ledger already shows a refund
             self.ds.disputes.append(
@@ -685,7 +760,7 @@ class _Gen:
         used.update(d.account_id for d in self.ds.disputes if d.label == "fraud:dispute_fraud")
 
         # F: AI manipulation -- injected documents / narratives on delivered orders
-        for t in r.sample(delivered, min(6, len(delivered))):
+        for t in r.sample(delivered, min(pf.ai_manipulations, len(delivered))):
             did = self.nid("DSP")
             self.ds.disputes.append(
                 Dispute(
@@ -720,7 +795,8 @@ class _Gen:
 
         # G: legitimate high value
         premium = pick(
-            4, lambda a: self.cust_profile[a]["segment"] in ("premium", "small_business")
+            pf.high_value_legit,
+            lambda a: self.cust_profile[a]["segment"] in ("premium", "small_business"),
         )
         for aid in premium:
             p = self.cust_profile[aid]
@@ -742,7 +818,69 @@ class _Gen:
                 )
             )
 
-        # H: graph-linked ring -- three fresh accounts sharing a device and a payout instrument
+        # H: graph-linked rings -- three fresh accounts sharing a device and a payout instrument
+        for ring_no in range(pf.rings):
+            self._ring(hi, ring_no)
+
+        # AML: structuring-like transfers
+        for aid in pick(pf.structuring):
+            cp = r.choice([a for a in accounts if a != aid])
+            when = AS_OF - timedelta(days=4)
+            ids = [
+                self._txn(
+                    aid,
+                    when=when + timedelta(days=i),
+                    amount=r.randint(40_000, 49_500),
+                    channel="transfer",
+                    counterparty=cp,
+                    label="fraud:structuring",
+                ).transaction_id
+                for i in range(4)
+            ]
+            self.ds.scenarios.append(
+                ScenarioTag(
+                    "structuring_like",
+                    "fraud:structuring",
+                    (aid, cp, *ids),
+                    "Four transfers just below the ₹50,000 threshold within a week.",
+                )
+            )
+
+        # AML: dormant activation -- silence then a burst
+        for aid in pick(pf.dormant):
+            cutoff = AS_OF - timedelta(days=120)
+            removed = {
+                t.transaction_id
+                for t in self.ds.transactions
+                if t.account_id == aid and datetime.fromisoformat(t.timestamp) > cutoff
+            }
+            self.ds.transactions = [
+                t for t in self.ds.transactions if t.transaction_id not in removed
+            ]
+            orphaned = [d for d in self.ds.disputes if d.transaction_id in removed]
+            for d in orphaned:
+                self.ds.narratives.pop(d.dispute_id, None)
+            self.ds.disputes = [d for d in self.ds.disputes if d.transaction_id not in removed]
+            when = AS_OF - timedelta(days=2)
+            ids = [
+                self._txn(
+                    aid, when=when + timedelta(hours=i * 5), label="fraud:dormant_activation"
+                ).transaction_id
+                for i in range(6)
+            ]
+            self.ds.scenarios.append(
+                ScenarioTag(
+                    "dormant_activation",
+                    "fraud:dormant_activation",
+                    (aid, *ids),
+                    "120 days of silence followed by six transactions in two days.",
+                )
+            )
+
+        self.ds.transactions.sort(key=lambda t: t.timestamp)
+
+    def _ring(self, hi: list[Merchant], ring_no: int) -> None:
+        r = self.rng
         shared_dev = self._device(AS_OF - timedelta(days=20), exact=True)
         ring: list[str] = []
         for _ in range(3):
@@ -777,7 +915,7 @@ class _Gen:
                     "7777",
                     _iso(AS_OF - timedelta(days=17)),
                     "IN",
-                    external_ref="BANK-RING-7777",
+                    external_ref=f"BANK-RING-{7777 + ring_no}",
                 )
             )
             self.ds.accounts.append(
@@ -839,70 +977,14 @@ class _Gen:
             )
         )
 
-        # AML: structuring-like transfers
-        for aid in pick(2):
-            cp = r.choice([a for a in accounts if a != aid])
-            when = AS_OF - timedelta(days=4)
-            ids = [
-                self._txn(
-                    aid,
-                    when=when + timedelta(days=i),
-                    amount=r.randint(40_000, 49_500),
-                    channel="transfer",
-                    counterparty=cp,
-                    label="fraud:structuring",
-                ).transaction_id
-                for i in range(4)
-            ]
-            self.ds.scenarios.append(
-                ScenarioTag(
-                    "structuring_like",
-                    "fraud:structuring",
-                    (aid, cp, *ids),
-                    "Four transfers just below the ₹50,000 threshold within a week.",
-                )
-            )
-
-        # AML: dormant activation -- silence then a burst
-        for aid in pick(2):
-            cutoff = AS_OF - timedelta(days=120)
-            removed = {
-                t.transaction_id
-                for t in self.ds.transactions
-                if t.account_id == aid and datetime.fromisoformat(t.timestamp) > cutoff
-            }
-            self.ds.transactions = [
-                t for t in self.ds.transactions if t.transaction_id not in removed
-            ]
-            orphaned = [d for d in self.ds.disputes if d.transaction_id in removed]
-            for d in orphaned:
-                self.ds.narratives.pop(d.dispute_id, None)
-            self.ds.disputes = [d for d in self.ds.disputes if d.transaction_id not in removed]
-            when = AS_OF - timedelta(days=2)
-            ids = [
-                self._txn(
-                    aid, when=when + timedelta(hours=i * 5), label="fraud:dormant_activation"
-                ).transaction_id
-                for i in range(6)
-            ]
-            self.ds.scenarios.append(
-                ScenarioTag(
-                    "dormant_activation",
-                    "fraud:dormant_activation",
-                    (aid, *ids),
-                    "120 days of silence followed by six transactions in two days.",
-                )
-            )
-
-        self.ds.transactions.sort(key=lambda t: t.timestamp)
-
     def kyb_attacks(self) -> None:
         """Four KYB applications carrying document-borne injections on bad records."""
         r = self.rng
-        bad = [
-            m for m in self.ds.merchants if m.registration_status != "verified"
-        ] or self.ds.merchants[:2]
-        for m in r.sample(bad, min(4, len(bad))):
+        # bad records first (the attack tries to launder them), then clean merchants
+        # (the attack tries to smuggle an off-surface request into a legitimate file)
+        bad = [m for m in self.ds.merchants if m.registration_status != "verified"]
+        pool = bad + [m for m in self.ds.merchants if m.registration_status == "verified"]
+        for m in pool[: min(self.profile.kyb_attacks, len(pool))]:
             app_id = self.nid("KYB")
             age = (AS_OF - datetime.fromisoformat(m.registered_at)).days
             self.ds.kyb_applications.append(
@@ -953,8 +1035,13 @@ def generate(
     merchants: int = 40,
     transactions: int = 5000,
     days: int = 240,
+    profile: str | Profile = "balanced",
 ) -> Dataset:
-    g = _Gen(seed, customers, merchants, transactions, days)
+    """A deterministic synthetic world. ``profile`` selects how many of each
+    labelled scenario it contains (see ``PROFILES``); everything else is identical."""
+    prof = PROFILES[profile] if isinstance(profile, str) else profile
+    g = _Gen(seed, customers, merchants, transactions, days, prof)
+    g.ds.profile = prof.name
     g.merchants()
     g.customers()
     g.baseline()

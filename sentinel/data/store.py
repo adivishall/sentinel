@@ -262,6 +262,7 @@ class SentinelStore:
         )
         self.set_meta("dataset_seed", str(ds.seed))
         self.set_meta("as_of", ds.as_of)
+        self.set_meta("profile", getattr(ds, "profile", "balanced"))
 
     # ---- entity reads -----------------------------------------------------------------
     def customer(self, cid: str) -> Customer | None:
@@ -772,7 +773,9 @@ class SentinelStore:
         from sentinel.data.generator import Dataset, ScenarioTag
 
         ds = Dataset(
-            seed=int(self.get_meta("dataset_seed") or 0), as_of=self.get_meta("as_of") or ""
+            seed=int(self.get_meta("dataset_seed") or 0),
+            as_of=self.get_meta("as_of") or "",
+            profile=self.get_meta("profile") or "balanced",
         )
         ds.customers = [
             Customer(r["customer_id"], r["name"], r["home_country"], r["segment"], r["created_at"])
