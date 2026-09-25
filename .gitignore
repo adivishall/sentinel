@@ -8,7 +8,7 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
-data/
+/data/
 results/_eval_run.log
 *.egg-info/
 build/
