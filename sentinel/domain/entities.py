@@ -62,6 +62,14 @@ class PaymentInstrument:
     last4: str
     added_at: str
     country: str = "IN"
+    # Identity of the underlying instrument (a bank account / card token) that several
+    # accounts may share; the graph links accounts to THIS, so a payout destination
+    # shared by a ring is one node with three edges. Defaults to the instrument id.
+    external_ref: str | None = None
+
+    @property
+    def identity(self) -> str:
+        return self.external_ref or self.instrument_id
 
 
 @dataclass(frozen=True)

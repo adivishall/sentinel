@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS accounts (account_id TEXT PRIMARY KEY, customer_id TE
 CREATE TABLE IF NOT EXISTS merchants (merchant_id TEXT PRIMARY KEY, name TEXT, mcc TEXT, mcc_risk TEXT, country TEXT, owner_id TEXT, domain TEXT, registered_at TEXT, registration_status TEXT, prior_flags INTEGER);
 CREATE TABLE IF NOT EXISTS devices (device_id TEXT PRIMARY KEY, fingerprint TEXT, first_seen TEXT, platform TEXT);
 CREATE TABLE IF NOT EXISTS account_devices (account_id TEXT, device_id TEXT, PRIMARY KEY (account_id, device_id));
-CREATE TABLE IF NOT EXISTS payment_instruments (instrument_id TEXT PRIMARY KEY, account_id TEXT, kind TEXT, last4 TEXT, added_at TEXT, country TEXT);
+CREATE TABLE IF NOT EXISTS payment_instruments (instrument_id TEXT PRIMARY KEY, account_id TEXT, kind TEXT, last4 TEXT, added_at TEXT, country TEXT, external_ref TEXT);
+CREATE INDEX IF NOT EXISTS ix_instr_ref ON payment_instruments(external_ref);
 CREATE TABLE IF NOT EXISTS transactions (transaction_id TEXT PRIMARY KEY, account_id TEXT, merchant_id TEXT, instrument_id TEXT, device_id TEXT, amount INTEGER, currency TEXT, timestamp TEXT, country TEXT, channel TEXT, auth_strength TEXT, delivery_status TEXT, counterparty_account_id TEXT, label TEXT);
 CREATE INDEX IF NOT EXISTS ix_txn_account ON transactions(account_id, timestamp);
 CREATE INDEX IF NOT EXISTS ix_txn_merchant ON transactions(merchant_id);
@@ -160,9 +161,17 @@ class SentinelStore:
             [(a, d) for a, devs in ds.account_devices.items() for d in devs],
         )
         self._many(
-            "INSERT OR REPLACE INTO payment_instruments VALUES (?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO payment_instruments VALUES (?,?,?,?,?,?,?)",
             [
-                (i.instrument_id, i.account_id, i.kind, i.last4, i.added_at, i.country)
+                (
+                    i.instrument_id,
+                    i.account_id,
+                    i.kind,
+                    i.last4,
+                    i.added_at,
+                    i.country,
+                    i.external_ref,
+                )
                 for i in ds.instruments
             ],
         )
@@ -338,33 +347,24 @@ class SentinelStore:
             out.setdefault(str(r["account_id"]), []).append(str(r["device_id"]))
         return out
 
-    def instrument(self, iid: str) -> PaymentInstrument | None:
-        r = self._one("SELECT * FROM payment_instruments WHERE instrument_id = ?", (iid,))
-        return (
-            PaymentInstrument(
-                r["instrument_id"],
-                r["account_id"],
-                r["kind"],
-                r["last4"],
-                r["added_at"],
-                r["country"],
-            )
-            if r
-            else None
+    @staticmethod
+    def _instrument(r: sqlite3.Row) -> PaymentInstrument:
+        return PaymentInstrument(
+            r["instrument_id"],
+            r["account_id"],
+            r["kind"],
+            r["last4"],
+            r["added_at"],
+            r["country"],
+            r["external_ref"],
         )
 
+    def instrument(self, iid: str) -> PaymentInstrument | None:
+        r = self._one("SELECT * FROM payment_instruments WHERE instrument_id = ?", (iid,))
+        return self._instrument(r) if r else None
+
     def instruments(self) -> list[PaymentInstrument]:
-        return [
-            PaymentInstrument(
-                r["instrument_id"],
-                r["account_id"],
-                r["kind"],
-                r["last4"],
-                r["added_at"],
-                r["country"],
-            )
-            for r in self._rows("SELECT * FROM payment_instruments")
-        ]
+        return [self._instrument(r) for r in self._rows("SELECT * FROM payment_instruments")]
 
     @staticmethod
     def _txn(r: sqlite3.Row) -> Transaction:

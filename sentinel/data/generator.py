@@ -171,7 +171,7 @@ class Dataset:
                 g.link("account", a.account_id, "USES", "device", dev, ts=ts)
                 uses.add((a.account_id, dev))
         for i in self.instruments:
-            g.link("account", i.account_id, "HAS", "instrument", i.instrument_id, ts=i.added_at)
+            g.link("account", i.account_id, "HAS", "instrument", i.identity, ts=i.added_at)
         for m in self.merchants:
             g.link("merchant", m.merchant_id, "OWNED_BY", "owner", m.owner_id)
             g.link("merchant", m.merchant_id, "HOSTS", "domain", m.domain)
@@ -237,6 +237,8 @@ class _Gen:
         self._ids: dict[str, int] = {}
         self.cust_profile: dict[str, dict[str, object]] = {}
         self.owners: list[str] = []
+        self._opened: dict[str, datetime] = {}  # account -> opened_at (temporal floor)
+        self._dev_seen: dict[str, datetime] = {}  # device -> first_seen
 
     def nid(self, prefix: str) -> str:
         self._ids[prefix] = self._ids.get(prefix, 0) + 1
@@ -288,7 +290,9 @@ class _Gen:
             self.ds.customers.append(
                 Customer(cid, f"{r.choice(_FIRST)} {r.choice(_LAST)}", home, seg, _iso(created))
             )
-            devices = [self._device(created)] + (
+            # the primary device exists from the day the customer joined; a second one
+            # may appear later (transactions before it existed fall back to the primary)
+            devices = [self._device(created, exact=True)] + (
                 [self._device(created)] if r.random() < 0.35 else []
             )
             n_acc = 2 if seg == "premium" and r.random() < 0.2 else 1
@@ -300,6 +304,7 @@ class _Gen:
             for _a in range(n_acc):
                 aid = self.nid("ACC")
                 opened = created + timedelta(days=r.randint(0, 30))
+                self._opened[aid] = opened
                 inst = PaymentInstrument(
                     self.nid("INS"), aid, "card", f"{r.randint(1000, 9999)}", _iso(opened), home
                 )
@@ -347,6 +352,7 @@ class _Gen:
             self.rng.choice(["android", "ios", "web", "web"]),
         )
         self.ds.devices.append(d)
+        self._dev_seen[d.device_id] = seen
         return d
 
     # ---- baseline transactions -----------------------------------------------------------
@@ -367,6 +373,13 @@ class _Gen:
     ) -> Transaction:
         r = self.rng
         p = self.cust_profile[aid]
+        # Temporal floor: no transaction before the account existed. A draw that lands
+        # before opening is re-spread over the account's actual lifetime rather than
+        # piled into its first hours (which would fabricate velocity and travel signals).
+        opened = self._opened.get(aid)
+        if opened is not None and when < opened + timedelta(hours=1):
+            span = max(3600.0, (AS_OF - opened).total_seconds() - 3600.0)
+            when = opened + timedelta(hours=1, seconds=r.uniform(0, span))
         amt = amount if amount is not None else max(50, int(r.lognormvariate(float(p["mu"]), float(p["sigma"]))))  # type: ignore[arg-type]
         favs: list[str] = p["favourites"]  # type: ignore[assignment]
         mer = merchant or (
@@ -374,6 +387,8 @@ class _Gen:
         )
         devs: list[str] = p["devices"]  # type: ignore[assignment]
         dev = device or (devs[0] if r.random() < 0.85 or len(devs) == 1 else devs[1])
+        if device is None and self._dev_seen.get(dev, when) > when:
+            dev = devs[0]  # the second device did not exist yet
         ctry = country or (
             str(p["home"]) if r.random() < 0.97 else r.choice(["AE", "SG", "GB", "US"])
         )
@@ -498,15 +513,20 @@ class _Gen:
             p = self.cust_profile[a.account_id]
             devs: list[str] = p["devices"]  # type: ignore[assignment]
             ip = f"10.{r.randint(0, 255)}.{r.randint(0, 255)}.{r.randint(1, 254)}"
+            opened = self._opened.get(a.account_id, AS_OF - timedelta(days=self.days))
             for _ in range(r.randint(3, 12)):
+                started = max(self.days_ago(0, self.days), opened + timedelta(hours=1))
+                dev = r.choice(devs)
+                if self._dev_seen.get(dev, started) > started:
+                    dev = devs[0]
                 self.ds.sessions.append(
                     LoginSession(
                         self.nid("SES"),
                         a.account_id,
-                        r.choice(devs),
+                        dev,
                         ip,
                         str(p["home"]),
-                        _iso(self.days_ago(0, self.days)),
+                        _iso(started),
                         mfa_passed=True,
                     )
                 )
@@ -730,7 +750,6 @@ class _Gen:
                 )
             )
             aid = self.nid("ACC")
-            payout_id = "INS-RING-PAYOUT"
             inst = PaymentInstrument(
                 self.nid("INS"),
                 aid,
@@ -740,9 +759,18 @@ class _Gen:
                 "IN",
             )
             self.ds.instruments.append(inst)
+            # Three accounts, three instrument records, ONE underlying bank account:
+            # the shared payout destination is the ring's tell.
+            payout_id = self.nid("INS")
             self.ds.instruments.append(
                 PaymentInstrument(
-                    payout_id, aid, "bank_account", "7777", _iso(AS_OF - timedelta(days=17)), "IN"
+                    payout_id,
+                    aid,
+                    "bank_account",
+                    "7777",
+                    _iso(AS_OF - timedelta(days=17)),
+                    "IN",
+                    external_ref="BANK-RING-7777",
                 )
             )
             self.ds.accounts.append(
@@ -755,6 +783,7 @@ class _Gen:
                     mfa_enabled=False,
                 )
             )
+            self._opened[aid] = AS_OF - timedelta(days=17)
             self.ds.account_devices[aid] = [shared_dev.device_id]
             self.cust_profile[aid] = {
                 "mu": math.log(9000),
