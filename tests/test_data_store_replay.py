@@ -296,3 +296,30 @@ def test_untrusted_content_trust_is_preserved_in_snapshot():
     trusts = {e["trust"] for e in snap["reconciliation"]["evidence"]["items"]}
     assert "TRUSTED_INTERNAL" in trusts and "USER_CONTROLLED" in trusts
     assert snap["security"]["source_trust"] in ("DOCUMENT_CONTROLLED", "USER_CONTROLLED")
+
+
+def test_append_onto_a_chain_with_a_deleted_record_fails_closed(tmp_path):
+    """A record deleted underneath the chain leaves a sequence collision; appending would
+    paper over the tampering, so the SQLite backend raises instead of writing."""
+    import sqlite3
+
+    import pytest
+
+    from sentinel.audit.chain import AuditChain, AuditIntegrityError
+    from sentinel.data.store import SentinelStore, SqliteAuditBackend
+
+    path = str(tmp_path / "audit.db")
+    store = SentinelStore(path)
+    chain = AuditChain(SqliteAuditBackend(store))
+    for _ in range(4):
+        chain.append(actor="t", workflow="dispute", action="ALLOW")
+    assert chain.verify().ok and len(chain) == 4
+    c = sqlite3.connect(path)
+    c.execute("DELETE FROM audit_events WHERE sequence = 1")
+    c.commit()
+    c.close()
+    reopened = AuditChain(SqliteAuditBackend(SentinelStore(path)))
+    v = reopened.verify()
+    assert not v.ok and v.first_bad_sequence == 1
+    with pytest.raises(AuditIntegrityError):
+        reopened.append(actor="t", workflow="dispute", action="ALLOW")

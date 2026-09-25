@@ -31,6 +31,14 @@ from typing import Protocol
 from sentinel.domain.ids import content_hash, new_id, now_iso
 
 GENESIS = "0" * 64
+
+
+class AuditIntegrityError(RuntimeError):
+    """The backend refused an append because the stored chain is inconsistent with the
+    chain's own view of it (a record was deleted or inserted underneath). Appending
+    would hide the tampering, so the chain fails closed; run ``sentinel audit verify``."""
+
+
 _RAW_TEXT_KEYS = frozenset(
     {"span", "text", "narrative", "submission", "document", "prompt", "rationale"}
 )

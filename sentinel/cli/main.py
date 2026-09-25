@@ -507,11 +507,15 @@ def cmd_audit(args: argparse.Namespace) -> int:
         else:
             v = app.verify_audit()
             what = "chain"
+        shown = list(v.problems[:12])
+        more = len(v.problems) - len(shown)
+        if more > 0:
+            shown.append(f"… and {more} more (first bad record: #{v.first_bad_sequence})")
         _out(
             args,
             to_dict(v),
             f"audit {what}: {'OK' if v.ok else 'TAMPERED'}  length={v.length}  head={v.head_hash[:16]}…"
-            + ("" if v.ok else "\n  " + "\n  ".join(v.problems)),
+            + ("" if v.ok else "\n  " + "\n  ".join(shown)),
         )
         return 0 if v.ok else 2
     if args.audit_command == "checkpoint":
@@ -904,12 +908,17 @@ COMMANDS = {
 
 
 def main(argv: list[str] | None = None) -> int:
+    from sentinel.audit.chain import AuditIntegrityError
+
     args = build_parser().parse_args(argv)
     try:
         return COMMANDS[args.command](args)
     except KeyError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
+    except AuditIntegrityError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     except (ValueError, FileNotFoundError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

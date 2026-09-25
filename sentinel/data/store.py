@@ -12,6 +12,7 @@ import threading
 from dataclasses import asdict
 from typing import Any
 
+from sentinel.audit.chain import AuditIntegrityError
 from sentinel.domain.cases import Case, CaseEvent, HumanDecision
 from sentinel.domain.decisions import Decision
 from sentinel.domain.entities import (
@@ -920,18 +921,25 @@ class SqliteAuditBackend:
         self.store = store
 
     def append(self, record: dict[str, object]) -> None:
-        self.store._exec(
-            "INSERT INTO audit_events VALUES (?,?,?,?,?,?,?)",
-            (
-                record["sequence"],
-                record["event_id"],
-                record.get("decision_id"),
-                record["previous_hash"],
-                record["event_hash"],
-                record["timestamp"],
-                json.dumps(record, sort_keys=True, default=str),
-            ),
-        )
+        try:
+            self.store._exec(
+                "INSERT INTO audit_events VALUES (?,?,?,?,?,?,?)",
+                (
+                    record["sequence"],
+                    record["event_id"],
+                    record.get("decision_id"),
+                    record["previous_hash"],
+                    record["event_hash"],
+                    record["timestamp"],
+                    json.dumps(record, sort_keys=True, default=str),
+                ),
+            )
+        except sqlite3.IntegrityError as e:
+            raise AuditIntegrityError(
+                f"audit chain is inconsistent: sequence {record['sequence']} already exists in the "
+                "store (a record was deleted or inserted underneath the chain); refusing to append "
+                "-- run `sentinel audit verify`"
+            ) from e
 
     def read_all(self) -> list[dict[str, object]]:
         return [
