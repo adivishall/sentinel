@@ -79,7 +79,6 @@ Everything composes ten typed, immutable primitives (`sentinel/domain`):
 | Primitive | Module | Notes |
 |---|---|---|
 | Entity | `domain/entities.py` | Customer, Account, Merchant, Device, PaymentInstrument, Transaction, Dispute, KYBApplication, LoginSession |
-| Event | `domain/events.py` | in-process typed bus (TransactionRiskAssessed, SecurityThreatDetected, PolicyEvaluated, CaseCreated, DecisionFinalized, AuditRecorded…) |
 | Evidence | `domain/evidence.py` | `Evidence` with `TrustClass` + `EvidenceStatus`; **untrusted sources can never be VERIFIED** (enforced in `__post_init__`) |
 | RiskAssessment | `domain/risk.py` | score, level, named factors with points and evidence ids, feature snapshot for replay |
 | SecurityEvent | `domain/security.py` | severity, threat classes, hashed findings, the capability the model asked for |
@@ -107,9 +106,13 @@ for exactly the first two. `UntrustedContent`, `UntrustedText`, `Claim` and
 
 ## The trust boundary as types (`security/trust_boundary.py`)
 
-- `UntrustedText` is opaque: it yields a coarse `ClaimType` (a selector for
-  *which* trusted field to check) and a hash. It has no accessor that returns
-  evidence.
+- `UntrustedText` is opaque: it yields a `ClaimType` (a selector for *which*
+  trusted field to check), read by a deterministic classifier
+  (`security/claims.py`: weighted pattern families, a negation guard, a hedge
+  detector, a conflict rule) that reports a confidence and the signals that
+  fired and **abstains** when it cannot read a claim. It has no accessor that
+  returns evidence. An abstain reconciles to INSUFFICIENT and is held for a
+  human; a recognised non-claim stays UNSUPPORTED.
 - `TrustedFacts` (`DisputeFacts`, `KYBFacts`) is built only from records and
   renders itself as VERIFIED `Evidence`. `supports(ClaimType)` is a pure function
   of the facts.
@@ -133,7 +136,14 @@ Final-action mapping (in order): policy BLOCK → BLOCK (if a security finding
 caused it) or DENY; evidence INSUFFICIENT → REQUIRE_HUMAN_REVIEW; evidence not
 supported → DENY; TEMPORARY_HOLD; REQUIRE_HUMAN_REVIEW (policy or pending
 authorization); STEP_UP; authorization GRANTED → ALLOW (the candidate
-capability executes); otherwise DENY.
+capability executes); otherwise DENY. The invariant with its ceiling: on a
+supporting ledger nothing exceeds the plain claim's outcome; on an
+unsupporting ledger nothing executes and nothing rises above a human review.
+Authoritative evaluation always runs every control, the active policy version
+and the active risk model of its surface; `sentinel/decision/authority.py`
+checks the inputs a decision was composed from before anything is recorded,
+and what-if runs (the simulator, scenario runs, replay) go to a runtime that
+never persists. Older versions and other models exist only for those what-ifs.
 
 `controls` exists for the ablation study only. Switching a control off
 reproduces the behaviour of a system that lacks it; the protected path is
@@ -214,7 +224,7 @@ audit chain and case service storage-agnostic.
 ## Application layer and surfaces
 
 `sentinel/app.py::SentinelApp` owns the store, the runtime (policies,
-gateway, cases, audit chain, event bus, provider) and the entity graph. The
+gateway, cases, audit chain, provider) and the entity graph. The
 CLI (`sentinel/cli`), the API (`sentinel/api`) and the console (`ui/`) only
 call it. The evaluation suites call the workflows directly with `persist=False`.
 
@@ -239,6 +249,8 @@ Nothing imports upward. `mypy` runs over the whole package in CI.
 
 ## What is deliberately not here
 
-No Kafka, Redis, Neo4j, microservices, Kubernetes or Terraform. The in-process
-event bus, the dict-backed graph and SQLite are honest choices for a portfolio
-system; `docs/INTERVIEW.md` covers where each would change at scale.
+No Kafka, Redis, Neo4j, microservices, Kubernetes or Terraform, and no event
+bus: each workflow is a synchronous function whose only side effects are the
+audit append and the case it opens. The dict-backed graph and SQLite are
+honest choices for a portfolio system; `docs/INTERVIEW.md` covers where each
+would change at scale.

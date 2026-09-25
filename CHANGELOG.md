@@ -4,6 +4,114 @@ All notable changes to Sentinel. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [Semantic Versioning](https://semver.org/).
 
+## [2.2.0] — 2026-09-26
+
+A release-candidate review of 2.1.0 as if the system protected real money,
+done in two passes: every consequential capability traced from input to
+action, every downgrade vector sought at every layer, the evaluation
+methodology audited, the synthetic world made less trivially separable, the
+claim classifier measured on a held-out set, and the code pruned. No point
+value or threshold was moved to improve a number; several metrics fell
+because the data or the evaluation became more honest.
+
+### Security
+- **Evaluation authority is structural** (`sentinel/decision/authority.py`).
+  `options.policy_version=1` paid a second refund on an already-refunded
+  ledger and `options.risk_model=txn-1.0` turned flagged fraud into executed
+  approvals. The first fix refused them at the API / CLI edge; the engine
+  still recorded downgraded runs, and the simulator's no-controls side and
+  scenario what-ifs were stored and audited next to real decisions. Now
+  `_finish` refuses to record any run whose inputs lack a control or name a
+  non-active policy version or risk model; what-if runs go to a runtime that
+  never persists; every decision carries `authoritative`. The evaluate routes
+  refuse every what-if switch (incl. investigation `as_of`) with 403, unknown
+  option keys with 400; the authoritative CLI commands no longer have the
+  flags; `SENTINEL_ALLOW_UNGUARDED` is gone. Risk models are bound to their
+  surface (a transaction model was silently applied to logins).
+- **Case lifecycle.** A status transition could resolve a case. RESOLVED is
+  now absent from the status table and reachable only through a human
+  decision from TRIAGE / INVESTIGATING / WAITING_HUMAN / ESCALATED; reserved
+  system / model actor names are refused; approving needs the review level the
+  capability registry requires (RELEASE_FUNDS / ALTER_RISK: senior; SKIP_REVIEW:
+  nobody); RESOLVED is final.
+- **Replay** diffed a fresh re-derivation instead of the stored decision, and
+  the stored decision itself was not tamper-evident. The audit event now
+  records the input snapshot's SHA-256, the risk model and the engine version;
+  replay anchors its recorded side to the event and reports `record_issues`,
+  and names policy / risk model / engine versions on each side.
+- **Policy engine fail-open paths closed**: a mistyped context value disabled a
+  BLOCK rule (now a fail-safe human review); a document without
+  `default_outcome` meant ALLOW, unknown keys were ignored and impossible
+  capability / enum values were only linted (now load errors); shipped
+  versions are pinned in `policies/MANIFEST.json` (`sentinel policy pin`) and a
+  store that recorded other content for a version refuses to open.
+- **Malformed trusted records**: an unparseable or negative ledger amount was
+  coerced to 0 / -N and passed the auto-limit, and `"inf"` crashed; dispute
+  ledgers and KYB records with such values now go to a human.
+- **Audit chain**: unreadable records (malformed JSON, truncated line, missing
+  field) are reported with the reason and verification continues past them;
+  SQLite lookups cross-check index columns; every backend refuses to append
+  onto an inconsistent store; `audit verify` prints AUDIT INTEGRITY ERROR and
+  exits 2; `audit verify --file` checks an exported chain.
+- **Temporal leaks**: a freeze or a payout change after T1 changed T1's
+  decisions (both read the account's current fields). Status is now read as
+  of the decision (`Account.status_since` / `status_at`) and payout sharing
+  from the bank accounts held at T1.
+- `authorize()` denies an unregistered capability or unknown actor instead of
+  raising; the API drains an oversized body before answering 413.
+
+### Added
+- **Claim classifier** (`sentinel/security/claims.py`): weighted pattern
+  families, negation guard, hedge detector, conflict rule, explicit confidence
+  and abstain (an abstain is INSUFFICIENT → human review; a recognised
+  non-claim is UNSUPPORTED). Suite `claims`: 117 phrasings in seven
+  categories, including a **held-out** set of 21 uncommon legitimate
+  phrasings written before the classifier was run on it (first run 7/21, all
+  misses abstained, none misread) and the development set the patterns were
+  then extended against (held-out now 17/21 -- optimistic, the author had seen
+  the misses). Reports classifier-sense false negatives and false positives.
+  The review also fixed "never made it to my house" being read as fraud.
+- **Temporal benchmark**: two seeds, 192 stratified transactions, nine kinds
+  of future record (dispute, device burst, flagged merchant, graph
+  relationship, session, account status, payout change, stored risk
+  assessment, stored AI-security event) at +1/+7/+30/+90 days; exact counts
+  (0 leaks in 3,648 decisions tested) with a one-sided 95% bound.
+- **Regression suites** for every finding: `test_evaluation_authority.py`,
+  `test_case_lifecycle.py`, `test_replay_integrity.py`,
+  `test_policy_adversarial.py`, `test_audit_corruption.py`,
+  `test_capability_trace.py`, `test_generator_chronology.py`,
+  `test_rc_hardening.py`, `test_claims.py`.
+- **Methodology record** on every results file and in every section of
+  `docs/EVALUATION.md`; per-signal fire statistics in the financial suite and
+  the risk-engine document.
+- **Provider comparison**: `eval run --suite models --provider
+  offline|anthropic|all --sample N`; the live row stays `not_run` until an
+  operator runs it.
+- **Console**: data-source lines, the claim reading beside the evidence,
+  methodology under every evaluation section, replay versions and record
+  check.
+
+### Changed
+- **Synthetic generator realism**: varied fraud timestamps and gaps;
+  legitimate accounts burst, travel, change phones and fail MFA; impossible
+  records removed; and, in the second pass, no scenario constants left
+  (takeover login gap and size, dormant silence and size, ring timing,
+  structuring count, merchant-abuse volume all vary). Transaction recall fell
+  from ~80% to 67.2% on the development seed, dormant-activation account
+  recall to 50%.
+- Informational integrity / surfaces rows moved with the classifier and the
+  regenerated world ("text changed a protected outcome" 38.2% → 58.2%,
+  tightening only; surfaces "tightened vs baseline" 43.3% → 30.0%); the
+  structural rows and every guarded attack-success rate stay 0.0%.
+- `make eval` failed after the ablation suite since `0b08279` (the
+  methodology record was read as a configuration); fixed.
+- Dead code and write-only state removed: the unused `EventBus`, write-only
+  `Runtime.decisions` / `security_events` (unbounded in a long-running
+  server), offline adjudicator roles, never-produced evidence kinds and a dozen
+  unused helpers; one numeric coercion instead of three; the static snapshot
+  built from the same builders as the API; `requirements.txt` retired.
+- Version 2.2.0.
+
 ## [2.1.0] — 2026-09-25
 
 A full-scale hardening pass over the reviewed 2.0.1 system: temporal

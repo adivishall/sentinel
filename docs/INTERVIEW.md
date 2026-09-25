@@ -14,7 +14,7 @@ Because the security property is a *global* one -- "no untrusted information
 reaches the authoritative decision" -- and it is far easier to prove and test
 in one process with one engine than across services. The seams where real
 infrastructure would attach are explicit: the repository protocol
-(`data/store.py`), the `EventBus` (`domain/events.py`), the `EntityGraph`
+(`data/store.py`), the audit backend protocol (`audit/chain.py`), the `EntityGraph`
 (`risk/graph.py`), the `LLMProvider` protocol. Nothing else would need to
 change to swap them. Fake microservices would have added failure modes
 without adding a single security guarantee.
@@ -100,8 +100,8 @@ The same inputs against the unguarded simulated agent execute 90.0% of the
 time, a hardened prompt still leaks 23.3%, and a detection-only system leaks
 20.0% (exactly the classes with no injection to detect: adjudication_gaming, financial_social_engineering, false_evidence).
 On supporting ledgers, 0.0% of attack texts exceed the ledger-supported
-ceiling and 0.0% execute without support, while 62.4% do change the
-outcome relative to a neutral message (they select the claim) and 9.4% are
+ceiling and 0.0% execute without support, while 44.1% do change the
+outcome relative to a neutral message (they select the claim) and 8.2% are
 approved -- deserved refunds, whatever the prose around them.
 <!-- /gen:interview-numbers -->
 The claim is not "we detect attacks"; it is "detection is not what stops
@@ -217,17 +217,24 @@ proves the stored prefix still hashes to that head.
 Every decision stores a `DecisionInputs` snapshot. `ReplayEngine` restores it,
 applies overrides (policy version, rule threshold, risk model version, model
 recommendation, controls), re-runs the pure composer and compares the result
-with the **originally stored** decision field by field (`decision_diff`). It
+with the **originally recorded** decision field by field (`decision_diff`).
+The recorded side is anchored to the tamper-evident chain: the decision's
+audit event carries the SHA-256 of its input snapshot and the key outcome
+fields, so a database row and snapshot edited consistently cannot replay as
+"no change" -- the replay says the record disagrees with its audit event. It
 reports `policy_drift` when the policy version named in the snapshot no
-longer has the content the decision was made under, and `engine_drift` when
-re-deriving the original no longer reproduces the recorded outcome. For
-identical input, facts, configuration, policy and engine the result
-reproduces exactly. The replay itself is audited.
+longer has the content the decision was made under, `engine_drift` when
+re-deriving the original no longer reproduces the recorded outcome, and the
+policy, risk-model and engine version on each side. For identical input,
+facts, configuration, policy and engine the result reproduces exactly. A
+replay is a what-if: audited as a replay, never recorded as a decision.
 
 **How do policy versions work?**
-Files `policy-id.vN.json` with `effective_from`; the registry serves the
-latest by default and any version on request; decisions record the version
-and the content hash they used; replay can pin another. `dispute-refund` is
+Files `policy-id.vN.json` with `effective_from`, pinned by SHA-256 in
+`MANIFEST.json` (an edited, unpinned or deleted version fails closed). The
+authoritative path always uses the **active** version; historical versions
+are loadable only for replay and what-if runs; decisions record the version
+and the content hash they used. `dispute-refund` is
 at v3, which reads richer ledger facts (already refunded, reversed,
 merchant-contested, strongly authenticated "unauthorised" claims). A linter
 reports rules that can never fire before a version is activated.
@@ -250,13 +257,16 @@ rate limit -- fine for a demo, not a production edge.
 They characterise a hand-weighted rule model on a synthetic generator. The
 point values were tuned while looking at seed 42, so the suite also runs two
 seeds they never saw and reports the range (transaction precision
-91.5%–95.6%, recall 76.8%–79.6%). Transaction-level recall is 79.6%
-on the development seed and every miss is a burst transaction whose
-short-window signals had not yet formed; the account-level monitor catches
-66.7% of the burst accounts. Account-level recall is 80.0% at
-0.0% FPR. A review found the per-transaction baseline counting
+77.3%–87.8%, recall 65.4%–67.2%). Transaction-level recall is 67.2%
+on the development seed and the misses are burst transactions; a burst's
+first transactions carry no short-window signal, and the account-level monitor
+catches 100.0% of the burst accounts. Legitimate accounts burst, travel
+and switch phones too, so the signals are not free. Account-level recall is 90.0% at
+0.7% FPR. A review found the per-transaction baseline counting
 disputes filed *after* the transaction; fixing that leak (and then every other
-aggregation) is why there is now a temporal-leakage benchmark, at 0.0%.
+aggregation) is why there is a temporal-leakage benchmark; extending it in 2.2.0 found two
+more current-state reads (account status, payout destination), now fixed: 0 leaks
+in 3,648 decisions tested.
 <!-- /gen:interview-financial -->
 
 **Why not simply train a fraud model?**
@@ -309,13 +319,100 @@ attacks: 0.0% exceeded the ledger-supported ceiling, 0.0% executed
 without support, 0.0% of 360 recommendation replays changed anything, vs
 83.5% permissive influence with no controls); zero unauthorised capability
 executions across 200 attacks on four surfaces and 24 hostile KYB applications --
-which is 0 by construction and is kept as a regression check; 0.0% temporal
-leakage; audit tampering is detected. Empirical ones, on synthetic data:
+which is 0 by construction and is kept as a regression check; 0 temporal leaks in
+3,648 decisions tested; audit tampering is detected. Empirical ones, on synthetic data:
 0.0% false positives on deserved refunds, 0.0% on unseen legitimate wording,
 26.3% of clean-but-hostile KYB applications held for a human, and the financial
 figures with their held-out-seed range. Nothing about a live model: the live
 row is `not_run`. See `docs/EVALUATION.md`, which separates the three kinds.
 <!-- /gen:interview-claims -->
+
+**Why is the classifier deterministic rather than an LLM?**
+Because the classifier's output selects which trusted fact is checked, and a
+model reading hostile text would be one more thing the attacker can steer. A
+weighted pattern classifier with a negation guard, a hedge detector and a
+conflict rule is inspectable, replayable and cheap; it reports a confidence
+and abstains when it cannot read a claim, and an abstain is a human review,
+not a denial and not an approval. Its benchmark shares its author and is
+labelled a regression floor, not a generalisation claim; an LLM classifier
+would be a recommendation-tier upgrade that keeps the same abstain semantics.
+
+**Why does point-in-time correctness matter?**
+Because a decision evaluated with data from its own future looks better than
+it was. The v2.0.1 review found the per-transaction baseline counting disputes
+filed after the transaction; the wider audit found profiles reading the whole
+dataset and a cycle finder unbounded in time. Every feature now takes `as_of`,
+every graph edge carries a timestamp, and a benchmark re-scores a stratified
+sample over two worlds with nine kinds of future record appended at four
+offsets and publishes exact counts (0 leaks in 3,648 decisions tested) with an
+upper bound. Extending it in 2.2.0 found two more leaks -- a later freeze and
+a later payout change altered earlier decisions because both read the
+account's *current* fields -- and they were fixed. It is a check over a
+synthetic world, not a proof.
+
+**How do you stop a caller from choosing a weaker policy or model?**
+Structurally, not at the edge. An evaluation is authoritative only if the
+inputs it was composed from carry every control, the active policy version
+and the active risk model of its surface; `_finish` checks that before
+anything is audited or stored and refuses otherwise. What-if runs (the
+simulator, scenario runs, replay) go to a runtime that never persists. The
+API returns 403 and the CLI has no flag, but those are conveniences: the
+release review found the first version of this fix lived only in the API and
+CLI, while the engine would still have recorded a downgraded run.
+
+**What did the release-candidate review actually find?**
+Real defects, each now pinned by a test: a caller-selected policy version
+that paid a second refund; a caller-selected risk model that approved flagged
+fraud; a case resolvable without a human; replay trusting an editable record;
+a malformed audit record crashing verification; a string amount that switched
+a BLOCK rule off; a policy file with no default meaning ALLOW; an unparseable
+ledger amount coerced to 0 (under every limit); two temporal leaks through
+current-state fields; `make eval` itself failing after the ablation suite; and
+a classifier pattern that read "never made it to my house" as fraud.
+
+**Why are synthetic benchmarks limited?**
+Three reasons the docs state everywhere: the attack corpus and the detector
+share an author; the "no controls" victim is a deterministic simulator, so
+its attack-success rate is a property of that simulator; and the financial
+generator, however realistic its legitimate behaviour now is, is still a
+generator whose labels the rules were designed against. The structural rows
+are 0 by construction and are regression checks; the empirical rows describe
+this corpus and this generator; the live-model row is `not_run` until someone
+runs it, and one model on one day would still be one data point.
+
+**What would production require?**
+Real record integrations in place of the SQLite context builders; per-user
+identity and roles before a human decision means anything; a production edge
+(TLS, a real WSGI/ASGI server, key management); binary document parsing; a
+trained risk model as one more trusted signal; real sanctions / AML providers
+as VERIFIED_EXTERNAL evidence; retention and PII policies; and a live-model
+evaluation on the operator's own key.
+
+## Questions where the honest answer is "not implemented"
+
+- **Can it learn from reviewer decisions?** No. Human decisions are recorded
+  and audited; nothing feeds them back into the classifier, the risk model or
+  the policies.
+- **Does it run against a real LLM in the evaluation?** Not here. The
+  provider comparison exists (`eval run --suite models --provider anthropic`)
+  and stores model, date, per-attack outcomes, latency and tokens, but the
+  live row is `not_run` in this repository.
+- **Is there user identity on the API?** No. One optional bearer token, no
+  roles. Only a human decision resolves a case, reserved system / model names
+  are refused and the registry's review level is checked, but the reviewer's
+  name and level are declared by the caller.
+- **Does it parse PDFs or images?** No. Uploads are untrusted text.
+- **Does it scale horizontally?** Not as built. One process, one SQLite
+  file, an in-memory graph; the seams where real infrastructure would attach
+  are named, not implemented.
+- **Is the monitoring layer AML-compliant?** No. It is a synthetic
+  investigation simulation with structured indicators and no filing
+  capability.
+- **Can the classifier read a claim it has never seen?** Not reliably. On a
+  held-out set of uncommon legitimate wording written before it was run, it
+  read 7 of 21 at first and 17 of 21 after the patterns were extended (by an
+  author who had seen the misses). A miss abstains and the case goes to a
+  human; the 100% on ordinary paraphrases is on phrasings by the same author.
 
 **What remains unimplemented for production?**
 Real record integrations, binary document parsing, a trained risk model,

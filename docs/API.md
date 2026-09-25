@@ -28,7 +28,7 @@ Open http://localhost:8000/ for the console.
 | GET | `/v1/risk/{entity_type}/{id}` | explainable entity / transaction risk |
 | GET | `/v1/graph/{entity_type}/{id}?depth=2` | relationship neighbourhood |
 | GET | `/v1/decisions[/{id}]` | decisions, with evidence and audit event |
-| GET, POST | `/v1/cases`, `/v1/cases/{id}`, `/v1/cases/{id}/transition`, `/v1/cases/{id}/decision` | cases; human-only resolution |
+| GET, POST | `/v1/cases`, `/v1/cases/{id}`, `/v1/cases/{id}/transition`, `/v1/cases/{id}/decision` | cases; a transition can never reach RESOLVED -- only `/decision` (a recorded human verdict) resolves |
 | GET | `/v1/cases/{id}/review` | the human-review packet: why the case exists, risk with components, trusted evidence vs untrusted claims, contradictions, the model's recommendation marked MODEL_GENERATED, audit history |
 | GET | `/v1/audit`, `/v1/audit/verify`, `/v1/audit/{id}` | the tamper-evident audit chain (indexed lookup by event or decision id) |
 | GET, POST | `/v1/policies`, `/v1/policies/{id}?version=`, `/v1/policies/catalog`, `/v1/policies/evaluate`, `/v1/policies/validate`, `/v1/policies/lint` | policy-as-code; `lint` returns the findings for a policy document or a shipped `{policy_id, version}` |
@@ -42,20 +42,32 @@ Open http://localhost:8000/ for the console.
 
 ```jsonc
 "options": {
-  "controls": ["provenance","detection","risk","adjudication","policy","authorization"],  // ablation only
-  "unguarded": false,        // shorthand for controls: []
-  "policy_version": 1,
-  "risk_model": "txn-2.0",   // txn-1.0 | txn-1.1 | txn-2.0
+  // user-controllable: accepted everywhere
   "hardened": false,         // hardened-prompt agent
-  "skip_agent": false        // evaluate without any model call
+  "skip_agent": false,       // evaluate without any model call
+  // what-if: refused (403) on the evaluate routes
+  "controls": ["provenance","detection","risk","adjudication","policy","authorization"],
+  "unguarded": false,        // shorthand for controls: []
+  "policy_version": 1,       // a historical version
+  "risk_model": "txn-1.0"    // a historical model of the route's surface
 }
 ```
 
-`controls` and `unguarded` are **refused with 403 on the evaluate routes**
-unless the server runs with `SENTINEL_ALLOW_UNGUARDED=1`. The authoritative
-path is always the full control set by request; the ablation switches are
-accepted by `/v1/attacks/simulate` and `/v1/replay`, which record the control
-set on the decision and the audit event.
+A caller may request an evaluation; it may not weaken one. On the five
+evaluate routes `controls`, `unguarded` (in `options` or top-level),
+`policy_version`, `risk_model` and the investigation route's `as_of` are
+**refused with 403**, and any option key not listed above with 400. The
+authoritative path always runs every control, the **active** policy version
+and the active risk model of its surface: an older version has rules the
+current one added (v1 of `dispute-refund` has no double-refund block), so
+selecting it by request would be a bypass. There is no switch that turns this
+off. The what-if switches are accepted by `/v1/attacks/simulate`,
+`/v1/scenarios/{key}/run` and `/v1/replay`; those runs are computed by the
+same engine and **never recorded as decisions** (no audit event, no case, no
+stored decision; `"authoritative": false` on the returned decision). A risk
+model for another surface (e.g. `acct-1.0` on a transaction scenario) is a 400,
+not a silent misapplication. `sentinel.decision.authority` enforces the same
+rule inside the engine, whatever the surface.
 
 ## Response — the canonical Decision
 
@@ -75,7 +87,8 @@ set on the decision and the audit event.
   "blocked_by": ["trusted_evidence", "ai_security_gateway", "policy:dispute-refund@v3", "capability_authorization"],
   "reason": "…", "trail": [{"stage": "provenance", …}, …],
   "input_hash": "…", "provider": "offline", "model": "offline-simulator",
-  "case_id": "CASE-…", "audit_event_id": "AUD-…", "controls": [...], "ai_agreed": false
+  "case_id": "CASE-…", "audit_event_id": "AUD-…", "controls": [...], "ai_agreed": false,
+  "authoritative": true   // recorded by the authoritative path; false for any what-if
 }
 ```
 
@@ -94,15 +107,37 @@ be the system of record, never a channel a customer can reach. Consequences:
   `{transaction_id}`, `{session_id}`), which read the facts from the store;
 - never build the `ledger` object from anything the disputing party sent.
 
-`POST /v1/replay` compares the recomputed decision with the **originally
-stored** one, never merely "replay completed": `decision_diff` lists every
-field that changed with its before / after values, `policy_drift` says the
-policy version named in the snapshot no longer has the content the decision
-was made under, and `engine_drift` (alias `original_drift`) says re-deriving
-the original from its snapshot no longer reproduces the recorded outcome. For
-identical input, trusted facts, risk configuration, policy version and engine
-version the deterministic result reproduces and the diff is empty
-(`tests/test_replay_determinism.py`).
+`POST /v1/replay` compares the recomputed decision with the decision **as
+recorded**, never merely "replay completed":
+
+- `original` is the stored decision's summary, **anchored to its audit
+  event**: the fields the event carries (action, risk score, policy version,
+  authorization, executed capability, evidence verdict, risk model) are taken
+  from the tamper-evident chain, and the stored input snapshot is checked
+  against the SHA-256 the event recorded. Any disagreement is listed in
+  `record_issues` and `record_verified` is `false`;
+- `replayed` is the composer's output under the overrides; `decision_diff`
+  lists every field that changed with before / after values, the risk model
+  included;
+- `versions` names the policy, risk model and engine on each side;
+- `policy_drift`: the policy version named in the snapshot no longer has the
+  content the decision was made under; `engine_drift` (alias
+  `original_drift`): re-deriving the decision from its own snapshot no longer
+  reproduces it.
+
+For identical input, trusted facts, risk configuration, policy version and
+engine version the result reproduces and the diff is empty
+(`tests/test_replay_determinism.py`, `tests/test_replay_integrity.py`). A
+replay is stored as a replay record and an audit event of kind `replay`; it
+never overwrites the original decision.
+
+`POST /v1/cases/{id}/decision` takes `reviewer`, `outcome`
+(approve | deny | escalate), `note` and an optional declared `role`
+(`HUMAN_REVIEWER` default, or `SENIOR_REVIEWER`). It is the only way a case
+reaches RESOLVED. A reserved system / model actor name, or the name of an
+agent that recommended on the case, is a 403; approving a case whose
+capability needs a senior reviewer with `HUMAN_REVIEWER` is a 403; a decision
+on an OPEN (untriaged) or already RESOLVED case is a 409.
 
 ## Errors
 
@@ -110,10 +145,10 @@ version the deterministic result reproduces and the diff is empty
 |---|---|
 | 400 | malformed JSON, missing/invalid field, unknown option, invalid policy document |
 | 401 | `SENTINEL_API_KEY` set and no valid `Authorization: Bearer` / `X-API-Key` (compared in constant time) |
-| 403 | `unguarded` / `options.controls` on an evaluate route without `SENTINEL_ALLOW_UNGUARDED=1` |
+| 403 | a what-if switch (`unguarded`, `options.controls`, `options.policy_version`, `options.risk_model`, investigation `as_of`) on an evaluate route; a reviewer that is not a human actor or lacks the case's required level |
 | 404 | unknown route / id |
-| 409 | invalid case transition |
-| 413 | body over 256 KB or a text over 20,000 chars |
+| 409 | invalid case transition; a human decision on an OPEN or RESOLVED case |
+| 413 | body over 256 KB (the body is drained first, so the client sees the 413) or a text over 20,000 chars |
 | 429 | per-client rate limit (`SENTINEL_RATE_LIMIT` requests/minute, default 600, 0 = off) |
 | 500 | internal error; never a stack trace |
 

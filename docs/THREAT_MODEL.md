@@ -76,13 +76,20 @@ closes them.
 | model executes a capability | registry: AI_AGENT allowed on no consequential capability; composer never executes the model's request | invariants 2, 6; `test_capabilities.py` |
 | model requests off-surface capability | gateway `inspect_model_output` → CRITICAL escalation → BLOCK + P1 case | `test_security_gateway.py`, `test_cases.py` |
 | unknown / unverifiable claim | INSUFFICIENT → REQUIRE_HUMAN_REVIEW | invariant 4 |
-| malformed input | validation → fail-safe human review; numbers coerce to 0 | invariant 5 |
+| malformed input | validation → fail-safe human review; a malformed or negative number in a trusted record (ledger amount, KYB flags) is a human review, never a coerced 0 | invariant 5, `test_policy_adversarial.py` |
 | high-value effect | policy thresholds + registry human-review thresholds | invariant 6 |
 | audit tampering | tamper-evident chain; verify names the first modified, deleted, inserted or reordered record; a signed checkpoint detects a consistent rewrite | invariant 7, `test_audit_chain.py`, `test_audit_indexing.py` |
 | text mimicking the model's own output | the parser reads only the provider's structured tool call; output-format mimicry is a gateway finding | `test_model_output_separation.py` |
 | fabricated records in prose | an untrusted channel cannot produce VERIFIED evidence (type system) | `test_evidence.py`, `test_trust_boundary.py` |
 | future data influencing a past decision | point-in-time baselines, as-of entity profiles, time-aware graph, bounded monitoring windows; the temporal suite | `test_temporal_leakage.py`, `test_entity_pointintime.py`, `test_graph_temporal.py` |
 | a second decision engine in the console | the console holds no decision logic and calls only real routes | `test_ui_api_contract.py` |
+| an older policy or risk model, or fewer controls, selected by request | evaluation authority in the engine: `_finish` refuses to record a run whose inputs are not the active policy / model with every control; evaluate routes 403 every what-if switch; what-if runs never persist | `test_evaluation_authority.py`, `test_rc_hardening.py` |
+| a model or caller driving a consequential capability | candidate capability fixed per workflow or from the caller's structured request, never model output; registry + policy + evidence gate it; human-reserved capabilities never execute through the system | `test_capability_trace.py`, `test_policy_adversarial.py` |
+| a case closed without a human verdict, or by a system / agent name, or approved below the required level | RESOLVED is absent from the status table; `record_human_decision` refuses reserved actors and checks the registry-derived level | `test_case_lifecycle.py`, `test_rc_hardening.py` |
+| a policy edited in place, mistyped or with a gate that can never fire | pinned manifest; strict documents; typed evaluation; store cross-check | `test_policy_adversarial.py` |
+| replay reporting "no change" for a rewritten record | the recorded side is anchored to the audit event and the snapshot to its recorded hash | `test_replay_integrity.py` |
+| a corrupted audit file crashing or passing verification | every unreadable / modified / missing / reordered record is an AUDIT INTEGRITY ERROR with exit 2 | `test_audit_corruption.py` |
+| an edited audit index redirecting a lookup | SQLite index columns are cross-checked against the hashed payload | `test_rc_hardening.py` |
 | silent policy drift | explicit versions, effective dates, replay | invariant 8 |
 | provenance loss | trust preserved through evidence, snapshot, audit | invariant 9 |
 | parallel business logic | one application layer; static check on API/CLI/UI sources | invariant 10 |
@@ -117,11 +124,10 @@ closes them.
 - The API's trusted inputs (`ledger`, `records`, `transaction`, `session`)
   are trusted by contract, not by proof: the caller is assumed to be the
   system of record. Auth is optional; the server warns when it starts open on
-  a non-loopback bind. Ablation controls are refused on the evaluate routes
-  unless `SENTINEL_ALLOW_UNGUARDED=1`.
-- Policy versions are labels. Every decision pins the policy content hash and
-  replay reports `policy_drift`, but nothing prevents editing a shipped
-  version in place; production would make policy files immutable artifacts.
+  a non-loopback bind. What-if switches are refused on the evaluate routes.
+- Shipped policy versions are pinned by digest, so an in-place edit fails
+  closed; someone who can edit both the policy and the manifest can still
+  change it -- production needs signed, immutable policy artefacts.
 - The audit chain detects modification, deletion, insertion and reordering.
   A consistent rewrite of the whole chain from genesis is detected only
   against a checkpoint (`sentinel audit checkpoint`, HMAC-signed with
@@ -132,6 +138,17 @@ closes them.
   rather than approved: a CRITICAL security finding blocks automatic approval
   by design. The KYB suite reports this as the any-input false-positive rate
   (`docs/LIMITATIONS.md`).
-- The temporal-leakage suite samples a subset of transactions and three
-  future offsets; the per-feature tests cover the mechanisms, but the suite
-  is a spot check over the generator, not a proof over every record.
+- The temporal-leakage suite is a deterministic check over two generator
+  worlds (192 sampled transactions, nine record kinds, four offsets); the
+  per-feature tests cover the mechanisms, but it is not a proof over every
+  record. A status with no recorded start and a merchant's registration-time
+  flags are current-state by nature.
+- A message the claim classifier cannot read is held for a human rather than
+  denied. That is the designed fail-safe on an unsupporting ledger; the human
+  reviewer is then the last control against social engineering, and the review
+  packet is built to keep the ledger facts first.
+- The API has no roles: any caller with the (optional) bearer token can record
+  a human decision under a (non-reserved) reviewer name and declare its level.
+  The structure is enforced -- only a human decision resolves, and the level
+  the registry requires is checked -- but the identity is not. Production
+  needs per-user identity before the human path means anything.

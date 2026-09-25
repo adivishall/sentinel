@@ -78,13 +78,16 @@ linked-entity risk reads precomputed profiles.
 **Trade-off.** No iterative graph propagation; the graph is one hop of
 signal, which is what the scenarios need.
 
-## D8 — SQLite, an in-process event bus, a dict-backed graph
+## D8 — SQLite, synchronous workflows, a dict-backed graph
 
 **Decision.** No Kafka, Redis, Neo4j, microservices.
 **Why.** A portfolio system should be runnable from a clean checkout in one
 command and every architectural choice should be explainable. The
-abstractions (repository protocol, `EventBus`, `EntityGraph`) are the seams
-where real infrastructure would attach.
+abstractions (repository protocol, audit backend protocol, `EntityGraph`,
+`LLMProvider`) are the seams where real infrastructure would attach. An
+in-process `EventBus` existed until 2.2.0; nothing subscribed to it, so it was
+removed rather than kept as decoration -- the audit chain is the durable record
+of every decision.
 **Trade-off.** Not horizontally scalable as-is; `docs/INTERVIEW.md` covers
 what changes.
 
@@ -125,6 +128,9 @@ decision engine that could drift. Never again.
 **Trade-off.** The static demo is read-only; custom attacks need `make ui`.
 
 ## D13 — Ablation controls are a lab feature, not an API option
+
+*Superseded by D25: there is no longer a lab switch; what-if runs are never
+recorded, whatever the surface.*
 
 **Decision.** `options.controls` / `unguarded` are refused (403) on the
 authoritative evaluate routes unless the operator sets
@@ -222,3 +228,153 @@ positives, which measured nothing. A clean merchant with an injected upload is
 held for a human by design; that is a cost and it is published.
 **Trade-off.** The headline any-input false-positive rate is not zero and is
 not tuned to be.
+
+## D20 — The authoritative path never runs an older policy or another risk model on request
+
+*Superseded by D25, which moved the rule from the API / CLI edge into the
+engine and removed `SENTINEL_ALLOW_UNGUARDED`.*
+
+**Decision.** `options.policy_version` and `options.risk_model` are refused
+(403 / exit 2) on the evaluate routes and commands unless the operator sets
+`SENTINEL_ALLOW_UNGUARDED=1`; replay and the attack simulator keep them.
+**Why.** The final review showed `dispute-refund@v1` has no double-refund
+rule, so a caller could pin it and pay a second refund on an already-refunded
+ledger, and pinning `txn-1.0` turned flagged fraud into executed approvals. A
+what-if is not an authorization.
+**Trade-off.** A legitimate "evaluate under the previous policy" question now
+goes through replay, which is where it is recorded as a what-if.
+
+## D21 — A case is resolved only by a recorded human decision
+
+**Decision.** `CaseService.transition` refuses `RESOLVED`; the only path is
+`record_human_decision`, which writes a `HumanDecision`.
+**Why.** D10 claimed this and the code did not honour it: a plain status
+transition through the API could close a case with no human verdict.
+**Trade-off.** None.
+
+## D22 — The claim classifier abstains, and an abstain is a human review
+
+**Decision.** The claim classifier is a deterministic scorer over weighted
+pattern families with a negation guard, a hedge detector and a conflict rule;
+it reports a confidence and the signals that fired. An unreadable message
+abstains and reconciles to INSUFFICIENT (held for a human); a recognised
+non-claim stays UNSUPPORTED (denied); two incompatible claims abstain. The
+invariant is restated accordingly: on an unsupporting ledger nothing executes
+and nothing rises above a human review; on a supporting ledger nothing
+exceeds the plain claim's outcome.
+**Why.** The old classifier denied every phrasing it did not recognise, which
+the docs described as "fails safe to a human" -- it did not. Auto-denying a
+legitimate customer for wording is the wrong failure; a human with the review
+packet is the designed safeguard, and a vague attacker still gets no
+execution. The benchmark that reports the classifier shares its author and is
+labelled a regression floor.
+**Trade-off.** A vague attacker reaches a human reviewer rather than an
+automatic deny; the packet keeps the ledger facts first and the model output
+marked untrusted.
+
+## D23 — Replay diffs the stored decision, not a re-derivation
+
+*Extended by D27: the stored decision is itself checked against the audit
+chain.*
+
+**Decision.** The "before" side of a replay is the decision as stored; engine
+drift is the disagreement between the stored record and its re-derivation
+across final action, policy outcome, matched rules, risk score,
+authorization, executed capability and verdict.
+**Why.** The final review found the diff was taken against a fresh
+recomputation, so a silently changed engine moved both sides at once.
+**Trade-off.** A deliberate engine change reports drift on every earlier
+decision until they are re-baselined -- which is the point.
+
+## D24 — The synthetic world must carry the same signals as fraud
+
+**Decision.** Legitimate accounts burst, travel, switch phones, fail MFA and
+change credentials at realistic rates; fraud timestamps and gaps vary;
+records that were impossible (purchases before a merchant existed, disputes
+after the dataset end, POS deliveries) are gone. Recall that falls as a
+result is published as it is.
+**Why.** A realism review found that several labels were recoverable from a
+single field (second-level timestamps, a fixed gap, an unregistered device
+that only attackers ever used). A rule engine evaluated against such a
+generator measures the generator, not the rules.
+**Trade-off.** Transaction-level burst recall dropped and account-level
+recall rose; the per-signal table shows how often every factor fires on
+legitimate traffic now.
+
+## D25 — Evaluation authority is enforced in the engine, not at the edge
+
+**Decision.** An evaluation is *authoritative* (recorded, audited, able to
+open a case and to execute) only when its inputs carry every control, the
+active policy version (content hash included) and the active risk model of
+its surface. `_finish` checks the inputs a decision was composed from and
+raises `ControlDowngrade` before anything is written; `SentinelApp` sends
+what-if options to a runtime that never persists. The evaluate routes refuse
+every what-if switch with 403, the authoritative CLI commands do not have the
+flags, unknown option keys are a 400, and the lab switch is gone.
+**Why.** The earlier fix (D20) refused the switches at the API and CLI only.
+The engine would still record a downgraded run, the attack simulator's
+no-controls side and scenario what-ifs were stored and audited next to real
+decisions, and a new surface would have had to remember the rule. A rule a
+caller cannot reach is only as good as every caller; a rule in `_finish` is
+structural.
+**Trade-off.** The simulator's WITHOUT side no longer appears in the audit
+log or the decision list; it is returned to the caller, labelled, and that is
+all.
+
+## D26 — Policy documents are strict and typed, and shipped versions are pinned
+
+**Decision.** Unknown keys, a missing `default_outcome` and a value a field
+can never take are load errors; every value a rule reads is type-checked at
+evaluation (a mistyped value fails safe to a human); `policies/MANIFEST.json`
+pins the SHA-256 of every shipped version, and a store that recorded a version
+with other content refuses to open.
+**Why.** An adversarial pass found each of these failing open: a string amount
+switched a BLOCK rule off, an absent default meant ALLOW, a typo'd capability
+made a gate that could never fire, and "policy versions are labels" meant v3
+could be edited in place.
+**Trade-off.** Adding a policy version is a two-step change (`sentinel policy
+pin`). The manifest guards against accidental edits, not against someone who
+can change both files.
+
+## D27 — Replay's recorded side comes from the audit chain
+
+**Decision.** Each decision's audit event records the SHA-256 of its input
+snapshot, the risk model and the engine version; replay verifies the stored
+snapshot against it and takes the recorded fields from the event, reporting
+every disagreement (`record_verified`, `record_issues`).
+**Why.** The decisions table and the snapshot are not tamper-evident; editing
+both consistently would replay as "no change".
+**Trade-off.** Decisions recorded before 2.2.0 carry no snapshot hash and
+replay as unverified -- correctly.
+
+## D28 — A case's approval level comes from the capability registry
+
+**Decision.** When a case opens it records who may approve it
+(`HUMAN_REVIEWER`, `SENIOR_REVIEWER` or `NOBODY`) from the registry; approving
+needs that declared level, denying needs any human; reserved system and model
+names cannot record a human decision; RESOLVED is not in the status table.
+**Why.** A RELEASE_FUNDS case could be approved by any reviewer name, and the
+state machine relied on a special case to keep RESOLVED unreachable.
+**Trade-off.** The level is declared, not authenticated: without an identity
+system the control is a structure waiting for one (`docs/LIMITATIONS.md`).
+
+## D29 — Current-state fields are read as of the decision
+
+**Decision.** `Account.status_since` / `status_at(t)`; payout sharing is read
+from the bank accounts held at the decision time, not the account's current
+payout field.
+**Why.** The extended temporal benchmark showed a freeze or a payout change
+after T1 changing T1's decisions (24/24 on a probe).
+**Trade-off.** A status with no recorded start (legacy data) is still read as
+current state; `docs/LIMITATIONS.md` says so.
+
+## D30 — Classifier changes are measured on a set written before them
+
+**Decision.** A held-out set of uncommon legitimate phrasings was written and
+labelled before the classifier was run on it; its first-run score (7/21) is
+published next to the post-change score (17/21), and the change was made
+against a separate development set.
+**Why.** "Improve the classifier" against the same phrasings it is scored on
+measures the author, not the classifier.
+**Trade-off.** The author had seen the held-out misses, so the post-change
+number is optimistic; the remaining misses were deliberately left unfitted.
