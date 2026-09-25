@@ -57,6 +57,7 @@ SIGNALS: tuple[Signal, ...] = (
         STRONG,
         _rx(
             r"never (arrived|received|delivered|reached|came|turned up|showed up|got here|got to me)"
+            r"|never made it( to| here| home|\b)|never (got|was) (handed|given) (over )?(to )?me"
             r"|not delivered|non[- ]?receipt|item (was )?never (sent|shipped)"
         ),
     ),
@@ -67,6 +68,25 @@ SIGNALS: tuple[Signal, ...] = (
         _rx(
             r"(has ?n'?t|have ?n'?t|had ?n'?t|did ?n'?t|has not|have not|still (has|had) not|not)"
             r"\W{0,3}(\w+\W+){0,3}(arriv|reach|deliver|come|came|turn(ed)? up|show(ed)? up|receiv)"
+        ),
+    ),
+    Signal(
+        "didnt_get",
+        ClaimType.NON_RECEIPT,
+        STRONG,
+        _rx(
+            r"(did ?n'?t|did not|have ?n'?t|have not|never|yet to) (get|got|receive) "
+            r"(my|the|any|a|an|it|this|that)\b"
+            r"|(not|never) (been )?handed over"
+        ),
+    ),
+    Signal(
+        "went_missing",
+        ClaimType.NON_RECEIPT,
+        STRONG,
+        _rx(
+            r"(parcel|package|order|delivery|item|shipment|consignment|goods) (has |have )?"
+            r"(went|gone|go|is|was|got) (missing|awol|lost)"
         ),
     ),
     Signal(
@@ -87,13 +107,19 @@ SIGNALS: tuple[Signal, ...] = (
         STRONG,
         _rx(
             r"\bin transit\b|still (on the way|on its way|coming|shipping)|not yet arrived|hasn'?t arrived yet"
+            r"|stuck (at|in) (the )?(hub|customs|warehouse|depot|sorting|facility|courier|transit)"
+            r"|(tracking|status|shipment|parcel|package)\W+(\w+\W+){0,8}(not moving|has ?n'?t moved"
+            r"|has not moved|not been updated|has ?n'?t (been )?updated)"
         ),
     ),
     Signal(
         "running_late",
         ClaimType.IN_TRANSIT,
         WEAK,
-        _rx(r"(order|parcel|package|delivery) (is|might be|may be|seems) (late|delayed|overdue)"),
+        _rx(
+            r"(order|parcel|package|delivery|shipment|consignment) (is|might be|may be|seems) "
+            r"(late|delayed|overdue)"
+        ),
     ),
     # ---- duplicate ----------------------------------------------------------------
     Signal(
@@ -104,7 +130,9 @@ SIGNALS: tuple[Signal, ...] = (
             r"\bduplicate\b|charged (me )?twice|billed (me )?(\w+ ){0,3}(twice|two times|double)"
             r"|(two|2|double|multiple) (\w+ ){0,3}(charges|debits|entries|transactions|deductions)"
             r"|charged (\w+ ){0,3}(twice|two times|multiple times|more than once)"
-            r"|(taken|debited|deducted) (\w+ ){0,3}(twice|two times)"
+            r"|(taken|debited|deducted|charged|went through|processed) (\w+ ){0,3}"
+            r"(twice|two times|2 times|2x|double)\b"
+            r"|double (charge|charged|debit|deduction|payment)"
         ),
     ),
     Signal(
@@ -125,6 +153,10 @@ SIGNALS: tuple[Signal, ...] = (
             r"|(order|booking|purchase|subscription|reservation|membership)\W+(\w+\W+){0,5}cancel"
             r"|call(ed)? (it |the \w+ |my \w+ )?off"
             r"|withdrew (the |my )?(order|booking|purchase)"
+            r"|(opted|backed|pulled) out of (the |my |this |that )?"
+            r"(order|booking|purchase|subscription|plan|membership|reservation|trial)"
+            r"|revoked (the |my )?(order|booking|purchase|subscription|reservation)"
+            r"|(order|booking|purchase|subscription|reservation) (was |got )?revoked"
         ),
     ),
     Signal(
@@ -142,8 +174,12 @@ SIGNALS: tuple[Signal, ...] = (
             r"\b(this|that|it|these|those|my)( \w+){0,2} (is|was|are|were) (clearly |definitely |plain |a )?fraud(ulent)?\b"
             r"|fraudulent (charge|transaction|payment|purchase|use|activity)|fraud on my (card|account)"
             r"|victim of (card )?fraud|report(ing|ed)? (it |this |these )?(as )?fraud"
-            r"|didn'?t (make|authori[sz]e|do|place)|unauthori[sz]ed|don'?t recogni[sz]e"
-            r"|not mine|\bnot me\b|(card|phone) (was )?with me|never (made|authori[sz]ed|placed)|never left my (wallet|possession|hands)"
+            r"|(did ?n'?t|did not|have ?n'?t|have not|had not|never) (make|made|do|done|place|placed|initiate|initiated) "
+            r"(this|that|these|those|the|any|a|an)? ?(\w+ )?(payment|purchase|transaction|order|charge|booking|debit|transfer)s?\b"
+            r"|(did ?n'?t|did not|have ?n'?t|have not|never) authori[sz]e|unauthori[sz]ed|don'?t recogni[sz]e"
+            r"|without my (consent|permission|knowledge|authori[sz]ation)"
+            r"|(card|account|bank) details (were |was |got )?(stolen|compromised|hacked|leaked)"
+            r"|not mine|\bnot me\b|(card|phone) (was )?with me|never left my (wallet|possession|hands)"
             r"|someone (else )?(used|has used|is using) my (card|account)|(stolen|cloned|skimmed) card|wasn'?t me"
             r"|i (did ?n'?t|never|have never) (bought|ordered|purchased|shopped)"
         ),
@@ -196,7 +232,7 @@ NEGATED_RECEIPT = _rx(
 # "I have not received the refund" is about money owed, not goods: it is not a
 # non-receipt claim about the order, and there is no trusted field for it -> abstain.
 REFUND_NOT_RECEIVED = _rx(
-    r"(not|never|hasn'?t|haven'?t|didn'?t|yet to) (\w+ ){0,3}(received|receive|got|seen|see) "
+    r"(not|never|hasn'?t|haven'?t|didn'?t|didnt|yet to) (\w+ ){0,3}(received|receive|get|got|seen|see) "
     r"(the |my |a |any )?(refund|money|credit|reversal|reimbursement|amount back)"
 )
 

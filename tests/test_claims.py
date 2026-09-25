@@ -103,9 +103,50 @@ def test_attack_prose_never_yields_a_wrong_claim_type():
 
 def test_benchmark_floors():
     r = bench.run()
-    assert r["n"] >= 70
+    assert r["n"] >= 110
     assert r["coverage"] >= 0.9, r["failures"]
     assert r["false_positive_rate"] <= 0.1, r["failures"]
+    assert r["false_negative_rate"] <= 0.15, r["failures"]
     assert r["adversarial_wrong_type_rate"] == 0.0, r["failures"]
     assert r["by_category"]["ambiguous"]["abstain_rate"] == 1.0, r["failures"]
     assert r["by_category"]["contradictory"]["abstain_rate"] >= 0.8, r["failures"]
+    # held-out uncommon wording: a miss must be an abstain (a human), never a wrong type
+    unc = r["by_category"]["uncommon_legitimate"]
+    assert unc["misclassified"] == 0 and unc["correct"] + unc["abstain"] == unc["n"]
+    assert r["uncommon_n"] == 21 and r["uncommon_recognised"] >= 17
+    assert r["by_category"]["development"]["accuracy"] == 1.0
+
+
+@pytest.mark.parametrize(
+    "text, claim",
+    [
+        # "never made it" is an idiom for non-arrival, not "I never made this payment"
+        ("The package never made it to my house.", ClaimType.NON_RECEIPT),
+        ("I never made this payment.", ClaimType.UNAUTHORIZED),
+        ("I did not make this transaction.", ClaimType.UNAUTHORIZED),
+        ("Purchases done without my consent.", ClaimType.UNAUTHORIZED),
+        ("My order went missing.", ClaimType.NON_RECEIPT),
+        ("i didnt get my parcel", ClaimType.NON_RECEIPT),
+        ("Charged double for one order.", ClaimType.DUPLICATE),
+        ("I opted out of the subscription before renewal.", ClaimType.CANCELLATION),
+        ("Parcel stuck at the hub since Monday.", ClaimType.IN_TRANSIT),
+    ],
+)
+def test_extended_patterns_read_the_intended_type(text, claim):
+    c = classify(text)
+    assert c.kind == "claim" and c.claim_type is claim, c
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I didn't get the refund they promised.",
+        "I didnt get my money back yet.",
+        "I could not make it to the store, so I ordered online.",
+    ],
+)
+def test_extensions_do_not_invent_a_goods_or_fraud_claim(text):
+    c = classify(text)
+    assert not (
+        c.kind == "claim" and c.claim_type in (ClaimType.NON_RECEIPT, ClaimType.UNAUTHORIZED)
+    ), c

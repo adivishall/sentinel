@@ -1,6 +1,6 @@
-"""Claim-classifier benchmark: a labelled set of dispute phrasings in five
-categories, scored on coverage, misclassification, false positives and abstain
-rate (``sentinel eval run --suite claims``).
+"""Claim-classifier benchmark: a labelled set of dispute phrasings in seven
+categories, scored on coverage, false negatives, false positives, misclassification
+and abstain rate (``sentinel eval run --suite claims``).
 
 Categories and what "correct" means for each:
 
@@ -13,6 +13,8 @@ Categories and what "correct" means for each:
   adversarial             attack prose around a claim; correct = the asserted type (the
                           ledger decides support) or abstain -- never a different type
   contradictory           two incompatible claims in one message; correct = abstain
+  uncommon_legitimate     HELD-OUT uncommon but legitimate wording; correct = its type
+  development             phrasings used to extend the patterns (a fit, reported apart)
 
 The benchmark and the classifier share an author: the numbers describe these
 patterns on these phrasings and are a regression floor, not a generalisation
@@ -36,6 +38,85 @@ NR, IT, DUP, CAN, UN = (
     ClaimType.DUPLICATE,
     ClaimType.CANCELLATION,
     ClaimType.UNAUTHORIZED,
+)
+
+# Written and labelled in the 2.2.0 release review BEFORE the classifier was run on them,
+# and never used to change it: uncommon but legitimate wording (Indian English, slang,
+# typos, formal register, indirect phrasing). This is the held-out estimate of how often
+# an honest customer is sent to a human because the wording was not recognised.
+UNCOMMON: tuple[tuple[str, str, object], ...] = (
+    (
+        "uncommon_legitimate",
+        "The courier marked it delivered but nothing ever reached my door.",
+        NR,
+    ),
+    ("uncommon_legitimate", "Package went AWOL somewhere between the warehouse and my flat.", NR),
+    (
+        "uncommon_legitimate",
+        "Still waiting on my order from three weeks back, it never showed up.",
+        NR,
+    ),
+    ("uncommon_legitimate", "Didnt get the parcel at all, pls help", NR),
+    ("uncommon_legitimate", "The order has not come to me till date.", NR),
+    ("uncommon_legitimate", "Kindly note the consignment was never handed over to me.", NR),
+    ("uncommon_legitimate", "I have received nothing for this payment.", NR),
+    ("uncommon_legitimate", "My card got hit twice for the same thing.", DUP),
+    (
+        "uncommon_legitimate",
+        "There are two identical debits for one purchase on my statement.",
+        DUP,
+    ),
+    ("uncommon_legitimate", "You people have deducted the amount double.", DUP),
+    ("uncommon_legitimate", "Same charge appears 2x on my account for a single order", DUP),
+    (
+        "uncommon_legitimate",
+        "I backed out of the subscription before renewal and they billed me anyway.",
+        CAN,
+    ),
+    ("uncommon_legitimate", "Order was called off by me the same day, still got charged.", CAN),
+    ("uncommon_legitimate", "I had cancelled it well in advance but the money was taken.", CAN),
+    ("uncommon_legitimate", "Revoked the booking within the free window; still debited.", CAN),
+    (
+        "uncommon_legitimate",
+        "I did not make this transaction, someone else must have used my details.",
+        UN,
+    ),
+    ("uncommon_legitimate", "No idea what this charge is, I never shopped there.", UN),
+    ("uncommon_legitimate", "My account was used without my permission.", UN),
+    ("uncommon_legitimate", "This debit wasn't done by me or anyone in my family.", UN),
+    ("uncommon_legitimate", "Shipment is stuck at the hub for two weeks now.", IT),
+    (
+        "uncommon_legitimate",
+        "The tracking hasn't moved since last Monday, still with the courier.",
+        IT,
+    ),
+)
+
+# Written AFTER the held-out set above was scored (by the same author, who had seen its
+# misses) and used to extend the patterns. Reported as its own category; its numbers are
+# a fit, not an estimate.
+DEVELOPMENT: tuple[tuple[str, str, object], ...] = (
+    ("development", "I never got my order.", NR),
+    ("development", "The package never made it to my house.", NR),
+    ("development", "My delivery went missing.", NR),
+    ("development", "Nothing was delivered to my address.", NR),
+    ("development", "i didnt get my shoes", NR),
+    ("development", "The item was not handed over to me by the delivery person.", NR),
+    ("development", "My card was charged double for one purchase.", DUP),
+    ("development", "Money was taken 2 times for a single item.", DUP),
+    ("development", "The same payment went through twice.", DUP),
+    ("development", "I opted out of the plan before the renewal date and was still charged.", CAN),
+    ("development", "I backed out of the order within an hour.", CAN),
+    ("development", "The reservation was revoked by me on time.", CAN),
+    ("development", "I haven't made this payment.", UN),
+    ("development", "These purchases were done without my consent.", UN),
+    ("development", "I did not authorise this debit.", UN),
+    ("development", "My card details were stolen and used.", UN),
+    ("development", "My parcel is stuck in customs.", IT),
+    ("development", "Tracking still shows it at the courier facility, not moving.", IT),
+    ("development", "The shipment is delayed at the warehouse.", IT),
+    ("development", "I didn't get the refund they promised.", "abstain"),
+    ("development", "It came yesterday, all good, thanks.", "non_claim"),
 )
 
 # (category, text, expected) -- expected is a ClaimType for a claim, "abstain" or "non_claim".
@@ -228,7 +309,7 @@ def run() -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     by_cat: dict[str, Counter[str]] = {}
     confusion: Counter[tuple[str, str]] = Counter()
-    for cat, text, expected in CASES:
+    for cat, text, expected in CASES + UNCOMMON + DEVELOPMENT:
         c = classify(text)
         got = c.claim_type.value if c.kind == "claim" else c.kind
         exp = expected.value if isinstance(expected, ClaimType) else str(expected)
@@ -260,10 +341,21 @@ def run() -> dict[str, Any]:
             }
         )
     legit = by_cat["legitimate_paraphrase"]
+    unc = by_cat["uncommon_legitimate"]
     adv = by_cat["adversarial"]
     n = len(rows)
     total_claimed = sum(v["claim"] for v in by_cat.values())
     total_wrong = sum(v["misclassified"] for v in by_cat.values())
+    # Classifier-sense errors. A false negative is a legitimate claim not read as its own
+    # type (the customer is held for a human, or misread); a false positive is a message
+    # that makes no single legitimate claim (ambiguous, unsupported, contradictory) read
+    # confidently as a claim. The development set is excluded: it is a fit.
+    pos = [legit, unc]
+    neg = [by_cat[c] for c in ("ambiguous", "unsupported", "contradictory")]
+    fn = sum(v["n"] - v["correct"] for v in pos)
+    fn_n = sum(v["n"] for v in pos)
+    fp = sum(v["claim"] for v in neg)
+    fp_n = sum(v["n"] for v in neg)
     return {
         "benchmark": "claim-classifier",
         "n": n,
@@ -280,10 +372,18 @@ def run() -> dict[str, Any]:
             }
             for cat, v in by_cat.items()
         },
-        # headline metrics
+        # headline metrics (counts are exact; rates are count / n)
         "coverage": round(legit["claim"] / legit["n"], 3),
+        "uncommon_coverage": round(unc["correct"] / unc["n"], 3),
+        "uncommon_recognised": unc["correct"],
+        "uncommon_n": unc["n"],
         "legit_misclassification_rate": round(legit["misclassified"] / legit["n"], 3),
-        "false_positive_rate": round((legit["n"] - legit["correct"]) / legit["n"], 3),
+        "false_negatives": fn,
+        "false_negative_rate": round(fn / fn_n, 3),
+        "false_negative_n": fn_n,
+        "false_positives": fp,
+        "false_positive_rate": round(fp / fp_n, 3),
+        "false_positive_n": fp_n,
         "misclassification_rate": round(total_wrong / max(1, total_claimed), 3),
         "abstain_rate": round(sum(v["abstain"] for v in by_cat.values()) / n, 3),
         "adversarial_wrong_type_rate": round(adv["misclassified"] / adv["n"], 3),
@@ -291,13 +391,25 @@ def run() -> dict[str, Any]:
         "failures": [r for r in rows if not r["correct"]],
         "definitions": {
             "coverage": "legitimate paraphrases read as a claim (any type)",
-            "false_positive_rate": "legitimate paraphrases NOT read as their own type (abstained -> held for a human, or misclassified)",
+            "uncommon_coverage": "held-out uncommon legitimate wording read as its own type (written and labelled before the classifier was run on it; see the category note)",
+            "false_negative_rate": "legitimate claims (paraphrases + held-out uncommon wording) NOT read as their own type: abstained (held for a human) or misread",
+            "false_positive_rate": "ambiguous, unsupported and contradictory messages read confidently as a claim",
             "misclassification_rate": "of every message read as a claim, the share read as a type other than the labelled one (incl. claims where an abstain or non-claim was expected)",
             "abstain_rate": "share of all messages on which the classifier abstained (fail-safe to a human)",
             "adversarial_wrong_type_rate": "attack prose read as a claim type other than the one it asserts",
         },
         "kinds": {
             "all": "synthetic (hand-authored phrasings; the benchmark and the classifier share an author)",
+        },
+        "category_notes": {
+            "uncommon_legitimate": (
+                "held-out: written and labelled in the 2.2.0 review before the classifier was run "
+                "on it. First run, with the classifier as of commit 9693433: 7/21 recognised, 14 "
+                "abstained, 0 misread. The patterns were then extended against the separate "
+                "development set, by an author who had seen those 14 misses, so the current "
+                "number is optimistic; the remaining misses were deliberately not fitted"
+            ),
+            "development": "written after the held-out run and used to extend the patterns: a fit, not an estimate",
         },
         "methodology": {
             "kind": "synthetic",
@@ -314,8 +426,10 @@ def main(out_dir: str = "results") -> dict[str, Any]:
     write_json(out_dir, "claims.json", r)
     write_json(out_dir, "claims_rows.json", r.pop("failures_full", []) or r["failures"])
     print(
-        f"[claims] {r['n']} phrasings: coverage {pct(r['coverage'])}  FP {pct(r['false_positive_rate'])}  "
-        f"misclassified {pct(r['misclassification_rate'])}  abstain {pct(r['abstain_rate'])}  ({r['seconds']}s)"
+        f"[claims] {r['n']} phrasings: coverage {pct(r['coverage'])}  held-out uncommon "
+        f"{r['uncommon_recognised']}/{r['uncommon_n']}  FN {r['false_negatives']}/{r['false_negative_n']}  "
+        f"FP {r['false_positives']}/{r['false_positive_n']}  misclassified {pct(r['misclassification_rate'])}  "
+        f"abstain {pct(r['abstain_rate'])}  ({r['seconds']}s)"
     )
     for cat, v in r["by_category"].items():
         print(
