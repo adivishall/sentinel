@@ -20,6 +20,7 @@ rate limit, request ids, structured logs, no stack traces to clients.
 
 from __future__ import annotations
 
+import hmac
 import json
 import mimetypes
 import os
@@ -47,6 +48,7 @@ from sentinel.policy.models import FIELD_CATALOG
 from sentinel.presets import ATTACKS, SCENARIOS
 from sentinel.replay.engine import ReplayOverrides
 from sentinel.risk import monitoring
+from sentinel.security.capabilities import matrix as capability_matrix
 from sentinel.security.gateway import Conversation
 from sentinel.security.provenance import UntrustedContent
 
@@ -106,9 +108,9 @@ def _authorized(headers: Any) -> bool:
     if not key:
         return True
     auth = headers.get("Authorization", "")
-    if auth.startswith("Bearer ") and auth[7:].strip() == key:
-        return True
-    return headers.get("X-API-Key", "").strip() == key
+    presented = auth[7:].strip() if auth.startswith("Bearer ") else headers.get("X-API-Key", "")
+    # constant-time comparison: the token check must not leak by timing
+    return hmac.compare_digest(presented.strip().encode("utf-8"), key.encode("utf-8"))
 
 
 class Router:
@@ -582,9 +584,7 @@ def build_routes(app: SentinelApp) -> Router:
         "GET",
         "/v1/capabilities",
         lambda q, b, p: {
-            "capabilities": __import__(
-                "sentinel.security.capabilities", fromlist=["matrix"]
-            ).matrix(),
+            "capabilities": capability_matrix(),
             "invariant": "no AI actor may execute a consequential capability; SKIP_REVIEW has no actor",
         },
     )
