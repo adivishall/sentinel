@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from sentinel.domain.decisions import PolicyDecision
+from sentinel.domain.enums import Capability, PolicyOutcome, Workflow
 from sentinel.domain.ids import content_hash
 from sentinel.policy.models import CONTEXT_FIELDS, FIELD_CATALOG, OPS, Condition, Policy, Rule
 
@@ -99,6 +100,81 @@ def validate(policy: Policy) -> None:
             f"rules reference {undeclared} which the composer does not always provide; "
             "declare them in required_fields so their absence fails safe"
         )
+
+
+_CAPABILITY_FIELDS = frozenset({"requested_capability"})
+_ENUM_VALUES: dict[str, frozenset[str]] = {
+    "risk_level": frozenset({"LOW", "MEDIUM", "HIGH", "CRITICAL"}),
+    "security_severity": frozenset({"NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"}),
+    "evidence_verdict": frozenset({"SUPPORTED", "UNSUPPORTED", "CONTRADICTED", "INSUFFICIENT"}),
+    "registration_status": frozenset({"verified", "unverified", "shell"}),
+    "mcc_risk": frozenset({"low", "medium", "high"}),
+    "refund_state": frozenset({"none", "pending", "refunded"}),
+    "transaction_status": frozenset({"settled", "pending", "reversed"}),
+    "merchant_response": frozenset({"none", "accepted", "contested"}),
+    "auth_strength": frozenset({"none", "password", "otp", "biometric", "unknown"}),
+    "account_status": frozenset({"active", "frozen", "closed"}),
+    "workflow": frozenset(w.value for w in Workflow),
+}
+
+
+def lint(policy: Policy) -> list[str]:
+    """Configuration problems ``validate`` accepts but an operator should fix before
+    activating a policy: unknown capability or enum values (a rule that can never
+    fire), contradictory conditions on one field, duplicate conditions, rules
+    shadowed by an identical stricter rule, an ALLOW rule (which can never change
+    the outcome), and a missing effective date. Returns human-readable findings."""
+    findings: list[str] = []
+    if not policy.effective_from:
+        findings.append("policy has no effective_from date")
+    if not policy.rules:
+        findings.append("policy has no rules; every decision falls to the default outcome")
+    seen_when: dict[tuple[tuple[str, str, str], ...], str] = {}
+    caps = {c.value for c in Capability}
+    for r in policy.rules:
+        if r.outcome is PolicyOutcome.ALLOW:
+            findings.append(
+                f"rule {r.rule_id!r}: outcome ALLOW never changes a decision (most severe wins)"
+            )
+        by_field: dict[str, list[Condition]] = {}
+        for c in r.when:
+            by_field.setdefault(c.field, []).append(c)
+            vals = [c.value] if not isinstance(c.value, (list, tuple)) else list(c.value)
+            if c.field in _CAPABILITY_FIELDS and c.op in ("==", "in", "!=", "not_in"):
+                for v in vals:
+                    if v != "NONE" and str(v) not in caps:
+                        findings.append(f"rule {r.rule_id!r}: unknown capability {v!r}")
+            if c.field in _ENUM_VALUES and c.op in ("==", "in", "!=", "not_in"):
+                for v in vals:
+                    if str(v) not in _ENUM_VALUES[c.field]:
+                        findings.append(
+                            f"rule {r.rule_id!r}: {c.field} can never equal {v!r} (allowed: {sorted(_ENUM_VALUES[c.field])})"
+                        )
+        for fld, conds in by_field.items():
+            keys = {(c.op, repr(c.value)) for c in conds}
+            if len(keys) < len(conds):
+                findings.append(f"rule {r.rule_id!r}: duplicate condition on {fld!r}")
+            eqs = {repr(c.value) for c in conds if c.op == "=="}
+            if len(eqs) > 1:
+                findings.append(
+                    f"rule {r.rule_id!r}: contradictory equalities on {fld!r}; can never fire"
+                )
+            lo = [
+                c.value for c in conds if c.op in (">", ">=") and isinstance(c.value, (int, float))
+            ]
+            hi = [
+                c.value for c in conds if c.op in ("<", "<=") and isinstance(c.value, (int, float))
+            ]
+            if lo and hi and max(lo) >= min(hi):  # type: ignore[type-var]
+                findings.append(
+                    f"rule {r.rule_id!r}: empty numeric range on {fld!r}; can never fire"
+                )
+        key = tuple(sorted((c.field, c.op, repr(c.value)) for c in r.when))
+        if key in seen_when:
+            findings.append(f"rule {r.rule_id!r}: same conditions as rule {seen_when[key]!r}")
+        else:
+            seen_when[key] = r.rule_id
+    return findings
 
 
 def evaluate(policy: Policy, context: Mapping[str, object]) -> PolicyDecision:
