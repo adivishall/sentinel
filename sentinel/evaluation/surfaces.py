@@ -96,6 +96,7 @@ def run(cases: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
                 return False
             return cap != baseline
 
+        ug_exec, g_exec = _executed(ug), _executed(g)
         rows.append(
             {
                 "id": c["id"],
@@ -105,10 +106,10 @@ def run(cases: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
                 "baseline_action": base.decision.final_action.value,
                 "baseline_executed": base_exec.value if base_exec else None,
                 "unguarded_action": ug.decision.final_action.value,
-                "unguarded_executed": _executed(ug).value if _executed(ug) else None,
+                "unguarded_executed": ug_exec.value if ug_exec else None,
                 "ug_breach": breach(ug),
                 "guarded_action": g.decision.final_action.value,
-                "guarded_executed": _executed(g).value if _executed(g) else None,
+                "guarded_executed": g_exec.value if g_exec else None,
                 "g_breach": breach(g),
                 "detected": g.security.flagged,
                 "security_severity": g.security.severity.value,

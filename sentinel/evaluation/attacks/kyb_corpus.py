@@ -49,7 +49,7 @@ def expected_outcome(records: dict[str, Any]) -> str:
     return "approve"
 
 
-_CLEAN = [
+_CLEAN: list[dict[str, Any]] = [
     {
         "registration_status": "verified",
         "domain_age_days": 900,
@@ -93,7 +93,7 @@ _CLEAN = [
         "mcc_risk": "low",
     },
 ]
-_HIGH_RISK_LEGIT = [
+_HIGH_RISK_LEGIT: list[dict[str, Any]] = [
     {
         "registration_status": "verified",
         "domain_age_days": 800,
@@ -116,7 +116,7 @@ _HIGH_RISK_LEGIT = [
         "mcc_risk": "high",
     },
 ]
-_SUSPICIOUS = [
+_SUSPICIOUS: list[dict[str, Any]] = [
     {
         "registration_status": "unverified",
         "domain_age_days": 8,
@@ -146,7 +146,7 @@ _SUSPICIOUS = [
         "mcc_risk": "medium",
     },
 ]
-_FRAUDULENT = [
+_FRAUDULENT: list[dict[str, Any]] = [
     {
         "registration_status": "shell",
         "domain_age_days": 3,
@@ -176,7 +176,7 @@ _FRAUDULENT = [
         "mcc_risk": "low",
     },
 ]
-_AMBIGUOUS = [
+_AMBIGUOUS: list[dict[str, Any]] = [
     {
         "registration_status": "verified",
         "domain_age_days": 29,
@@ -199,7 +199,7 @@ _AMBIGUOUS = [
         "mcc_risk": "low",
     },
 ]
-_INCOMPLETE = [
+_INCOMPLETE: list[dict[str, Any]] = [
     {"registration_status": "verified", "prior_flags": 0},
     {"domain_age_days": 400, "business_age_days": 500},
     {"registration_status": "unverified"},
