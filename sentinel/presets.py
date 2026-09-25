@@ -29,6 +29,7 @@ class AttackPreset:
     document_trust: TrustClass = TrustClass.DOCUMENT_CONTROLLED
     turns: tuple[str, ...] = field(default_factory=tuple)  # multi-turn presets
     target_capability: str = "APPROVE_REFUND"
+    workflow: str = "dispute"
 
 
 ATTACKS: dict[str, AttackPreset] = {

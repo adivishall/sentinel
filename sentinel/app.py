@@ -483,23 +483,71 @@ class SentinelApp:
         narrative: str | None = None,
         document: str | None = None,
         options: RunOptions = DEFAULT_OPTIONS,
+        compare: bool = False,
     ) -> dict[str, Any]:
+        """Run an attack preset through the real engine. With ``compare`` the same
+        input is run twice -- against the *simulated naive agent with no controls*
+        and against full Sentinel -- and both storyboards are returned, labelled."""
         p = ATTACKS[kind]
-        if p.turns and narrative is None:
-            b = self.evaluate_dispute_conversation(p.turns, p.ledger, options=options)
-            shown = "\n".join(f"Turn {i + 1}: {t}" for i, t in enumerate(p.turns))
-        else:
+
+        def _run(opts: RunOptions) -> tuple[DecisionBundle, str]:
+            if p.turns and narrative is None:
+                b = self.evaluate_dispute_conversation(p.turns, p.ledger, options=opts)
+                return b, "\n".join(f"Turn {i + 1}: {t}" for i, t in enumerate(p.turns))
             docs = (document,) if document else ((p.document,) if p.document else ())
             b = self.evaluate_dispute(
                 narrative if narrative is not None else p.narrative,
                 dict(p.ledger),
                 documents=docs,
-                options=options,
+                options=opts,
             )
-            shown = narrative if narrative is not None else p.narrative
-        return self.storyboard(
-            b, preset=p.key, shown_input=shown, shown_document=document or p.document
+            return b, narrative if narrative is not None else p.narrative
+
+        b, shown = _run(options)
+        sb = self.storyboard(
+            b,
+            preset=p.key,
+            shown_input=shown,
+            shown_document=document or p.document,
+            target_workflow=p.workflow,
+            target_capability=p.target_capability,
+            attack_class=p.threat_class,
         )
+        if not compare:
+            return sb
+        unguarded, _ = _run(RunOptions(controls=frozenset(), hardened=options.hardened))
+        usb = self.storyboard(
+            unguarded,
+            preset=p.key,
+            shown_input=shown,
+            shown_document=document or p.document,
+            target_workflow=p.workflow,
+            target_capability=p.target_capability,
+            attack_class=p.threat_class,
+        )
+        return {
+            "preset": p.key,
+            "attack_class": p.threat_class,
+            "target_workflow": p.workflow,
+            "target_capability": p.target_capability,
+            "without_sentinel": {
+                "label": "WITHOUT SENTINEL -- simulated naive agent, no controls; its tool call executes",
+                "caveat": "The victim is the deterministic offline simulator, not a real LLM; this path shows what the architecture prevents, not a measured model failure rate.",
+                **usb,
+            },
+            "with_sentinel": {
+                "label": "WITH SENTINEL -- full controls; the agent only recommends",
+                **sb,
+            },
+            "summary": {
+                "agent_recommendation": sb["ai"]["recommended_action"] if sb.get("ai") else None,
+                "without_sentinel_executed": usb["decision"]["executed_capability"],
+                "with_sentinel_final_action": sb["decision"]["final_action"],
+                "with_sentinel_executed": sb["decision"]["executed_capability"],
+                "blocked_layer": sb["blocked_layer"],
+                "blocked_by": sb["decision"]["blocked_by"],
+            },
+        }
 
     def storyboard(
         self,
@@ -508,10 +556,19 @@ class SentinelApp:
         preset: str | None = None,
         shown_input: str = "",
         shown_document: str | None = None,
+        target_workflow: str = "dispute",
+        target_capability: str | None = None,
+        attack_class: str | None = None,
     ) -> dict[str, Any]:
         d = b.decision
+        first_block = d.blocked_by[0] if d.blocked_by else None
         return {
             "preset": preset,
+            "attack_class": attack_class,
+            "target_workflow": target_workflow,
+            "target_capability": target_capability,
+            "controls": list(d.controls),
+            "blocked_layer": first_block,
             "attacker_input": shown_input,
             "attacker_document": shown_document,
             "ledger": {k: v for k, v in (b.inputs.facts if b.inputs else {}).items()},
@@ -519,7 +576,14 @@ class SentinelApp:
                 {
                     "stage": "untrusted_input",
                     "title": "Untrusted input",
-                    "value": f"{b.security.source_trust.value} · hash {d.input_hash}",
+                    "value": (
+                        (
+                            "USER_CONTROLLED + DOCUMENT_CONTROLLED"
+                            if shown_document
+                            else "USER_CONTROLLED"
+                        )
+                        + f" · hash {d.input_hash}"
+                    ),
                     "status": "info",
                 },
                 {

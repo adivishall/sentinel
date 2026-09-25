@@ -270,12 +270,33 @@ def cmd_security(args: argparse.Namespace) -> int:
                 f"unknown attack scenario {args.scenario!r}; try: {', '.join(ATTACKS)}"
             )
         sb = app.simulate_attack(
-            key, narrative=args.text, document=args.document, options=_options(args)
+            key,
+            narrative=args.text,
+            document=args.document,
+            options=_options(args),
+            compare=args.compare,
         )
         if args.json:
             print(json.dumps(sb, indent=2, default=str))
             return 0
-        print(f"Attack: {ATTACKS[key].name}")
+        if args.compare:
+            for side in ("without_sentinel", "with_sentinel"):
+                s = sb[side]
+                print(f"\n== {s['label']}")
+                if s.get("caveat"):
+                    print(f"   ({s['caveat']})")
+                for st in s["stages"]:
+                    print(f"  {st['title']:<28} {st['value']}")
+                print(f"  -> {s['headline']}")
+            sm = sb["summary"]
+            print(
+                f"\nagent recommended {sm['agent_recommendation']}; without Sentinel executed {sm['without_sentinel_executed']}; "
+                f"with Sentinel {sm['with_sentinel_final_action']} (executed {sm['with_sentinel_executed']}), first blocked at {sm['blocked_layer']}"
+            )
+            return 0
+        print(
+            f"Attack: {ATTACKS[key].name}  [{sb['attack_class']} -> {sb['target_workflow']} / {sb['target_capability']}]"
+        )
         print("Attacker input:\n  " + (sb["attacker_input"] or "").replace("\n", "\n  "))
         if sb.get("attacker_document"):
             print("Attacker document:\n  " + sb["attacker_document"].replace("\n", "\n  "))
@@ -730,6 +751,11 @@ def build_parser() -> argparse.ArgumentParser:
     at.add_argument("--scenario", default="document_injection", help="attack preset key, or 'list'")
     at.add_argument("--text", help="custom attacker text")
     at.add_argument("--document", help="custom attacker document")
+    at.add_argument(
+        "--compare",
+        action="store_true",
+        help="run the same input WITHOUT (simulated agent, no controls) and WITH Sentinel",
+    )
     opts(at)
     se = sec.add_parser("evaluate")
     se.add_argument("text")

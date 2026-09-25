@@ -347,6 +347,9 @@ def test_attacks_scenarios_evaluations(server):
     assert sim["decision"]["final_action"] == "BLOCK" and sim["stages"][-1]["stage"] == "audit"
     s, ung = _post(server + "/v1/attacks/simulate", {"kind": "direct_injection", "unguarded": True})
     assert ung["decision"]["final_action"] == "ALLOW"
+    s, cmp = _post(server + "/v1/attacks/simulate", {"kind": "document_injection", "compare": True})
+    assert cmp["without_sentinel"]["decision"]["executed_capability"] == "APPROVE_REFUND"
+    assert cmp["with_sentinel"]["decision"]["final_action"] == "BLOCK"
     s, sc = _get(server + "/v1/scenarios")
     assert sc["scenarios"] and sc["tags"]
     s, run = _post(server + "/v1/scenarios/account_takeover/run", {})
@@ -373,9 +376,11 @@ def test_validation_and_errors(server):
     )
     assert code == 400 and "trusted" in body["error"]
     code, body = _err(_get, server + "/v1/cases/CASE-nope")
-    assert code == 404
+    assert code == 404 and body["code"] == "not_found" and body["request_id"]
     code, body = _err(_get, server + "/nope")
-    assert code == 404
+    assert code == 404 and body["code"] == "not_found"
+    code, body = _err(_post, server + "/v1/disputes/evaluate", {"ledger": {}})
+    assert body["code"] == "bad_request" and body["request_id"]
     req = urllib.request.Request(
         server + "/v1/disputes/evaluate",
         data=b"{not json",

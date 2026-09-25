@@ -55,6 +55,22 @@ UI_DIR = Path(__file__).resolve().parents[2] / "ui"
 RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
 
 
+_ERROR_CODES = {
+    400: "bad_request",
+    401: "unauthorized",
+    403: "forbidden",
+    404: "not_found",
+    409: "conflict",
+    413: "payload_too_large",
+    429: "rate_limited",
+    500: "internal_error",
+}
+
+
+def _error(status: int, message: str, rid: str | None) -> dict[str, Any]:
+    return {"error": message, "code": _ERROR_CODES.get(status, "error"), "request_id": rid}
+
+
 class ApiError(Exception):
     def __init__(self, status: int, message: str) -> None:
         super().__init__(message)
@@ -620,6 +636,7 @@ def build_routes(app: SentinelApp) -> Router:
             narrative=S.opt_str(d, "narrative"),
             document=S.opt_str(d, "document"),
             options=S.run_options(d),
+            compare=S.opt_bool(d, "compare", False),
         )
 
     def scenario_run(q: Any, b: Any, p: Any) -> Any:
@@ -824,7 +841,7 @@ class SentinelHandler(BaseHTTPRequestHandler):
         query = parse_qs(url.query)
         client = self.client_address[0] if self.client_address else "?"
         if not self.limiter.allow(client):
-            return self._send(429, {"error": "rate limit exceeded"}, rid)
+            return self._send(429, _error(429, "rate limit exceeded", rid), rid)
         if method == "GET" and (
             path == "/"
             or path.startswith("/ui")
@@ -835,35 +852,38 @@ class SentinelHandler(BaseHTTPRequestHandler):
                 return None
         route = self.router.match(method, path)
         if route is None:
-            return self._send(404, {"error": "not found", "path": path}, rid)
+            return self._send(404, {**_error(404, "not found", rid), "path": path}, rid)
         fn, params = route
         if path not in ("/health", "/version") and not _authorized(self.headers):
-            return self._send(401, {"error": "unauthorized"}, rid)
+            return self._send(401, _error(401, "unauthorized", rid), rid)
         body: Any = None
         if method == "POST":
             try:
                 length = int(self.headers.get("Content-Length", 0))
             except ValueError:
-                return self._send(400, {"error": "invalid Content-Length"}, rid)
+                return self._send(400, _error(400, "invalid Content-Length", rid), rid)
             if length > MAX_BODY:
-                return self._send(413, {"error": f"request too large (> {MAX_BODY} bytes)"}, rid)
+                return self._send(
+                    413, _error(413, f"request too large (> {MAX_BODY} bytes)", rid), rid
+                )
             raw = self.rfile.read(length) if length else b""
             try:
                 body = json.loads(raw or b"{}")
             except json.JSONDecodeError as e:
-                return self._send(400, {"error": f"invalid JSON: {e.msg}"}, rid)
+                return self._send(400, _error(400, f"invalid JSON: {e.msg}", rid), rid)
         try:
             result = fn(query, body, params)
             status = 200
         except S.ValidationError as e:
-            result, status = {"error": e.message}, e.status
+            result, status = _error(e.status, e.message, rid), e.status
         except ApiError as e:
-            result, status = {"error": e.message}, e.status
+            result, status = _error(e.status, e.message, rid), e.status
         except Exception as e:  # noqa: BLE001 - never leak a stack trace
             _log.warning(
-                "handler failed", extra={"detail": {"path": path, "error": type(e).__name__}}
+                "handler failed",
+                extra={"detail": {"path": path, "error": type(e).__name__, "request_id": rid}},
             )
-            result, status = {"error": "internal error"}, 500
+            result, status = _error(500, "internal error", rid), 500
         METRICS.observe(
             f"http:{method} {path.split('/')[1] if path != '/' else 'root'}",
             (time.perf_counter() - t0) * 1000,

@@ -89,6 +89,25 @@ def test_every_attack_preset_never_executes_a_consequential_capability(app, kind
         assert d["executed_capability"] is None and d["final_action"] != "ALLOW", kind
 
 
+def test_attack_compare_mode_labels_both_paths(app):
+    cmp = app.simulate_attack("capability_escalation", compare=True)
+    assert cmp["target_workflow"] == "dispute" and cmp["target_capability"] == "UNFREEZE_ACCOUNT"
+    wo, wi = cmp["without_sentinel"], cmp["with_sentinel"]
+    assert wo["label"].startswith("WITHOUT SENTINEL") and "simulated" in wo["caveat"]
+    assert wi["label"].startswith("WITH SENTINEL") and wi["controls"]
+    assert wo["decision"]["executed_capability"] == "UNFREEZE_ACCOUNT" and wo["controls"] == []
+    assert (
+        wi["decision"]["executed_capability"] is None and wi["decision"]["final_action"] == "BLOCK"
+    )
+    assert cmp["summary"]["blocked_layer"] == wi["blocked_layer"] == wi["decision"]["blocked_by"][0]
+    assert wi["stages"][0]["value"].startswith("USER_CONTROLLED + DOCUMENT_CONTROLLED")
+    single = app.simulate_attack("adjudication_gaming")
+    assert (
+        single["attack_class"] == "adjudication_gaming"
+        and single["blocked_layer"] == "trusted_evidence"
+    )
+
+
 def test_custom_attack_text_and_unguarded_option(app):
     sb = app.simulate_attack(
         "direct_injection",

@@ -32,6 +32,9 @@ demo: attack      ## the flagship demo
 attack:           ## "Attack the financial AI" -- the flagship demonstration
 	$(PY) -m sentinel --db :memory: security attack --scenario document_injection
 
+attack-compare:   ## the same attack WITHOUT (simulated agent, no controls) and WITH Sentinel, side by side
+	$(PY) -m sentinel --db :memory: security attack --scenario document_injection --compare
+
 api:              ## API + console on :8000 (in-memory demo dataset, analysed on start)
 	$(PY) -m sentinel --db :memory: serve --host 0.0.0.0 --port 8000 --analyze
 
