@@ -3,35 +3,476 @@
     "seed": 42,
     "customers": 150,
     "merchants": 30,
-    "transactions": 3183
+    "transactions": 3184
   },
-  "risk_model": "txn-1.0",
+  "risk_model": "txn-2.0",
   "positive_definition": "risk level HIGH or CRITICAL",
+  "ground_truth": {
+    "fraud:account_takeover": {
+      "level": "transaction",
+      "definition": "two purchases from a new device in a new country within an hour of a home-country purchase, after a session with credential + payout changes and a failed second factor"
+    },
+    "fraud:burst": {
+      "level": "transaction + account",
+      "definition": "8-12 purchases three minutes apart on an account that normally transacts every few days"
+    },
+    "fraud:graph_linked": {
+      "level": "transaction + account",
+      "definition": "three 17-day-old accounts on one device and one payout bank account, five purchases each at high-risk merchants, then transfers in a circle"
+    },
+    "fraud:structuring": {
+      "level": "account",
+      "definition": "four transfers just under the reporting threshold within a week"
+    },
+    "fraud:dormant_activation": {
+      "level": "account",
+      "definition": "120 days of silence then six purchases in two days"
+    },
+    "exposure:merchant_abuse": {
+      "level": "merchant",
+      "definition": "purchases at a merchant with an injected 30% dispute ratio; the transactions themselves are not fraud"
+    },
+    "legit:high_value": {
+      "level": "decisioning",
+      "definition": "a genuine purchase above the auto-approval limit on a home device; policy must route it to a human, not block it"
+    }
+  },
+  "stages": {
+    "screening": "transaction-level risk band on every transaction (transaction_level)",
+    "decisioning": "policy outcome of the full pipeline on a sample (policy_sample)",
+    "investigation_triage": "account-level monitoring over the account's activity (account_level)"
+  },
   "transaction_level": {
-    "tp": 14,
-    "fp": 1,
-    "fn": 38,
-    "tn": 3130,
-    "precision": 0.933,
-    "recall": 0.269,
-    "false_positive_rate": 0.0003,
-    "false_negative_rate": 0.731,
+    "tp": 43,
+    "fp": 3,
+    "fn": 11,
+    "tn": 3127,
+    "precision": 0.935,
+    "recall": 0.796,
+    "false_positive_rate": 0.001,
+    "false_negative_rate": 0.204,
     "scenarios": [
       "fraud:account_takeover",
       "fraud:burst",
       "fraud:graph_linked"
     ],
-    "prevalence": 0.0163
+    "prevalence": 0.017,
+    "by_channel": {
+      "ecommerce": {
+        "n": 2741,
+        "fraud_n": 51,
+        "recall": 0.784,
+        "legit_n": 2690,
+        "false_positive_rate": 0.0011
+      },
+      "pos": {
+        "n": 302,
+        "fraud_n": 0,
+        "recall": null,
+        "legit_n": 302,
+        "false_positive_rate": 0.0
+      },
+      "transfer": {
+        "n": 141,
+        "fraud_n": 3,
+        "recall": 1.0,
+        "legit_n": 138,
+        "false_positive_rate": 0.0
+      }
+    },
+    "by_account_segment": {
+      "premium": {
+        "n": 672,
+        "fraud_n": 0,
+        "recall": null,
+        "legit_n": 672,
+        "false_positive_rate": 0.0015
+      },
+      "retail": {
+        "n": 2119,
+        "fraud_n": 40,
+        "recall": 0.8,
+        "legit_n": 2079,
+        "false_positive_rate": 0.001
+      },
+      "small_business": {
+        "n": 393,
+        "fraud_n": 14,
+        "recall": 0.786,
+        "legit_n": 379,
+        "false_positive_rate": 0.0
+      }
+    },
+    "by_merchant_tier": {
+      "high": {
+        "n": 361,
+        "fraud_n": 19,
+        "recall": 0.947,
+        "legit_n": 342,
+        "false_positive_rate": 0.0058
+      },
+      "low": {
+        "n": 2428,
+        "fraud_n": 23,
+        "recall": 0.696,
+        "legit_n": 2405,
+        "false_positive_rate": 0.0004
+      },
+      "medium": {
+        "n": 395,
+        "fraud_n": 12,
+        "recall": 0.75,
+        "legit_n": 383,
+        "false_positive_rate": 0.0
+      }
+    },
+    "miss_breakdown": {
+      "fraud:account_takeover": {
+        "n": 6,
+        "detected": 6,
+        "missed": 0,
+        "dominant_signals_detected": {
+          "recent_account_changes": 6,
+          "recent_failed_mfa": 6,
+          "new_device": 6,
+          "impossible_travel": 6,
+          "new_country": 6,
+          "auth_weak": 6
+        },
+        "dominant_signals_missed": {},
+        "expected_signals": [
+          "new_device",
+          "new_country",
+          "impossible_travel",
+          "recent_account_changes",
+          "recent_failed_mfa",
+          "amount_anomaly_extreme"
+        ]
+      },
+      "fraud:burst": {
+        "n": 30,
+        "detected": 19,
+        "missed": 11,
+        "dominant_signals_detected": {
+          "rapid_fire": 19,
+          "rapid_succession": 15,
+          "velocity_spike": 15,
+          "chargeback_some": 10,
+          "new_merchant": 6,
+          "velocity_burst": 6
+        },
+        "dominant_signals_missed": {
+          "rapid_succession": 8,
+          "new_merchant": 4,
+          "chargeback_high": 3,
+          "merchant_risk_medium": 3,
+          "chargeback_some": 3,
+          "velocity_elevated": 2
+        },
+        "expected_signals": [
+          "rapid_fire",
+          "rapid_succession",
+          "velocity_elevated",
+          "velocity_spike",
+          "velocity_burst"
+        ]
+      },
+      "fraud:graph_linked": {
+        "n": 18,
+        "detected": 18,
+        "missed": 0,
+        "dominant_signals_detected": {
+          "shared_payout_instrument": 18,
+          "young_account_shared_device": 18,
+          "shared_device": 18,
+          "account_age_young": 18,
+          "merchant_risk_high": 15,
+          "auth_weak": 15
+        },
+        "dominant_signals_missed": {},
+        "expected_signals": [
+          "young_account_shared_device",
+          "shared_device",
+          "shared_payout_instrument",
+          "account_age_young",
+          "auth_weak"
+        ]
+      }
+    },
+    "missed_examples": [
+      {
+        "transaction_id": "TX-003031",
+        "scenario": "fraud:burst",
+        "score": 24,
+        "level": "LOW",
+        "factors": [
+          "merchant_risk_high:+10",
+          "chargeback_high:+10",
+          "new_merchant:+4"
+        ],
+        "components": {
+          "entity": 20,
+          "anomaly": 4
+        },
+        "missing_expected": [
+          "rapid_fire",
+          "rapid_succession",
+          "velocity_elevated",
+          "velocity_spike",
+          "velocity_burst"
+        ]
+      },
+      {
+        "transaction_id": "TX-003032",
+        "scenario": "fraud:burst",
+        "score": 45,
+        "level": "MEDIUM",
+        "factors": [
+          "amount_anomaly_high:+16",
+          "rapid_succession:+15",
+          "chargeback_high:+10",
+          "new_merchant:+4"
+        ],
+        "components": {
+          "anomaly": 20,
+          "velocity": 15,
+          "entity": 10
+        },
+        "missing_expected": [
+          "rapid_fire",
+          "velocity_elevated",
+          "velocity_spike",
+          "velocity_burst"
+        ]
+      },
+      {
+        "transaction_id": "TX-003033",
+        "scenario": "fraud:burst",
+        "score": 30,
+        "level": "MEDIUM",
+        "factors": [
+          "rapid_succession:+15",
+          "merchant_risk_medium:+5",
+          "chargeback_high:+10"
+        ],
+        "components": {
+          "velocity": 15,
+          "entity": 15
+        },
+        "missing_expected": [
+          "rapid_fire",
+          "velocity_elevated",
+          "velocity_spike",
+          "velocity_burst"
+        ]
+      },
+      {
+        "transaction_id": "TX-003019",
+        "scenario": "fraud:burst",
+        "score": 27,
+        "level": "MEDIUM",
+        "factors": [
+          "amount_anomaly_extreme:+22",
+          "chargeback_some:+5"
+        ],
+        "components": {
+          "anomaly": 22,
+          "entity": 5
+        },
+        "missing_expected": [
+          "rapid_fire",
+          "rapid_succession",
+          "velocity_elevated",
+          "velocity_spike",
+          "velocity_burst"
+        ]
+      },
+      {
+        "transaction_id": "TX-003020",
+        "scenario": "fraud:burst",
+        "score": 20,
+        "level": "LOW",
+        "factors": [
+          "rapid_succession:+15",
+          "chargeback_some:+5"
+        ],
+        "components": {
+          "velocity": 15,
+          "entity": 5
+        },
+        "missing_expected": [
+          "rapid_fire",
+          "velocity_elevated",
+          "velocity_spike",
+          "velocity_burst"
+        ]
+      },
+      {
+        "transaction_id": "TX-003021",
+        "scenario": "fraud:burst",
+        "score": 29,
+        "level": "MEDIUM",
+        "factors": [
+          "rapid_succession:+15",
+          "merchant_risk_medium:+5",
+          "chargeback_some:+5",
+          "new_merchant:+4"
+        ],
+        "components": {
+          "velocity": 15,
+          "entity": 10,
+          "anomaly": 4
+        },
+        "missing_expected": [
+          "rapid_fire",
+          "velocity_elevated",
+          "velocity_spike",
+          "velocity_burst"
+        ]
+      },
+      {
+        "transaction_id": "TX-003010",
+        "scenario": "fraud:burst",
+        "score": 15,
+        "level": "LOW",
+        "factors": [
+          "merchant_risk_medium:+5",
+          "unusual_hour:+6",
+          "new_merchant:+4"
+        ],
+        "components": {
+          "entity": 5,
+          "anomaly": 10
+        },
+        "missing_expected": [
+          "rapid_fire",
+          "rapid_succession",
+          "velocity_elevated",
+          "velocity_spike",
+          "velocity_burst"
+        ]
+      },
+      {
+        "transaction_id": "TX-003011",
+        "scenario": "fraud:burst",
+        "score": 25,
+        "level": "MEDIUM",
+        "factors": [
+          "amount_anomaly_moderate:+10",
+          "rapid_succession:+15"
+        ],
+        "components": {
+          "anomaly": 10,
+          "velocity": 15
+        },
+        "missing_expected": [
+          "rapid_fire",
+          "velocity_elevated",
+          "velocity_spike",
+          "velocity_burst"
+        ]
+      },
+      {
+        "transaction_id": "TX-003012",
+        "scenario": "fraud:burst",
+        "score": 15,
+        "level": "LOW",
+        "factors": [
+          "rapid_succession:+15"
+        ],
+        "components": {
+          "velocity": 15
+        },
+        "missing_expected": [
+          "rapid_fire",
+          "velocity_elevated",
+          "velocity_spike",
+          "velocity_burst"
+        ]
+      },
+      {
+        "transaction_id": "TX-003013",
+        "scenario": "fraud:burst",
+        "score": 45,
+        "level": "MEDIUM",
+        "factors": [
+          "velocity_elevated:+10",
+          "rapid_fire:+20",
+          "rapid_succession:+15"
+        ],
+        "components": {
+          "velocity": 45
+        },
+        "missing_expected": [
+          "velocity_spike",
+          "velocity_burst"
+        ]
+      },
+      {
+        "transaction_id": "TX-003014",
+        "scenario": "fraud:burst",
+        "score": 45,
+        "level": "MEDIUM",
+        "factors": [
+          "velocity_elevated:+10",
+          "rapid_fire:+20",
+          "rapid_succession:+15"
+        ],
+        "components": {
+          "velocity": 45
+        },
+        "missing_expected": [
+          "velocity_spike",
+          "velocity_burst"
+        ]
+      }
+    ],
+    "false_positive_examples": [
+      {
+        "transaction_id": "TX-001566",
+        "label": "legit",
+        "score": 53,
+        "factors": [
+          "amount_anomaly_extreme:+22",
+          "new_country:+15",
+          "merchant_risk_high:+10",
+          "unusual_hour:+6"
+        ]
+      },
+      {
+        "transaction_id": "TX-003131",
+        "label": "exposure:merchant_abuse",
+        "score": 54,
+        "factors": [
+          "impossible_travel:+20",
+          "new_country:+15",
+          "merchant_risk_high:+10",
+          "account_age_young:+5",
+          "new_merchant:+4"
+        ]
+      },
+      {
+        "transaction_id": "TX-002884",
+        "label": "legit",
+        "score": 50,
+        "factors": [
+          "amount_anomaly_moderate:+10",
+          "impossible_travel:+20",
+          "new_country:+15",
+          "account_age_young:+5"
+        ]
+      }
+    ]
   },
   "account_level": {
-    "tp": 10,
-    "fp": 4,
-    "fn": 0,
-    "tn": 145,
-    "precision": 0.714,
-    "recall": 1.0,
-    "false_positive_rate": 0.0268,
-    "false_negative_rate": 0.0,
+    "tp": 8,
+    "fp": 0,
+    "fn": 2,
+    "tn": 151,
+    "precision": 1.0,
+    "recall": 0.8,
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.2,
     "scenarios": [
       "fraud:structuring",
       "fraud:dormant_activation",
@@ -41,11 +482,11 @@
     "recall_by_scenario": {
       "fraud:burst": {
         "n": 3,
-        "recall": 1.0
+        "recall": 0.667
       },
       "fraud:dormant_activation": {
         "n": 2,
-        "recall": 1.0
+        "recall": 0.5
       },
       "fraud:graph_linked": {
         "n": 3,
@@ -58,114 +499,115 @@
     },
     "calibration": {
       "LOW": {
-        "n": 133,
-        "observed_fraud_rate": 0.0
-      },
-      "MEDIUM": {
-        "n": 12,
-        "observed_fraud_rate": 0.0
+        "n": 152,
+        "observed_fraud_rate": 0.0066
       },
       "HIGH": {
-        "n": 8,
-        "observed_fraud_rate": 0.625
+        "n": 4,
+        "observed_fraud_rate": 1.0
       },
       "CRITICAL": {
-        "n": 6,
-        "observed_fraud_rate": 0.8333
+        "n": 4,
+        "observed_fraud_rate": 1.0
+      },
+      "MEDIUM": {
+        "n": 1,
+        "observed_fraud_rate": 1.0
       }
     }
   },
   "merchant_level": {
     "tp": 2,
-    "fp": 3,
+    "fp": 0,
     "fn": 1,
-    "tn": 24,
-    "precision": 0.4,
+    "tn": 27,
+    "precision": 1.0,
     "recall": 0.667,
-    "false_positive_rate": 0.1111,
+    "false_positive_rate": 0.0,
     "false_negative_rate": 0.333,
     "bad_merchants": 3,
     "definition": "abused (scenario) or shell registration or >= 2 prior flags"
   },
-  "tp": 14,
-  "fp": 1,
-  "fn": 38,
-  "tn": 3130,
-  "precision": 0.933,
-  "recall": 0.269,
-  "false_positive_rate": 0.0003,
-  "false_negative_rate": 0.731,
-  "prevalence": 0.0163,
+  "tp": 43,
+  "fp": 3,
+  "fn": 11,
+  "tn": 3127,
+  "precision": 0.935,
+  "recall": 0.796,
+  "false_positive_rate": 0.001,
+  "false_negative_rate": 0.204,
+  "prevalence": 0.017,
   "recall_by_scenario": {
     "fraud:account_takeover": {
       "n": 6,
-      "recall": 0.667
+      "recall": 1.0
     },
     "fraud:burst": {
-      "n": 28,
-      "recall": 0.143
+      "n": 30,
+      "recall": 0.633
     },
     "fraud:graph_linked": {
       "n": 18,
-      "recall": 0.333
+      "recall": 1.0
     }
   },
   "calibration": {
     "LOW": {
-      "n": 2954,
-      "observed_fraud_rate": 0.0051
+      "n": 2960,
+      "observed_fraud_rate": 0.0014
     },
     "MEDIUM": {
-      "n": 214,
-      "observed_fraud_rate": 0.1075
+      "n": 178,
+      "observed_fraud_rate": 0.0393
     },
     "HIGH": {
-      "n": 10,
-      "observed_fraud_rate": 0.9
+      "n": 27,
+      "observed_fraud_rate": 0.8889
     },
     "CRITICAL": {
-      "n": 5,
+      "n": 19,
       "observed_fraud_rate": 1.0
     }
   },
   "score_histogram": {
-    "0": 2017,
-    "10": 717,
-    "20": 328,
-    "30": 82,
-    "40": 24,
-    "50": 6,
-    "60": 2,
-    "70": 4,
-    "80": 2,
-    "100": 1
+    "0": 2070,
+    "10": 690,
+    "20": 299,
+    "30": 71,
+    "40": 8,
+    "50": 13,
+    "60": 14,
+    "70": 3,
+    "80": 3,
+    "90": 4,
+    "100": 9
   },
   "factor_frequency": {
-    "new_merchant": 1308,
-    "merchant_risk_high": 420,
-    "merchant_risk_medium": 390,
-    "chargeback_some": 371,
-    "unusual_hour": 347,
-    "chargeback_high": 185,
-    "auth_weak": 140,
-    "amount_anomaly_extreme": 125,
+    "new_merchant": 1018,
+    "merchant_risk_medium": 395,
+    "unusual_hour": 378,
+    "merchant_risk_high": 361,
+    "chargeback_some": 348,
+    "chargeback_high": 195,
+    "auth_weak": 138,
+    "amount_anomaly_extreme": 137,
     "amount_anomaly_moderate": 119,
-    "new_country": 96,
-    "account_age_new": 64,
-    "amount_anomaly_high": 64,
-    "new_instrument": 61,
-    "account_age_young": 39,
-    "auth_none": 32
+    "account_age_young": 111,
+    "new_country": 83,
+    "amount_anomaly_high": 55,
+    "rapid_succession": 49,
+    "auth_none": 37,
+    "account_age_new": 27
   },
   "policy_sample": {
     "n": 400,
     "outcomes": {
-      "ALLOW": 323,
-      "STEP_UP": 43,
-      "REQUIRE_HUMAN_REVIEW": 27,
-      "DENY": 7
+      "ALLOW": 315,
+      "STEP_UP": 32,
+      "REQUIRE_HUMAN_REVIEW": 34,
+      "DENY": 19
     },
-    "fraud_allowed_rate": 0.288,
+    "fraud_allowed_rate": 0.074,
     "legit_blocked_or_denied_rate": 0.0,
     "policy": "transaction-authorization@latest"
   },
@@ -179,30 +621,463 @@
   "held_out_seeds": {
     "7": {
       "transaction_level": {
-        "tp": 14,
-        "fp": 1,
-        "fn": 38,
-        "tn": 3129,
-        "precision": 0.933,
-        "recall": 0.269,
-        "false_positive_rate": 0.0003,
-        "false_negative_rate": 0.731,
+        "tp": 43,
+        "fp": 4,
+        "fn": 13,
+        "tn": 3117,
+        "precision": 0.915,
+        "recall": 0.768,
+        "false_positive_rate": 0.0013,
+        "false_negative_rate": 0.232,
         "scenarios": [
           "fraud:account_takeover",
           "fraud:burst",
           "fraud:graph_linked"
         ],
-        "prevalence": 0.0163
+        "prevalence": 0.0176,
+        "by_channel": {
+          "ecommerce": {
+            "n": 2751,
+            "fraud_n": 53,
+            "recall": 0.755,
+            "legit_n": 2698,
+            "false_positive_rate": 0.0011
+          },
+          "pos": {
+            "n": 263,
+            "fraud_n": 0,
+            "recall": null,
+            "legit_n": 263,
+            "false_positive_rate": 0.0
+          },
+          "transfer": {
+            "n": 163,
+            "fraud_n": 3,
+            "recall": 1.0,
+            "legit_n": 160,
+            "false_positive_rate": 0.0063
+          }
+        },
+        "by_account_segment": {
+          "premium": {
+            "n": 227,
+            "fraud_n": 10,
+            "recall": 0.6,
+            "legit_n": 217,
+            "false_positive_rate": 0.0
+          },
+          "retail": {
+            "n": 2665,
+            "fraud_n": 44,
+            "recall": 0.795,
+            "legit_n": 2621,
+            "false_positive_rate": 0.0015
+          },
+          "small_business": {
+            "n": 285,
+            "fraud_n": 2,
+            "recall": 1.0,
+            "legit_n": 283,
+            "false_positive_rate": 0.0
+          }
+        },
+        "by_merchant_tier": {
+          "high": {
+            "n": 339,
+            "fraud_n": 19,
+            "recall": 1.0,
+            "legit_n": 320,
+            "false_positive_rate": 0.0
+          },
+          "low": {
+            "n": 2452,
+            "fraud_n": 34,
+            "recall": 0.618,
+            "legit_n": 2418,
+            "false_positive_rate": 0.0008
+          },
+          "medium": {
+            "n": 386,
+            "fraud_n": 3,
+            "recall": 1.0,
+            "legit_n": 383,
+            "false_positive_rate": 0.0052
+          }
+        },
+        "miss_breakdown": {
+          "fraud:account_takeover": {
+            "n": 6,
+            "detected": 6,
+            "missed": 0,
+            "dominant_signals_detected": {
+              "recent_account_changes": 6,
+              "recent_failed_mfa": 6,
+              "new_device": 6,
+              "impossible_travel": 6,
+              "new_country": 6,
+              "auth_weak": 6
+            },
+            "dominant_signals_missed": {},
+            "expected_signals": [
+              "new_device",
+              "new_country",
+              "impossible_travel",
+              "recent_account_changes",
+              "recent_failed_mfa",
+              "amount_anomaly_extreme"
+            ]
+          },
+          "fraud:burst": {
+            "n": 32,
+            "detected": 19,
+            "missed": 13,
+            "dominant_signals_detected": {
+              "rapid_fire": 19,
+              "rapid_succession": 19,
+              "velocity_spike": 17,
+              "velocity_burst": 8,
+              "repeat_merchant_burst": 6,
+              "amount_anomaly_moderate": 3
+            },
+            "dominant_signals_missed": {
+              "rapid_succession": 10,
+              "unusual_hour": 5,
+              "velocity_elevated": 4,
+              "rapid_fire": 4,
+              "amount_anomaly_moderate": 2
+            },
+            "expected_signals": [
+              "rapid_fire",
+              "rapid_succession",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          "fraud:graph_linked": {
+            "n": 18,
+            "detected": 18,
+            "missed": 0,
+            "dominant_signals_detected": {
+              "shared_payout_instrument": 18,
+              "young_account_shared_device": 18,
+              "shared_device": 18,
+              "merchant_risk_high": 18,
+              "account_age_young": 18,
+              "auth_weak": 15
+            },
+            "dominant_signals_missed": {},
+            "expected_signals": [
+              "young_account_shared_device",
+              "shared_device",
+              "shared_payout_instrument",
+              "account_age_young",
+              "auth_weak"
+            ]
+          }
+        },
+        "missed_examples": [
+          {
+            "transaction_id": "TX-003020",
+            "scenario": "fraud:burst",
+            "score": 6,
+            "level": "LOW",
+            "factors": [
+              "unusual_hour:+6"
+            ],
+            "components": {
+              "anomaly": 6
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "rapid_succession",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003021",
+            "scenario": "fraud:burst",
+            "score": 21,
+            "level": "LOW",
+            "factors": [
+              "rapid_succession:+15",
+              "unusual_hour:+6"
+            ],
+            "components": {
+              "velocity": 15,
+              "anomaly": 6
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003022",
+            "scenario": "fraud:burst",
+            "score": 25,
+            "level": "MEDIUM",
+            "factors": [
+              "amount_anomaly_moderate:+10",
+              "rapid_succession:+15"
+            ],
+            "components": {
+              "anomaly": 10,
+              "velocity": 15
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003024",
+            "scenario": "fraud:burst",
+            "score": 45,
+            "level": "MEDIUM",
+            "factors": [
+              "velocity_elevated:+10",
+              "rapid_fire:+20",
+              "rapid_succession:+15"
+            ],
+            "components": {
+              "velocity": 45
+            },
+            "missing_expected": [
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003010",
+            "scenario": "fraud:burst",
+            "score": 6,
+            "level": "LOW",
+            "factors": [
+              "unusual_hour:+6"
+            ],
+            "components": {
+              "anomaly": 6
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "rapid_succession",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003011",
+            "scenario": "fraud:burst",
+            "score": 15,
+            "level": "LOW",
+            "factors": [
+              "rapid_succession:+15"
+            ],
+            "components": {
+              "velocity": 15
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003012",
+            "scenario": "fraud:burst",
+            "score": 15,
+            "level": "LOW",
+            "factors": [
+              "rapid_succession:+15"
+            ],
+            "components": {
+              "velocity": 15
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003013",
+            "scenario": "fraud:burst",
+            "score": 45,
+            "level": "MEDIUM",
+            "factors": [
+              "velocity_elevated:+10",
+              "rapid_fire:+20",
+              "rapid_succession:+15"
+            ],
+            "components": {
+              "velocity": 45
+            },
+            "missing_expected": [
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003030",
+            "scenario": "fraud:burst",
+            "score": 6,
+            "level": "LOW",
+            "factors": [
+              "unusual_hour:+6"
+            ],
+            "components": {
+              "anomaly": 6
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "rapid_succession",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003031",
+            "scenario": "fraud:burst",
+            "score": 21,
+            "level": "LOW",
+            "factors": [
+              "rapid_succession:+15",
+              "unusual_hour:+6"
+            ],
+            "components": {
+              "velocity": 15,
+              "anomaly": 6
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003032",
+            "scenario": "fraud:burst",
+            "score": 25,
+            "level": "MEDIUM",
+            "factors": [
+              "amount_anomaly_moderate:+10",
+              "rapid_succession:+15"
+            ],
+            "components": {
+              "anomaly": 10,
+              "velocity": 15
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003033",
+            "scenario": "fraud:burst",
+            "score": 45,
+            "level": "MEDIUM",
+            "factors": [
+              "velocity_elevated:+10",
+              "rapid_fire:+20",
+              "rapid_succession:+15"
+            ],
+            "components": {
+              "velocity": 45
+            },
+            "missing_expected": [
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003034",
+            "scenario": "fraud:burst",
+            "score": 45,
+            "level": "MEDIUM",
+            "factors": [
+              "velocity_elevated:+10",
+              "rapid_fire:+20",
+              "rapid_succession:+15"
+            ],
+            "components": {
+              "velocity": 45
+            },
+            "missing_expected": [
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          }
+        ],
+        "false_positive_examples": [
+          {
+            "transaction_id": "TX-002212",
+            "label": "legit",
+            "score": 50,
+            "factors": [
+              "amount_anomaly_extreme:+22",
+              "new_country:+15",
+              "merchant_risk_medium:+5",
+              "auth_weak:+8"
+            ]
+          },
+          {
+            "transaction_id": "TX-002608",
+            "label": "legit",
+            "score": 57,
+            "factors": [
+              "amount_anomaly_extreme:+22",
+              "rapid_succession:+15",
+              "impossible_travel:+20"
+            ]
+          },
+          {
+            "transaction_id": "TX-000100",
+            "label": "legit",
+            "score": 57,
+            "factors": [
+              "amount_anomaly_extreme:+22",
+              "impossible_travel:+20",
+              "new_country:+15"
+            ]
+          },
+          {
+            "transaction_id": "TX-002526",
+            "label": "legit",
+            "score": 52,
+            "factors": [
+              "amount_anomaly_extreme:+22",
+              "new_country:+15",
+              "merchant_risk_medium:+5",
+              "unusual_hour:+6",
+              "new_merchant:+4"
+            ]
+          }
+        ]
       },
       "account_level": {
-        "tp": 10,
+        "tp": 9,
         "fp": 0,
-        "fn": 0,
-        "tn": 147,
+        "fn": 1,
+        "tn": 144,
         "precision": 1.0,
-        "recall": 1.0,
+        "recall": 0.9,
         "false_positive_rate": 0.0,
-        "false_negative_rate": 0.0,
+        "false_negative_rate": 0.1,
         "scenarios": [
           "fraud:structuring",
           "fraud:dormant_activation",
@@ -212,7 +1087,7 @@
         "recall_by_scenario": {
           "fraud:burst": {
             "n": 3,
-            "recall": 1.0
+            "recall": 0.667
           },
           "fraud:dormant_activation": {
             "n": 2,
@@ -229,31 +1104,31 @@
         },
         "calibration": {
           "LOW": {
-            "n": 144,
+            "n": 142,
             "observed_fraud_rate": 0.0
           },
           "HIGH": {
-            "n": 6,
-            "observed_fraud_rate": 1.0
-          },
-          "CRITICAL": {
-            "n": 4,
+            "n": 5,
             "observed_fraud_rate": 1.0
           },
           "MEDIUM": {
             "n": 3,
-            "observed_fraud_rate": 0.0
+            "observed_fraud_rate": 0.3333
+          },
+          "CRITICAL": {
+            "n": 4,
+            "observed_fraud_rate": 1.0
           }
         }
       },
       "merchant_level": {
         "tp": 2,
-        "fp": 1,
+        "fp": 2,
         "fn": 1,
-        "tn": 26,
-        "precision": 0.667,
+        "tn": 25,
+        "precision": 0.5,
         "recall": 0.667,
-        "false_positive_rate": 0.037,
+        "false_positive_rate": 0.0741,
         "false_negative_rate": 0.333,
         "bad_merchants": 3,
         "definition": "abused (scenario) or shell registration or >= 2 prior flags"
@@ -261,44 +1136,444 @@
       "recall_by_scenario": {
         "fraud:account_takeover": {
           "n": 6,
-          "recall": 0.333
+          "recall": 1.0
         },
         "fraud:burst": {
-          "n": 28,
-          "recall": 0.143
+          "n": 32,
+          "recall": 0.594
         },
         "fraud:graph_linked": {
           "n": 18,
-          "recall": 0.444
+          "recall": 1.0
         }
       }
     },
     "2024": {
       "transaction_level": {
-        "tp": 24,
-        "fp": 4,
-        "fn": 35,
-        "tn": 3116,
-        "precision": 0.857,
-        "recall": 0.407,
-        "false_positive_rate": 0.0013,
-        "false_negative_rate": 0.593,
+        "tp": 43,
+        "fp": 2,
+        "fn": 12,
+        "tn": 3123,
+        "precision": 0.956,
+        "recall": 0.782,
+        "false_positive_rate": 0.0006,
+        "false_negative_rate": 0.218,
         "scenarios": [
           "fraud:account_takeover",
           "fraud:burst",
           "fraud:graph_linked"
         ],
-        "prevalence": 0.0186
+        "prevalence": 0.0173,
+        "by_channel": {
+          "ecommerce": {
+            "n": 2748,
+            "fraud_n": 52,
+            "recall": 0.769,
+            "legit_n": 2696,
+            "false_positive_rate": 0.0004
+          },
+          "pos": {
+            "n": 268,
+            "fraud_n": 0,
+            "recall": null,
+            "legit_n": 268,
+            "false_positive_rate": 0.0037
+          },
+          "transfer": {
+            "n": 164,
+            "fraud_n": 3,
+            "recall": 1.0,
+            "legit_n": 161,
+            "false_positive_rate": 0.0
+          }
+        },
+        "by_account_segment": {
+          "premium": {
+            "n": 578,
+            "fraud_n": 0,
+            "recall": null,
+            "legit_n": 578,
+            "false_positive_rate": 0.0
+          },
+          "retail": {
+            "n": 2228,
+            "fraud_n": 47,
+            "recall": 0.851,
+            "legit_n": 2181,
+            "false_positive_rate": 0.0
+          },
+          "small_business": {
+            "n": 374,
+            "fraud_n": 8,
+            "recall": 0.375,
+            "legit_n": 366,
+            "false_positive_rate": 0.0055
+          }
+        },
+        "by_merchant_tier": {
+          "high": {
+            "n": 447,
+            "fraud_n": 23,
+            "recall": 0.913,
+            "legit_n": 424,
+            "false_positive_rate": 0.0
+          },
+          "low": {
+            "n": 2539,
+            "fraud_n": 31,
+            "recall": 0.677,
+            "legit_n": 2508,
+            "false_positive_rate": 0.0008
+          },
+          "medium": {
+            "n": 194,
+            "fraud_n": 1,
+            "recall": 1.0,
+            "legit_n": 193,
+            "false_positive_rate": 0.0
+          }
+        },
+        "miss_breakdown": {
+          "fraud:account_takeover": {
+            "n": 6,
+            "detected": 6,
+            "missed": 0,
+            "dominant_signals_detected": {
+              "recent_account_changes": 6,
+              "recent_failed_mfa": 6,
+              "new_device": 6,
+              "impossible_travel": 6,
+              "auth_weak": 6,
+              "amount_anomaly_extreme": 5
+            },
+            "dominant_signals_missed": {},
+            "expected_signals": [
+              "new_device",
+              "new_country",
+              "impossible_travel",
+              "recent_account_changes",
+              "recent_failed_mfa",
+              "amount_anomaly_extreme"
+            ]
+          },
+          "fraud:burst": {
+            "n": 31,
+            "detected": 19,
+            "missed": 12,
+            "dominant_signals_detected": {
+              "rapid_fire": 19,
+              "rapid_succession": 19,
+              "velocity_spike": 16,
+              "impossible_travel": 8,
+              "chargeback_some": 7,
+              "velocity_burst": 7
+            },
+            "dominant_signals_missed": {
+              "rapid_succession": 9,
+              "chargeback_some": 6,
+              "velocity_elevated": 3,
+              "rapid_fire": 3,
+              "merchant_risk_high": 2,
+              "unusual_hour": 1
+            },
+            "expected_signals": [
+              "rapid_fire",
+              "rapid_succession",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          "fraud:graph_linked": {
+            "n": 18,
+            "detected": 18,
+            "missed": 0,
+            "dominant_signals_detected": {
+              "shared_payout_instrument": 18,
+              "young_account_shared_device": 18,
+              "shared_device": 18,
+              "merchant_risk_high": 18,
+              "account_age_young": 18,
+              "auth_weak": 15
+            },
+            "dominant_signals_missed": {},
+            "expected_signals": [
+              "young_account_shared_device",
+              "shared_device",
+              "shared_payout_instrument",
+              "account_age_young",
+              "auth_weak"
+            ]
+          }
+        },
+        "missed_examples": [
+          {
+            "transaction_id": "TX-003033",
+            "scenario": "fraud:burst",
+            "score": 6,
+            "level": "LOW",
+            "factors": [
+              "unusual_hour:+6"
+            ],
+            "components": {
+              "anomaly": 6
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "rapid_succession",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003034",
+            "scenario": "fraud:burst",
+            "score": 29,
+            "level": "MEDIUM",
+            "factors": [
+              "rapid_succession:+15",
+              "merchant_risk_high:+10",
+              "new_merchant:+4"
+            ],
+            "components": {
+              "velocity": 15,
+              "entity": 10,
+              "anomaly": 4
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003035",
+            "scenario": "fraud:burst",
+            "score": 15,
+            "level": "LOW",
+            "factors": [
+              "rapid_succession:+15"
+            ],
+            "components": {
+              "velocity": 15
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003036",
+            "scenario": "fraud:burst",
+            "score": 45,
+            "level": "MEDIUM",
+            "factors": [
+              "velocity_elevated:+10",
+              "rapid_fire:+20",
+              "rapid_succession:+15"
+            ],
+            "components": {
+              "velocity": 45
+            },
+            "missing_expected": [
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003037",
+            "scenario": "fraud:burst",
+            "score": 45,
+            "level": "MEDIUM",
+            "factors": [
+              "velocity_elevated:+10",
+              "rapid_fire:+20",
+              "rapid_succession:+15"
+            ],
+            "components": {
+              "velocity": 45
+            },
+            "missing_expected": [
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003010",
+            "scenario": "fraud:burst",
+            "score": 5,
+            "level": "LOW",
+            "factors": [
+              "chargeback_some:+5"
+            ],
+            "components": {
+              "entity": 5
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "rapid_succession",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003011",
+            "scenario": "fraud:burst",
+            "score": 28,
+            "level": "MEDIUM",
+            "factors": [
+              "rapid_succession:+15",
+              "auth_weak:+8",
+              "chargeback_some:+5"
+            ],
+            "components": {
+              "velocity": 15,
+              "security": 8,
+              "entity": 5
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003012",
+            "scenario": "fraud:burst",
+            "score": 20,
+            "level": "LOW",
+            "factors": [
+              "rapid_succession:+15",
+              "chargeback_some:+5"
+            ],
+            "components": {
+              "velocity": 15,
+              "entity": 5
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003021",
+            "scenario": "fraud:burst",
+            "score": 15,
+            "level": "LOW",
+            "factors": [
+              "merchant_risk_high:+10",
+              "chargeback_some:+5"
+            ],
+            "components": {
+              "entity": 15
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "rapid_succession",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003022",
+            "scenario": "fraud:burst",
+            "score": 20,
+            "level": "LOW",
+            "factors": [
+              "rapid_succession:+15",
+              "chargeback_some:+5"
+            ],
+            "components": {
+              "velocity": 15,
+              "entity": 5
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003023",
+            "scenario": "fraud:burst",
+            "score": 20,
+            "level": "LOW",
+            "factors": [
+              "rapid_succession:+15",
+              "chargeback_some:+5"
+            ],
+            "components": {
+              "velocity": 15,
+              "entity": 5
+            },
+            "missing_expected": [
+              "rapid_fire",
+              "velocity_elevated",
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          },
+          {
+            "transaction_id": "TX-003024",
+            "scenario": "fraud:burst",
+            "score": 45,
+            "level": "MEDIUM",
+            "factors": [
+              "velocity_elevated:+10",
+              "rapid_fire:+20",
+              "rapid_succession:+15"
+            ],
+            "components": {
+              "velocity": 45
+            },
+            "missing_expected": [
+              "velocity_spike",
+              "velocity_burst"
+            ]
+          }
+        ],
+        "false_positive_examples": [
+          {
+            "transaction_id": "TX-001975",
+            "label": "legit",
+            "score": 50,
+            "factors": [
+              "rapid_succession:+15",
+              "impossible_travel:+20",
+              "new_country:+15"
+            ]
+          },
+          {
+            "transaction_id": "TX-001325",
+            "label": "legit",
+            "score": 57,
+            "factors": [
+              "amount_anomaly_extreme:+22",
+              "rapid_succession:+15",
+              "impossible_travel:+20"
+            ]
+          }
+        ]
       },
       "account_level": {
-        "tp": 10,
+        "tp": 9,
         "fp": 0,
-        "fn": 0,
-        "tn": 144,
+        "fn": 1,
+        "tn": 150,
         "precision": 1.0,
-        "recall": 1.0,
+        "recall": 0.9,
         "false_positive_rate": 0.0,
-        "false_negative_rate": 0.0,
+        "false_negative_rate": 0.1,
         "scenarios": [
           "fraud:structuring",
           "fraud:dormant_activation",
@@ -308,7 +1583,7 @@
         "recall_by_scenario": {
           "fraud:burst": {
             "n": 3,
-            "recall": 1.0
+            "recall": 0.667
           },
           "fraud:dormant_activation": {
             "n": 2,
@@ -325,7 +1600,7 @@
         },
         "calibration": {
           "LOW": {
-            "n": 136,
+            "n": 149,
             "observed_fraud_rate": 0.0
           },
           "HIGH": {
@@ -333,39 +1608,39 @@
             "observed_fraud_rate": 1.0
           },
           "MEDIUM": {
-            "n": 8,
-            "observed_fraud_rate": 0.0
+            "n": 2,
+            "observed_fraud_rate": 0.5
           },
           "CRITICAL": {
-            "n": 4,
+            "n": 3,
             "observed_fraud_rate": 1.0
           }
         }
       },
       "merchant_level": {
-        "tp": 2,
-        "fp": 0,
+        "tp": 3,
+        "fp": 1,
         "fn": 0,
-        "tn": 28,
-        "precision": 1.0,
+        "tn": 26,
+        "precision": 0.75,
         "recall": 1.0,
-        "false_positive_rate": 0.0,
+        "false_positive_rate": 0.037,
         "false_negative_rate": 0.0,
-        "bad_merchants": 2,
+        "bad_merchants": 3,
         "definition": "abused (scenario) or shell registration or >= 2 prior flags"
       },
       "recall_by_scenario": {
         "fraud:account_takeover": {
           "n": 6,
-          "recall": 0.833
+          "recall": 1.0
         },
         "fraud:burst": {
-          "n": 35,
-          "recall": 0.343
+          "n": 31,
+          "recall": 0.613
         },
         "fraud:graph_linked": {
           "n": 18,
-          "recall": 0.389
+          "recall": 1.0
         }
       }
     }
@@ -373,35 +1648,35 @@
   "seed_range": {
     "transaction_level": {
       "precision": {
-        "min": 0.857,
-        "max": 0.933
+        "min": 0.915,
+        "max": 0.956
       },
       "recall": {
-        "min": 0.269,
-        "max": 0.407
+        "min": 0.768,
+        "max": 0.796
       },
       "false_positive_rate": {
-        "min": 0.0003,
+        "min": 0.0006,
         "max": 0.0013
       }
     },
     "account_level": {
       "precision": {
-        "min": 0.714,
-        "max": 1.0
-      },
-      "recall": {
         "min": 1.0,
         "max": 1.0
       },
+      "recall": {
+        "min": 0.8,
+        "max": 0.9
+      },
       "false_positive_rate": {
         "min": 0.0,
-        "max": 0.0268
+        "max": 0.0
       }
     },
     "merchant_level": {
       "precision": {
-        "min": 0.4,
+        "min": 0.5,
         "max": 1.0
       },
       "recall": {
@@ -410,9 +1685,9 @@
       },
       "false_positive_rate": {
         "min": 0.0,
-        "max": 0.1111
+        "max": 0.0741
       }
     }
   },
-  "seconds": 1.5
+  "seconds": 2.4
 }

@@ -1,20 +1,20 @@
 {
   "no_controls": {
-    "asr": 0.833,
+    "asr": 0.9,
     "fp": 0.4,
-    "escalation_executed": 0.125,
+    "escalation_executed": 0.2,
     "controls": [],
     "hardened": false
   },
   "prompt_hardening": {
-    "asr": 0.167,
+    "asr": 0.233,
     "fp": 0.4,
     "escalation_executed": 0.0,
     "controls": [],
     "hardened": true
   },
   "detection_only": {
-    "asr": 0.167,
+    "asr": 0.2,
     "fp": 0.4,
     "escalation_executed": 0.0,
     "controls": [
@@ -24,18 +24,18 @@
     "hardened": false
   },
   "risk_only": {
-    "asr": 0.833,
+    "asr": 0.9,
     "fp": 0.4,
-    "escalation_executed": 0.125,
+    "escalation_executed": 0.2,
     "controls": [
       "risk"
     ],
     "hardened": false
   },
   "policy_only": {
-    "asr": 0.333,
+    "asr": 0.36,
     "fp": 0.4,
-    "escalation_executed": 0.05,
+    "escalation_executed": 0.08,
     "controls": [
       "policy"
     ],

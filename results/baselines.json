@@ -1,6 +1,6 @@
 {
-  "no_defence": 0.833,
-  "hardened_prompt": 0.167,
+  "no_defence": 0.9,
+  "hardened_prompt": 0.233,
   "sentinel": 0.0,
   "hardened_by_class": {
     "direct_injection": 0.0,
@@ -14,6 +14,9 @@
     "indirect_injection": 0.0,
     "adjudication_gaming": 1.0,
     "financial_social_engineering": 1.0,
-    "capability_escalation": 0.0
+    "capability_escalation": 0.0,
+    "model_output_injection": 0.5,
+    "false_evidence": 1.0,
+    "synthetic_evidence": 0.0
   }
 }

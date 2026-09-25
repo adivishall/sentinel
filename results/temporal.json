@@ -1,0 +1,21 @@
+{
+  "benchmark": "temporal-leakage",
+  "dataset": {
+    "seed": 42,
+    "transactions": 2585,
+    "sample": 24
+  },
+  "future_offsets_days": [
+    1,
+    30,
+    90
+  ],
+  "truncation_mismatch_rate": 0.0,
+  "truncation_mismatches": [],
+  "truncation_mismatch_fields": {},
+  "perturbation_transaction_change_rate": 0.0,
+  "perturbation_monitoring_change_rate": 0.0,
+  "perturbation_examples": [],
+  "expected": "all rates 0.0: a decision at T1 reads only records at or before T1",
+  "seconds": 1.8
+}
