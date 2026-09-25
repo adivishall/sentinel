@@ -46,7 +46,16 @@ class CapabilitySpec:
 
     @property
     def consequential(self) -> bool:
-        return self.irreversible or self.financial_effect
+        """A capability whose execution matters: it is irreversible, moves money, or
+        is reserved to a human (closing a fraud case or overriding a risk score has no
+        direct monetary effect, but an agent doing it is exactly the failure the
+        registry exists to prevent, so it counts as a breach when it executes)."""
+        return (
+            self.irreversible
+            or self.financial_effect
+            or self.required_authorization
+            in (AuthorizationLevel.HUMAN_REVIEWER, AuthorizationLevel.SENIOR_REVIEWER)
+        )
 
 
 _HUMANS = frozenset({ActorKind.HUMAN_REVIEWER, ActorKind.SENIOR_REVIEWER})

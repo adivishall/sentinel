@@ -16,6 +16,7 @@ from sentinel.evaluation import (
     integrity,
     kyb,
     models,
+    surfaces,
     temporal,
 )
 from sentinel.evaluation.attacks import corpus
@@ -24,6 +25,7 @@ from sentinel.evaluation.common import write_json
 SUITES = (
     "security",
     "heldout",
+    "surfaces",
     "kyb",
     "baselines",
     "ablation",
@@ -47,6 +49,8 @@ def run_suite(name: str = "full", out_dir: str = "results", full: bool = False) 
             results[n] = harness.main(out_dir)
         elif n == "heldout":
             results[n] = heldout.main(out_dir)
+        elif n == "surfaces":
+            results[n] = surfaces.main(out_dir)
         elif n == "kyb":
             results[n] = kyb.main(out_dir)
         elif n == "baselines":
@@ -68,7 +72,7 @@ def run_suite(name: str = "full", out_dir: str = "results", full: bool = False) 
         else:
             raise SystemExit(f"unknown suite {n!r}; choose from full, {', '.join(SUITES)}")
     if name == "full":
-        s, h, k, b, a, f, i, p, tl = (
+        s, h, k, b, a, f, i, p, tl, sf = (
             results.get(x, {})
             for x in (
                 "security",
@@ -80,6 +84,7 @@ def run_suite(name: str = "full", out_dir: str = "results", full: bool = False) 
                 "integrity",
                 "performance",
                 "temporal",
+                "surfaces",
             )
         )
         summary = {
@@ -109,7 +114,30 @@ def run_suite(name: str = "full", out_dir: str = "results", full: bool = False) 
                     "fp_rate",
                 )
             },
-            "kyb": k,
+            "surfaces": {
+                k2: sf.get(k2)
+                for k2 in (
+                    "n_attacks",
+                    "asr_unguarded",
+                    "asr_guarded",
+                    "detection_recall",
+                    "loosened_vs_baseline",
+                )
+            },
+            "kyb": {
+                k2: k.get(k2)
+                for k2 in (
+                    "attacks",
+                    "controls",
+                    "asr_unguarded",
+                    "asr_guarded",
+                    "fp_rate",
+                    "fp_rate_benign_input",
+                    "fn_rate",
+                    "borderline_to_review",
+                    "manual_review_rate",
+                )
+            },
             "baselines": {k2: b.get(k2) for k2 in ("no_defence", "hardened_prompt", "sentinel")},
             "ablation": {k2: v.get("asr") for k2, v in a.items()},
             "financial": {

@@ -85,9 +85,9 @@ _SEV_RANK = {
 
 
 class ThreatClass(StrEnum):
-    """The AI threat taxonomy. Twelve classes; the last five are not lexical and
-    are detected structurally (contradiction engine, capability registry,
-    session model) rather than by pattern matching."""
+    """The AI threat taxonomy. Fifteen classes; several are not lexical and are
+    caught structurally (contradiction engine, capability registry, session
+    model, model-output inspection) rather than by pattern matching."""
 
     DIRECT_INJECTION = "direct_injection"
     AUTHORITY_SPOOF = "authority_spoof"
@@ -101,6 +101,9 @@ class ThreatClass(StrEnum):
     ADJUDICATION_GAMING = "adjudication_gaming"
     FINANCIAL_SOCIAL_ENGINEERING = "financial_social_engineering"
     CAPABILITY_ESCALATION = "capability_escalation"
+    MODEL_OUTPUT_INJECTION = "model_output_injection"  # text that mimics the agent's own output
+    FALSE_EVIDENCE = "false_evidence"  # a verifiable-sounding fact that the records refute
+    SYNTHETIC_EVIDENCE = "synthetic_evidence"  # a fabricated record / report presented as trusted
 
 
 class ClaimType(StrEnum):

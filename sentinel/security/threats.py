@@ -1,11 +1,13 @@
-"""The AI threat taxonomy: twelve classes of attack against financial decision
+"""The AI threat taxonomy: fifteen classes of attack against financial decision
 agents, each with the mechanism, how Sentinel detects it, and which financial
 capabilities it typically targets.
 
-Only the first eight are (partly) detectable by inspecting text. The last four
-are caught structurally: the contradiction engine (adjudication gaming), the
-capability registry (capability escalation), the session model (multi-turn),
-and the normaliser (unicode obfuscation).
+Only some are (partly) detectable by inspecting text. The rest are caught
+structurally: the contradiction engine (adjudication gaming, false evidence),
+the trust boundary (synthetic evidence -- a fabricated record is still
+untrusted), the capability registry (capability escalation), model-output
+inspection (model-output injection), the session model (multi-turn) and the
+normaliser (unicode obfuscation).
 """
 
 from __future__ import annotations
@@ -103,6 +105,30 @@ TAXONOMY: dict[ThreatClass, ThreatInfo] = {
             Capability.ALTER_RISK,
             Capability.SKIP_REVIEW,
         ),
+    ),
+    ThreatClass.MODEL_OUTPUT_INJECTION: ThreatInfo(
+        "Model-output injection",
+        "Untrusted text that mimics the agent's own output format (an 'assistant:' turn, "
+        "a JSON tool call, a chat-template marker) so a parser or a model treats it as the "
+        "model's decision.",
+        "lexical + structural",
+        (Capability.APPROVE_REFUND, Capability.RELEASE_FUNDS, Capability.CLOSE_CASE),
+    ),
+    ThreatClass.FALSE_EVIDENCE: ThreatInfo(
+        "False evidence",
+        "A verifiable-sounding fact asserted in prose -- a tracking status, a 'your own "
+        "system shows' claim -- that the trusted records refute. Nothing to detect; the "
+        "contradiction engine decides.",
+        "evidence",
+        (Capability.APPROVE_REFUND, Capability.APPROVE_MERCHANT),
+    ),
+    ThreatClass.SYNTHETIC_EVIDENCE: ThreatInfo(
+        "Synthetic evidence",
+        "A fabricated record, ledger extract or verification report presented as if it were "
+        "the institution's own data. It arrives through an untrusted channel, so it can never "
+        "become VERIFIED evidence whatever it says.",
+        "trust boundary",
+        (Capability.APPROVE_REFUND, Capability.APPROVE_MERCHANT, Capability.RELEASE_FUNDS),
     ),
 }
 

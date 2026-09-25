@@ -136,6 +136,30 @@ SIGNALS: tuple[Signal, ...] = (
         ),
     ),
     Signal(
+        "model_output_mimicry",
+        ThreatClass.MODEL_OUTPUT_INJECTION,
+        0.8,
+        _rx(
+            r"^\s*(assistant|agent|model|ai)\s*:"
+            r"|\n\s*(assistant|agent|model|ai)\s*:"
+            r"|<\|?(assistant|im_start|im_end|end_of_turn)\|?>"
+            r"|\[/?(assistant|agent)\]"
+            r"|(final|my|the) (answer|decision|verdict)\s*(is|:)\s*\{"
+            r"|[\"']?(recommended_action|verdict|final_action)[\"']?\s*[:=]\s*[\"']?(approve|allow|release|unfreeze)"
+        ),
+    ),
+    Signal(
+        "synthetic_record",
+        ThreatClass.SYNTHETIC_EVIDENCE,
+        0.7,
+        _rx(
+            r"(ledger|record|database|system|acquirer|kyb|verification) (extract|export|report|dump|snapshot)"
+            r"|(delivery_status|refund_state|registration_status|prior_flags|cardholder_present|evidence_verdict)\s*[=:]\s*[\w\"']+"
+            r"|(all|kyb|kyc) checks? passed|no adverse media|beneficial owners? confirmed"
+            r"|(per|from) (our|the) (internal|core|back[- ]?office) (system|records|ledger)"
+        ),
+    ),
+    Signal(
         "social_engineering_pressure",
         ThreatClass.FINANCIAL_SOCIAL_ENGINEERING,
         0.4,

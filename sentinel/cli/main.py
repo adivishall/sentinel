@@ -720,6 +720,7 @@ def build_parser() -> argparse.ArgumentParser:
             "full",
             "security",
             "heldout",
+            "surfaces",
             "kyb",
             "baselines",
             "ablation",
