@@ -165,7 +165,10 @@ class AISecurityGateway:
         a capability outside the surface its agent is permitted to *request*?
         (Even in-surface requests are only recommendations downstream.)"""
         cap = recommendation.requested_capability
-        escalation = cap is not None and cap not in tool_surface
+        # An escalation is a request for a CONSEQUENTIAL capability outside the surface.
+        # A read, a bare recommendation, or an unknown tool name that the interpreter
+        # mapped to RECOMMEND_ACTION is not an attack -- it is just not authoritative.
+        escalation = cap is not None and cap not in tool_surface and is_consequential(cap)
         findings: tuple[SecurityFinding, ...] = ()
         classes: tuple[ThreatClass, ...] = ()
         if escalation and cap is not None:
