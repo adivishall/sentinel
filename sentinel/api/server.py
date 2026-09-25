@@ -820,6 +820,15 @@ class SentinelHandler(BaseHTTPRequestHandler):
             except ValueError:
                 return self._send(400, _error(400, "invalid Content-Length", rid), rid)
             if length > MAX_BODY:
+                # Drain a bounded amount first: answering while the client is still sending
+                # makes the client see a connection reset instead of the 413.
+                left = min(length, 4 * MAX_BODY)
+                while left > 0:
+                    chunk = self.rfile.read(min(65536, left))
+                    if not chunk:
+                        break
+                    left -= len(chunk)
+                self.close_connection = True
                 return self._send(
                     413, _error(413, f"request too large (> {MAX_BODY} bytes)", rid), rid
                 )
