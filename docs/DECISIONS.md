@@ -115,6 +115,15 @@ come from evidence and policy, not from a detector matching its own words.
 --suite models` runs the identical suite live when a key is present and
 records `not_run` otherwise; nothing is fabricated.
 
+## D12 — One engine, three surfaces, a static snapshot for hosting
+
+**Decision.** CLI, API and console call `SentinelApp`; the console contains
+no scoring or policy logic (asserted by a test). GitHub Pages serves a
+snapshot the engine computed.
+**Why.** The v1 console re-implemented the firewall in JavaScript -- a second
+decision engine that could drift. Never again.
+**Trade-off.** The static demo is read-only; custom attacks need `make ui`.
+
 ## D13 — Ablation controls are a lab feature, not an API option
 
 **Decision.** `options.controls` / `unguarded` are refused (403) on the
@@ -138,11 +147,78 @@ detect: 16.7%. Reporting the higher number would have flattered Sentinel's
 marginal contribution.
 **Trade-off.** None; the honest number is smaller.
 
-## D12 — One engine, three surfaces, a static snapshot for hosting
+## D15 — Every feature is computed as of the decision, and the graph knows time
 
-**Decision.** CLI, API and console call `SentinelApp`; the console contains
-no scoring or policy logic (asserted by a test). GitHub Pages serves a
-snapshot the engine computed.
-**Why.** The v1 console re-implemented the firewall in JavaScript -- a second
-decision engine that could drift. Never again.
-**Trade-off.** The static demo is read-only; custom attacks need `make ui`.
+**Decision.** Behavioural baselines read only earlier transactions and
+earlier disputes; entity profiles take `as_of`, are cached per
+`(entity, as_of)` and read only records at or before it; every graph edge
+carries a timestamp and every query takes `as_of`; device knowledge is "used
+on this account at least 24 h before"; the monitoring cycle finder accepts
+only hops inside `cycle_window_days`. The invariant *data available after T
+never influences a decision made at T* is a documented, benchmarked property
+(`results/temporal.json`).
+**Why.** The v2.0.1 review found the baseline counting disputes filed after
+the transaction; a wider audit found profiles reading the whole dataset, a
+cycle finder unbounded in time, and a generator that registered the
+attacker's device as known. Each leak either flattered precision or depressed
+recall; none was visible without an explicit as-of.
+**Trade-off.** Profiles are computed per time and cached per time, so a
+replay across many timestamps does more work than a single dataset-date
+profile would.
+
+## D16 — `txn-2.0` adds features, not threshold tuning
+
+**Decision.** The default transaction model adds short-window velocity,
+inter-arrival timing, the trusted account-security events of the previous
+24 h and payout-instrument sharing; existing point values were not moved to
+improve a number, and `txn-1.0` / `txn-1.1` remain loadable for replay.
+**Why.** The burst and takeover scenarios were being missed for identifiable
+reasons (no signal until the ninth transaction; a device the generator had
+wrongly registered), and the honest fix is a feature that exists in the
+records, not a lower threshold. Recall that improves because a leak was
+removed or a real signal was added is reported; recall that would improve by
+tuning is not pursued.
+**Trade-off.** Burst recall at the transaction level remains partial by
+construction (the first transactions of a burst cannot carry a short-window
+signal); the account-level monitor is where a burst is meant to be caught,
+and the evaluation reports both.
+
+## D17 — The audit trail is a tamper-evident application audit chain with exportable checkpoints
+
+**Decision.** Keep the SHA-256 link and the redaction; add indexed lookups on
+every backend (never on the verification path) and a `Checkpoint`
+(length + head hash, HMAC-signed with `SENTINEL_AUDIT_KEY`) meant to be stored
+outside the store. Call it a tamper-evident application audit chain; never a
+blockchain or an immutable ledger.
+**Why.** A consistent rewrite from genesis was the documented residual risk;
+an external anchor closes it without inventing consensus. Honest terminology
+is part of the security claim.
+**Trade-off.** The operator must keep the checkpoint and the key somewhere
+the storage attacker cannot reach; the platform cannot do that for them.
+
+## D18 — "Consequential" includes human-reserved capabilities, and every surface is attacked
+
+**Decision.** A capability counts as consequential when it is irreversible,
+moves money, *or* requires a human reviewer (closing a case, overriding a risk
+score). Attack success on the transaction, account-security and
+investigation surfaces is measured against a text-free baseline of the same
+request, and the temporal suite is part of `make eval`.
+**Why.** An agent closing a fraud case has no direct monetary effect and is
+exactly the failure the registry exists to prevent; excluding it would have
+under-counted escalation. The dispute corpus alone could not show that
+descriptors, login messages and case notes are on the protected path.
+**Trade-off.** More attacks and more structural 0% rows; the honest content
+stays in the empirical columns and the docs say so.
+
+## D19 — The KYB benchmark is balanced and reports its false positives twice
+
+**Decision.** Balanced categories (legitimate, suspicious, fraudulent,
+ambiguous, incomplete, malicious document on bad and on clean records,
+high-risk but legitimate) with records-only ground truth, and two
+false-positive rates: on benign input, and on any input including clean
+merchants held because their upload was hostile.
+**Why.** The v2 KYB set had ten attacks on bad records and reported 0% false
+positives, which measured nothing. A clean merchant with an injected upload is
+held for a human by design; that is a cost and it is published.
+**Trade-off.** The headline any-input false-positive rate is not zero and is
+not tuned to be.

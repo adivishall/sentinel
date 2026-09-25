@@ -29,10 +29,12 @@ Open http://localhost:8000/ for the console.
 | GET | `/v1/graph/{entity_type}/{id}?depth=2` | relationship neighbourhood |
 | GET | `/v1/decisions[/{id}]` | decisions, with evidence and audit event |
 | GET, POST | `/v1/cases`, `/v1/cases/{id}`, `/v1/cases/{id}/transition`, `/v1/cases/{id}/decision` | cases; human-only resolution |
-| GET | `/v1/audit`, `/v1/audit/verify`, `/v1/audit/{id}` | hash chain |
-| GET, POST | `/v1/policies`, `/v1/policies/{id}?version=`, `/v1/policies/catalog`, `/v1/policies/evaluate`, `/v1/policies/validate` | policy-as-code |
+| GET | `/v1/cases/{id}/review` | the human-review packet: why the case exists, risk with components, trusted evidence vs untrusted claims, contradictions, the model's recommendation marked MODEL_GENERATED, audit history |
+| GET | `/v1/audit`, `/v1/audit/verify`, `/v1/audit/{id}` | the tamper-evident audit chain (indexed lookup by event or decision id) |
+| GET, POST | `/v1/policies`, `/v1/policies/{id}?version=`, `/v1/policies/catalog`, `/v1/policies/evaluate`, `/v1/policies/validate`, `/v1/policies/lint` | policy-as-code; `lint` returns the findings for a policy document or a shipped `{policy_id, version}` |
+| GET | `/v1/capabilities` | the capability security matrix as data (`docs/SECURITY_MODEL.md`) |
 | POST, GET | `/v1/replay`, `/v1/replays` | decision replay |
-| GET, POST | `/v1/attacks`, `/v1/attacks/simulate` | the attack simulator |
+| GET, POST | `/v1/attacks`, `/v1/attacks/simulate` | the attack simulator; `{"kind", "narrative"?, "document"?, "options"?, "compare"?}` -- `compare: true` returns `without` (simulated agent, no controls) and `with` (full controls) side by side with a caveat that the victim is the offline simulator |
 | GET, POST | `/v1/scenarios`, `/v1/scenarios/{key}/run` | flagship scenarios |
 | GET | `/v1/evaluations` | `results/*.json` |
 
@@ -43,7 +45,7 @@ Open http://localhost:8000/ for the console.
   "controls": ["provenance","detection","risk","adjudication","policy","authorization"],  // ablation only
   "unguarded": false,        // shorthand for controls: []
   "policy_version": 1,
-  "risk_model": "txn-1.1",
+  "risk_model": "txn-2.0",   // txn-1.0 | txn-1.1 | txn-2.0
   "hardened": false,         // hardened-prompt agent
   "skip_agent": false        // evaluate without any model call
 }
@@ -66,11 +68,11 @@ set on the decision and the audit event.
                         "requested_capability": "APPROVE_REFUND", "trust": "MODEL_GENERATED", …},
   "evidence_verdict": "CONTRADICTED", "evidence_ids": ["EV-LEDGER-001", …], "contradiction_count": 1,
   "security_severity": "CRITICAL", "security_event_id": "SEC-…",
-  "policy": {"policy_id": "dispute-refund", "version": 2, "outcome": "BLOCK", "matched_rules": [...], "explanations": [...]},
+  "policy": {"policy_id": "dispute-refund", "version": 3, "outcome": "BLOCK", "matched_rules": [...], "explanations": [...]},
   "authorization": {"status": "DENIED", "capability": "APPROVE_REFUND", "actor": "SYSTEM", "reason": "…"},
   "human_review": {"required": true, "reason": "…", "case_id": "CASE-…"},
   "final_action": "BLOCK", "executed_capability": null,
-  "blocked_by": ["trusted_evidence", "ai_security_gateway", "policy:dispute-refund@v2", "capability_authorization"],
+  "blocked_by": ["trusted_evidence", "ai_security_gateway", "policy:dispute-refund@v3", "capability_authorization"],
   "reason": "…", "trail": [{"stage": "provenance", …}, …],
   "input_hash": "…", "provider": "offline", "model": "offline-simulator",
   "case_id": "CASE-…", "audit_event_id": "AUD-…", "controls": [...], "ai_agreed": false
@@ -92,24 +94,30 @@ be the system of record, never a channel a customer can reach. Consequences:
   `{transaction_id}`, `{session_id}`), which read the facts from the store;
 - never build the `ledger` object from anything the disputing party sent.
 
-`POST /v1/replay` returns `policy_drift` (the policy version named in the
-snapshot no longer has the content the decision was made under) and
-`original_drift` (re-deriving the original from its snapshot no longer
-reproduces the recorded outcome).
+`POST /v1/replay` compares the recomputed decision with the **originally
+stored** one, never merely "replay completed": `decision_diff` lists every
+field that changed with its before / after values, `policy_drift` says the
+policy version named in the snapshot no longer has the content the decision
+was made under, and `engine_drift` (alias `original_drift`) says re-deriving
+the original from its snapshot no longer reproduces the recorded outcome. For
+identical input, trusted facts, risk configuration, policy version and engine
+version the deterministic result reproduces and the diff is empty
+(`tests/test_replay_determinism.py`).
 
 ## Errors
 
 | Status | When |
 |---|---|
 | 400 | malformed JSON, missing/invalid field, unknown option, invalid policy document |
-| 401 | `SENTINEL_API_KEY` set and no valid `Authorization: Bearer` / `X-API-Key` |
+| 401 | `SENTINEL_API_KEY` set and no valid `Authorization: Bearer` / `X-API-Key` (compared in constant time) |
+| 403 | `unguarded` / `options.controls` on an evaluate route without `SENTINEL_ALLOW_UNGUARDED=1` |
 | 404 | unknown route / id |
 | 409 | invalid case transition |
 | 413 | body over 256 KB or a text over 20,000 chars |
 | 429 | per-client rate limit (`SENTINEL_RATE_LIMIT` requests/minute, default 600, 0 = off) |
 | 500 | internal error; never a stack trace |
 
-Every response carries `X-Request-ID`; structured logs (`SENTINEL_LOG=INFO`)
+Errors are `{"error", "code", "request_id"}`. Every response carries `X-Request-ID`; structured logs (`SENTINEL_LOG=INFO`)
 carry `trace_id`, `request_id`, `decision_id`, workflow, entity, risk, policy
 version, capability and action -- never raw untrusted text.
 

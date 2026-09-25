@@ -9,6 +9,8 @@ changes.
 make api                          # API + console on :8000, in-memory demo dataset
 # or with a persistent store:
 make data && make analyze && sentinel --db data/sentinel.db serve
+make audit-verify                 # verify the tamper-evident audit chain
+make audit-checkpoint             # export (and, with SENTINEL_AUDIT_KEY, sign) the chain head
 ```
 
 ## 2. Docker
@@ -43,6 +45,7 @@ SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models   # same corpus, real 
 | `SENTINEL_API_KEY` | unset | if set, the API requires this bearer token (`/health`, `/version` stay open) |
 | `SENTINEL_RATE_LIMIT` | `600` | requests per minute per client (0 = off) |
 | `SENTINEL_ALLOW_UNGUARDED` | unset | `1` lets the evaluate routes accept `unguarded` / `options.controls` (lab use only; the simulator and replay always accept them) |
+| `SENTINEL_AUDIT_KEY` | unset | if set, `sentinel audit checkpoint` signs the exported checkpoint with HMAC-SHA256 and `audit verify --checkpoint` authenticates it; keep the key and the checkpoint outside the audit store |
 | `SENTINEL_LOG` | `WARNING` | `INFO` for structured per-decision JSON logs |
 | `PORT` | `8000` | listen port |
 

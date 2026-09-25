@@ -64,11 +64,11 @@ same query surface (`accounts_sharing_device`, `linked_accounts`, cycles).
 ## Security
 
 **What attacks does Sentinel defend against?**
-Twelve classes (`security/threats.py`): direct injection, authority spoof,
-document-borne, fake policy, context poisoning, tool manipulation, multi-turn
-escalation, unicode obfuscation, indirect injection, adjudication gaming,
-financial social engineering, capability escalation. Each has a corpus and a
-held-out variant.
+<!-- gen:interview-classes -->
+15 classes (`security/threats.py`): direct injection, authority spoof, document borne, fake policy, context poisoning, tool manipulation, multi turn escalation, unicode obfuscation, indirect injection, adjudication gaming, financial social engineering, capability escalation, model output injection, false evidence, synthetic evidence. Each has a development corpus, a held-out variant and, for the non-dispute surfaces, a transaction / account-security / investigation variant.
+<!-- /gen:interview-classes -->
+The full taxonomy with detection kind and typical targets is rendered in
+`docs/SECURITY_MODEL.md`.
 
 **Why is prompt-injection detection insufficient?**
 Because the hardest attack contains no injection: a false claim in ordinary
@@ -93,21 +93,30 @@ deserved claims and the claim classifier's held-out coverage.
 
 **Isn't "0% attack success" then vacuous?**
 On its own, yes, and the docs say so. What makes it meaningful is the
-contrast: the same inputs against the unguarded simulated agent execute
-83.3% of the time, a hardened prompt still leaks 16.7%, and a detection-only
-system leaks 16.7% (exactly the two classes with no injection to detect).
+contrast, and the honest shape of the property on ledgers that *do* support
+the claim:
+<!-- gen:interview-numbers -->
+The same inputs against the unguarded simulated agent execute 90.0% of the
+time, a hardened prompt still leaks 23.3%, and a detection-only system leaks
+20.0% (exactly the classes with no injection to detect: adjudication_gaming, financial_social_engineering, false_evidence).
+On supporting ledgers, 0.0% of attack texts exceed the ledger-supported
+ceiling and 0.0% execute without support, while 62.4% do change the
+outcome relative to a neutral message (they select the claim) and 9.4% are
+approved -- deserved refunds, whatever the prose around them.
+<!-- /gen:interview-numbers -->
 The claim is not "we detect attacks"; it is "detection is not what stops
-them".
+them". And the three kinds of number are kept apart: a structural guarantee
+(the 0% rows), a synthetic evaluation (the simulator's rates, detection
+recall, false positives) and a live-model evaluation (not run; recorded as
+such).
 
 **What can untrusted text actually change?**
 It selects the claim type -- which trusted fact gets checked. On a ledger
 that supports the claim, "my order never arrived" is approved and "following
 up, thanks" is not; on a ledger that does not, nothing is. The integrity
-suite measures the property as it is enforced: on supporting ledgers, 0% of
-attack texts exceed the ledger-supported ceiling and 0% execute without
-support, while 61.8% do change the outcome relative to a neutral message
-(they select the claim) and 8.1% are approved -- deserved refunds, whatever
-the prose around them. Saying "text can only tighten" would be wrong.
+suite measures exactly that (the numbers above). Saying "text can only
+tighten" would be wrong; saying "text cannot produce an outcome the records
+do not support" is right.
 
 **What if the LLM itself is compromised?**
 Its output is `MODEL_GENERATED`, so: it can recommend anything, it can request
@@ -130,21 +139,31 @@ the rest deny. Contradictions are recorded as first-class objects and shown in
 the UI and the case.
 
 **What about the audit log?**
-Hash-chained; modification, deletion, insertion and reordering are detected
-and the first bad record is named. It stores hashes of untrusted content,
-never prose, and even detector spans are hashed.
+A tamper-evident application audit chain -- deliberately not called a
+blockchain or an immutable ledger. Modification, deletion, insertion and
+reordering are detected and the first bad record is named; a consistent
+rewrite from genesis is caught against an exported, HMAC-signed checkpoint
+that the operator stores elsewhere. It stores hashes of untrusted content,
+never prose, and even detector spans are hashed. Lookups by event or
+decision id are indexed; verification deliberately is not
+(`docs/AUDIT_MODEL.md`).
 
 ## Finance
 
 **How does transaction risk work?**
-Features are extracted from trusted records only (`risk/transaction.py`):
-amount deviation from the account baseline (z-score, or ratio on thin
-baselines), 1-hour velocity, device novelty and sharing, geography and
-impossible travel, merchant profile, account and instrument age,
-authentication strength, chargeback history, time of day, merchant novelty,
-repeat-merchant bursts, linked-entity risk. A versioned weight table maps them
-to a capped 0–100 score with named factors. The score is a *recommendation*;
-policy decides.
+Features are extracted from trusted records only (`risk/transaction.py`), all
+as of the transaction: amount deviation from the account baseline (z-score,
+or ratio on thin baselines), 1-hour velocity plus short-window velocity and
+inter-arrival timing (`txn-2.0`), device novelty and sharing, geography and
+impossible travel, the trusted account-security events of the previous 24 h
+(a payout change or a failed second factor before a purchase), payout
+instruments shared across accounts, merchant profile, account and instrument
+age, authentication strength, point-in-time chargeback history, time of day,
+merchant novelty, repeat-merchant bursts, linked-entity risk. A versioned
+point table maps them to a capped 0–100 score with named factors and a
+component breakdown; every factor, condition and value is in
+`docs/RISK_ENGINE.md`. The values are Sentinel heuristics, not industry
+standards. The score is a *recommendation*; policy decides.
 
 **How are behavioural baselines constructed?**
 Descriptive statistics over the account's prior transactions
@@ -153,12 +172,16 @@ countries/devices/merchants/instruments (share ≥ 10%), usual hours (≥ 5%),
 chargeback rate. Deterministic synthetic history; no ML claim.
 
 **How are merchant/account relationships used?**
-The `EntityGraph` answers "what accounts share this device / instrument",
-"what merchants does this owner control", "is there a transfer cycle". Those
-feed device profiles (shared device), merchant profiles (owner linked to a
-flagged merchant), account profiles (high-risk device), transaction risk
-(linked-entity risk, young account on a shared device) and monitoring
-(circular transfers, rings).
+The `EntityGraph` answers "what accounts shared this device / instrument *as
+of this time*", "what merchants does this owner control", "is there a
+transfer cycle whose every hop falls inside this window". Every edge carries a
+timestamp, so a relationship does not exist at every point in time merely
+because it exists somewhere in the dataset. Those answers feed device
+profiles (shared device), merchant profiles (owner linked to a flagged
+merchant), account profiles (high-risk device), transaction risk
+(linked-entity risk, young account on a shared device, shared payout
+instrument) and monitoring (circular transfers, rings). Each graph feature is
+consumed downstream; none exists for decoration.
 
 **How does a high-value transaction get handled?**
 Scenario G: valid evidence, home device and country, LOW/MEDIUM risk -- and
@@ -184,18 +207,30 @@ current layer is explicitly a labelled simulation and claims no compliance.
 **How does the audit chain work?**
 `audit/chain.py`: each event's hash covers its canonical JSON body plus the
 previous hash; sequence numbers are contiguous from 0; verification recomputes
-from genesis. Backends: memory, JSONL, SQLite.
+from genesis and names the first bad record. Backends: memory, JSONL, SQLite,
+each with an indexed `find` for the console and API and a full read for
+verification. `sentinel audit checkpoint` exports the length and head hash,
+HMAC-signed when `SENTINEL_AUDIT_KEY` is set; `audit verify --checkpoint`
+proves the stored prefix still hashes to that head.
 
 **How does replay work?**
 Every decision stores a `DecisionInputs` snapshot. `ReplayEngine` restores it,
 applies overrides (policy version, rule threshold, risk model version, model
-recommendation, controls), re-runs the pure composer and diffs the summaries.
-The replay itself is audited.
+recommendation, controls), re-runs the pure composer and compares the result
+with the **originally stored** decision field by field (`decision_diff`). It
+reports `policy_drift` when the policy version named in the snapshot no
+longer has the content the decision was made under, and `engine_drift` when
+re-deriving the original no longer reproduces the recorded outcome. For
+identical input, facts, configuration, policy and engine the result
+reproduces exactly. The replay itself is audited.
 
 **How do policy versions work?**
 Files `policy-id.vN.json` with `effective_from`; the registry serves the
 latest by default and any version on request; decisions record the version
-they used; replay can pin another.
+and the content hash they used; replay can pin another. `dispute-refund` is
+at v3, which reads richer ledger facts (already refunded, reversed,
+merchant-contested, strongly authenticated "unauthorised" claims). A linter
+reports rules that can never fire before a version is activated.
 
 **How do you maintain determinism?**
 No randomness on the decision path; ids are the only non-deterministic
@@ -211,16 +246,18 @@ rate limit -- fine for a demo, not a production edge.
 ## ML / AI
 
 **Are the financial numbers real?**
+<!-- gen:interview-financial -->
 They characterise a hand-weighted rule model on a synthetic generator. The
-weights were tuned while looking at seed 42, so the suite also runs two seeds
-the weights never saw and reports the range. The account-level scenarios are
-the mirror image of the monitoring rules, so 100% recall there is by
-construction; the interesting facts are the false positives (a time-unbounded
-cycle finder on seed 42, none on the held-out seeds) and the low
-transaction-level recall (the first transactions of a burst have no velocity
-yet). A review also found the per-transaction baseline was counting disputes
-filed *after* the transaction; fixing that point-in-time leak moved
-transaction precision from 73.7% to 93.3% without touching a weight.
+point values were tuned while looking at seed 42, so the suite also runs two
+seeds they never saw and reports the range (transaction precision
+91.5%–95.6%, recall 76.8%–79.6%). Transaction-level recall is 79.6%
+on the development seed and every miss is a burst transaction whose
+short-window signals had not yet formed; the account-level monitor catches
+66.7% of the burst accounts. Account-level recall is 80.0% at
+0.0% FPR. A review found the per-transaction baseline counting
+disputes filed *after* the transaction; fixing that leak (and then every other
+aggregation) is why there is now a temporal-leakage benchmark, at 0.0%.
+<!-- /gen:interview-financial -->
 
 **Why not simply train a fraud model?**
 You should, eventually -- as *one more trusted signal*. It does not replace
@@ -241,6 +278,23 @@ detection over baselines, case summarisation. All are recommendation-tier.
 Evidence verification, policy evaluation, capability authorization, human
 review routing, audit.
 
+## Eight claims and their evidence
+
+The claims an interviewer will push on, what backs each one, and the caveat
+that must travel with it. Numbers live in `docs/EVALUATION.md` and the
+generated blocks; this table points at the evidence.
+
+| Claim | Evidence | Caveat |
+|---|---|---|
+| Untrusted text and model output cannot produce an outcome the trusted records do not support | `_TrustedView` has no field for either (`decision/composer.py`); integrity suite §H; `test_invariants.py`, `test_model_output_separation.py` | structural; text still selects the claim type, by design |
+| No unauthorised consequential capability executed under attack | security, held-out, surfaces and KYB suites; `test_results_regression.py` recomputes the 0% rows | 0 by construction on unsupporting records; a regression check, not a detection result |
+| Deserved refunds are not held | FP rows in §A and §B; the `legit_plus_injection` rows in §H | on hand-authored legitimate phrasings; the classifier is lexical and new phrasings will degrade to a human |
+| Detection is not what stops the attacks | ablation §F: detection-only leaks the classes with nothing to detect; adjudication alone closes them | the hardened-prompt and detection-only rows are the simulator's behaviour |
+| The unguarded contrast is meaningful | baselines §E and the WITHOUT / WITH simulator | it is the offline simulator, authored alongside the corpus; the live row is `not_run` |
+| A decision at T never reads data after T | temporal suite §I; `test_temporal_leakage.py`, `test_entity_pointintime.py`, `test_graph_temporal.py` | a sampled spot check over the generator plus per-feature tests |
+| The risk model is explainable and its numbers are honest | `docs/RISK_ENGINE.md` (every factor and value); financial suite §G with held-out seeds and a miss breakdown | rules tuned on one seed, not ML, not industry standards; burst recall is partial at the transaction level by construction |
+| The audit trail is tamper-evident and decisions replay | `test_audit_chain.py`, `test_audit_indexing.py`, `test_replay_determinism.py`; `sentinel audit verify --checkpoint` | not a blockchain; a rewrite from genesis is caught only against a checkpoint the operator stores elsewhere |
+
 ## Honesty
 
 **Which parts are simulated?**
@@ -250,15 +304,17 @@ offline agent, the KYB records. Everything is labelled synthetic.
 <!-- gen:interview-claims -->
 **What claims can you actually prove?**
 Structural ones, by test: untrusted text and model output cannot produce an
-outcome the trusted records do not support (integrity suite over 136
+outcome the trusted records do not support (integrity suite over 170
 attacks: 0.0% exceeded the ledger-supported ceiling, 0.0% executed
 without support, 0.0% of 360 recommendation replays changed anything, vs
-77.9% permissive influence with no controls); zero unauthorised capability
-executions across the corpus, the held-out set and KYB -- which is 0 by
-construction and is kept as a regression check; audit tampering is detected.
-Empirical ones, on synthetic data: 0.0% false positives on deserved refunds,
-0.0% on unseen legitimate wording, and the financial figures with their
-held-out-seed range. See `docs/EVALUATION.md`, which separates the two kinds.
+83.5% permissive influence with no controls); zero unauthorised capability
+executions across 200 attacks on four surfaces and 24 hostile KYB applications --
+which is 0 by construction and is kept as a regression check; 0.0% temporal
+leakage; audit tampering is detected. Empirical ones, on synthetic data:
+0.0% false positives on deserved refunds, 0.0% on unseen legitimate wording,
+26.3% of clean-but-hostile KYB applications held for a human, and the financial
+figures with their held-out-seed range. Nothing about a live model: the live
+row is `not_run`. See `docs/EVALUATION.md`, which separates the three kinds.
 <!-- /gen:interview-claims -->
 
 **What remains unimplemented for production?**

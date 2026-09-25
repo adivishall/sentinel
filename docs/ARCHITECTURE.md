@@ -67,8 +67,8 @@ AUTHORITATIVE_DECISION ≠ f(MODEL_OUTPUT)
                └────────────┬──────────┘
                             ▼
                     ┌───────────────┐
-                    │ Audit / Case  │  SHA-256 hash chain; replay from
-                    │ / Replay      │  stored input snapshots
+                    │ Audit / Case  │  tamper-evident audit chain + signed
+                    │ / Replay      │  checkpoints; replay from input snapshots
                     └───────────────┘
 ```
 
@@ -87,7 +87,7 @@ Everything composes ten typed, immutable primitives (`sentinel/domain`):
 | Policy | `policy/models.py` | versioned rules over a declared field catalog |
 | Decision | `domain/decisions.py` | the canonical record; carries the AI recommendation but is not computed from it |
 | Case | `domain/cases.py` | investigation with a guarded lifecycle and human-only resolution |
-| AuditEvent | `audit/chain.py` | hash-chained; stores hashes of untrusted content, never prose |
+| AuditEvent | `audit/chain.py` | tamper-evident chain (each event hashes its body plus the previous hash); stores hashes of untrusted content, never prose; exportable HMAC-signed checkpoints |
 
 ## Trust classes
 
@@ -143,10 +143,16 @@ always `FULL`.
 
 Each capability declares risk, reversibility, monetary impact, required
 authorization level, allowed actors and a human-review amount threshold
-(Sentinel demo values, not industry standards). `ActorKind.AI_AGENT` is not in
-the allowed-actor set of any consequential capability; `SKIP_REVIEW` has no
-allowed actor at all. `authorize()` is deterministic and is called with the
-capability the *workflow* is considering, never the one the model asked for.
+(Sentinel demo values, not industry standards). A capability is
+**consequential** when it is irreversible, moves money, or is reserved to a
+human reviewer -- closing a case or overriding a risk score has no direct
+monetary effect, but an agent doing it is exactly the failure the registry
+exists to prevent, so it counts as a breach when it executes.
+`ActorKind.AI_AGENT` is not in the allowed-actor set of any consequential
+capability; `SKIP_REVIEW` has no allowed actor at all. `authorize()` is
+deterministic and is called with the capability the *workflow* is
+considering, never the one the model asked for. The full matrix is rendered
+in `docs/SECURITY_MODEL.md` and served by `GET /v1/capabilities`.
 
 ## Policy-as-code (`policy/`)
 
@@ -155,21 +161,36 @@ against a field catalog (`policy/models.py::FIELD_CATALOG`) -- unknown fields,
 operators, outcomes and type mismatches are rejected at load time. Evaluation
 is deterministic and order-independent: all rules are evaluated, the most
 severe outcome wins, every match is explained, and a missing required field
-raises (the composer turns that into a fail-safe human review). Shipped
-policies: `dispute-refund` v1/v2, `transaction-authorization` v1/v2,
-`merchant-onboarding`, `account-security`, `investigation`.
+raises (the composer turns that into a fail-safe human review). A linter
+(`sentinel policy lint`) reports rules that can never fire, contradictory or
+duplicate conditions and missing effective dates. Every rule of every shipped
+version is listed in `docs/POLICY_ENGINE.md`.
+
+<!-- gen:shipped-policies -->
+Shipped policies: `account-security` v1, `dispute-refund` v1/v2/v3, `investigation` v1, `merchant-onboarding` v1, `transaction-authorization` v1/v2 (8 versions, all lint-clean; every rule is listed in `docs/POLICY_ENGINE.md`).
+<!-- /gen:shipped-policies -->
 
 ## Risk (`risk/`)
 
-Deterministic, versioned weight tables (`risk/scoring.py`) over feature
-snapshots. Transaction risk reads behavioural baselines, device and geography
-history, merchant and linked-entity profiles; account-security risk reads the
-session record; the monitoring engine recognises structuring-like transfers,
-rapid movement, velocity, geography shifts, high-risk exposure, circular
-transfers, dormant activation and graph-linked rings. Entity profiles are
-computed in a fixed order (device → merchant → account → customer) so nothing
-is circular. Feature snapshots are stored with each decision so replay can
-re-score under another model version without touching source systems.
+Deterministic, versioned point tables (`risk/scoring.py`) over feature
+snapshots; every factor, condition and point value is rendered in
+`docs/RISK_ENGINE.md`. Transaction risk (`txn-2.0`) reads point-in-time
+behavioural baselines, device and geography history, short-window velocity
+and inter-arrival timing, the trusted account-security events of the previous
+24 hours, payout-instrument sharing, merchant and linked-entity profiles;
+account-security risk reads the session record; the monitoring engine
+recognises structuring-like transfers, rapid movement, velocity, geography
+shifts, high-risk exposure, circular transfers bounded to a window, dormant
+activation and graph-linked rings. Entity profiles are computed in a fixed
+order (device → merchant → account → customer) so nothing is circular, and
+**as of a time**: profiles are cached per `(entity, as_of)` and read only
+records at or before it. The `EntityGraph` is time-aware -- every edge carries
+a timestamp and every query takes `as_of` -- so a relationship does not exist
+at every point in time merely because it exists somewhere in the dataset.
+Feature snapshots are stored with each decision so replay can re-score under
+another model version without touching source systems. The invariant *data
+available after T never influences a decision made at T* is measured by the
+temporal suite (`results/temporal.json`).
 
 ## Workflows (`decision/workflows.py`)
 
@@ -204,6 +225,17 @@ domain ← security ← risk ← evidence ← policy ← decision ← cases/audi
 ```
 
 Nothing imports upward. `mypy` runs over the whole package in CI.
+
+## Reference documents (rendered from the code by `make docs`)
+
+| Document | Rendered from |
+|---|---|
+| `docs/SECURITY_MODEL.md` | trust classes, the capability matrix, the threat taxonomy, case rules |
+| `docs/RISK_ENGINE.md` | every risk model's factors, conditions, point values and thresholds |
+| `docs/POLICY_ENGINE.md` | the field catalog, the engine's semantics, every rule of every shipped policy with its content hash |
+| `docs/EVIDENCE_MODEL.md` | evidence kinds and statuses, claim types, the compatibility table, reconciliation verdicts |
+| `docs/AUDIT_MODEL.md` | the audit record, verification, backends, checkpoints |
+| `docs/EVALUATION.md`, `docs/PERFORMANCE.md` | `results/*.json` |
 
 ## What is deliberately not here
 

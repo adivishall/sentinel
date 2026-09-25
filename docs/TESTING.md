@@ -26,9 +26,21 @@ make lint        # ruff + black --check + mypy over the whole package
 | `test_audit_chain.py` | link/verify, modification, deletion, reordering, truncation head, JSONL reload + disk tamper, redaction |
 | `test_data_store_replay.py` | generator determinism and coherence, store round-trip, SQLite-backed audit/cases survive reopen and detect DB tamper, snapshot round-trip, replay by policy version / rule / model / recommendation |
 | `test_app.py` | application layer: overview from real data, investigation view, entity risk + graph, every attack preset never executes, every scenario runs, cases/audit/replay |
-| `test_api_v1.py` | real socket: every route family, validation errors, auth, rate limit, static console, path traversal |
+| `test_api_v1.py` | real socket: every route family, validation errors, auth, 403 on control switches, rate limit, static console, capabilities / lint / review routes |
 | `test_cli.py` | every command family end to end against a temp store, including `audit verify` and `ui snapshot` |
 | `test_domain.py`, `test_providers_agents.py` | primitives; provider abstraction and the naive agents |
+| `test_graph_temporal.py` | edges before / after creation, inside / outside the active window, exact boundaries, bounded transfer cycles, multiple cycles, bounded rendering |
+| `test_entity_pointintime.py` | as-of device / merchant / account / customer profiles; records after `as_of` never enter; the takeover device is new at the takeover |
+| `test_temporal_leakage.py` | a T1 decision is unchanged when records appear at T1 + 1, 30 and 90 days; truncation equivalence; the reusable temporal helper |
+| `test_generator_scenarios.py`, `test_generator_profiles.py` | every labelled scenario is present and coherent (known device → no `new_device`, takeover device → `new_device`); generator profiles |
+| `test_dispute_facts.py` | the richer ledger facts, `as_policy_facts`, refund policy v3 outcomes (already refunded, reversed, contested, strong auth) |
+| `test_policy_lint.py` | every lint finding and the exhaustive boundary tests of the shipped policies |
+| `test_model_output_separation.py` | model output never reaches the trusted view, the policy context, evidence or authorization; output-format mimicry is a finding, not a decision |
+| `test_replay_determinism.py` | identical input / facts / configuration / policy / engine reproduce the decision; policy drift, engine drift and the field-level diff against the stored original |
+| `test_audit_indexing.py` | indexed lookups return the same records as a full read; the indexed path never skips tamper detection; checkpoints and signatures |
+| `test_api_path_containment.py` | static file serving cannot escape the console directory |
+| `test_ui_api_contract.py` | the console holds no decision logic and every route it calls exists |
+| `test_results_regression.py` | the headline claims recompute from `results/` |
 
 ## The regression tests that matter most
 
@@ -41,5 +53,7 @@ make lint        # ruff + black --check + mypy over the whole package
 ## CI
 
 `.github/workflows/ci.yml`: ruff → black → mypy → pytest with coverage gate →
-invariants → evaluation smoke (security, held-out, ablation, integrity) → CLI
-+ audit-chain smoke → Docker build. Live model calls are never made in CI.
+invariants → evaluation smoke (security, held-out, surfaces, KYB, ablation,
+integrity, temporal) → CLI + audit-chain smoke (generate, analyse, the
+flagship attack, verify, checkpoint export and verification) → Docker build.
+Live model calls are never made in CI.

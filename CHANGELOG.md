@@ -4,6 +4,102 @@ All notable changes to Sentinel. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] — 2026-09-25
+
+A full-scale hardening pass over the reviewed 2.0.1 system: temporal
+correctness, richer trusted facts, a wider attack surface, honest benchmarks,
+a polished console and documentation rendered from the code. No point value
+or threshold was moved to improve a number; where a metric changed it is
+because a leak was removed, a real signal was added, or the evaluation became
+more honest.
+
+### Fixed
+- **Temporal leakage, everywhere it was found.** Entity profiles are
+  point-in-time (`entity-1.1`: cached per `(entity, as_of)`, reading only
+  records at or before it); every graph edge carries a timestamp and every
+  query takes `as_of`; device knowledge is "used on this account at least
+  24 h before"; the monitoring cycle finder accepts only hops inside
+  `cycle_window_days`. A temporal-leakage benchmark (`results/temporal.json`)
+  re-scores transactions with records truncated to their timestamp and with
+  records added 1, 30 and 90 days later.
+- **The generator registered the attacker's device as known**, so
+  `new_device` never fired on takeovers; takeover devices are now genuinely
+  new at the takeover, with a regression test on both directions. Payout
+  instruments are shareable across accounts and events are emitted in time
+  order.
+- **The investigation workflow's `extra_context` side channel** is gone: the
+  trusted view has no such field.
+- **Audit lookups** by event or decision id are indexed on every backend;
+  verification still reads everything. **Static path containment** on the
+  console routes is hardened. **API token comparison** is constant-time.
+- **The benchmark evaluated a hand-typed policy context**; it now benchmarks
+  the composer's real context (its field count is recorded in the output).
+- The `is_new_country … or True` cosmetic bug and the over-frequent
+  `new_merchant` signal (now "never used before", not "below a share
+  threshold").
+
+### Added
+- **`txn-2.0`**: short-window velocity, inter-arrival timing, the trusted
+  account-security events of the previous 24 h, and payout-instrument sharing;
+  factor groups give every assessment a component breakdown. `txn-1.0` and
+  `txn-1.1` remain loadable for replay.
+- **Richer dispute facts and `dispute-refund` v3**: refund state, transaction
+  status, merchant response, authentication strength and tenure; an
+  already-refunded or reversed transaction can never be refunded again; a
+  merchant-contested or strongly-authenticated "unauthorised" claim needs a
+  human. An explicit adjudication view shows claimed vs recorded.
+- **Three more threat classes** (model-output injection, false evidence,
+  synthetic evidence) and a corpus expanded to 150 attacks targeting refunds,
+  fund release, unfreezes, case closure and risk overrides; a **surfaces
+  suite** attacking the transaction, account-security and investigation
+  workflows against a text-free baseline; a **balanced KYB benchmark** (47
+  applications across eight categories) that reports false positives on
+  benign input and on any input.
+- **Policy linter** (`sentinel policy lint`, `POST /v1/policies/lint`) with
+  exhaustive boundary tests of the shipped policies.
+- **Capability security matrix as data** (`sentinel capability list`,
+  `GET /v1/capabilities`, `docs/SECURITY_MODEL.md`); "consequential" now
+  includes human-reserved capabilities such as `CLOSE_CASE` and `ALTER_RISK`.
+- **Audit checkpoints**: `sentinel audit checkpoint` exports the length and
+  head hash, HMAC-signed with `SENTINEL_AUDIT_KEY`; `audit verify
+  --checkpoint` detects a consistent rewrite from genesis.
+- **Replay** compares the recomputed decision with the stored original field
+  by field (`decision_diff`) and reports `policy_drift` and `engine_drift`.
+- **Human-review packet** (`sentinel case review`, `GET /v1/cases/{id}/review`)
+  separating trusted evidence from untrusted claims and marking the model's
+  recommendation MODEL_GENERATED.
+- **Attack simulator WITHOUT / WITH comparison** (`make attack-compare`,
+  `compare: true`), labelled as the offline simulator, not a real-LLM
+  experiment.
+- **Console**: transaction timeline, risk components, bounded relationship
+  graphs, the AI-security incident view with USER INPUT / MODEL OUTPUT /
+  TRUSTED EVIDENCE / DETERMINISTIC DECISION kept visually distinct, the
+  investigation workflow view, replay with drift chips and the field diff, an
+  evaluations dashboard that shows sample sizes, seed ranges and the kind of
+  every number, and the capability matrix. The console still contains no
+  decision logic and every route it calls is checked against the API.
+- **Generator profiles**, structured per-decision logs, and 95 new tests.
+- **Documentation rendered from the code**: `docs/SECURITY_MODEL.md`,
+  `docs/RISK_ENGINE.md`, `docs/POLICY_ENGINE.md`, `docs/EVIDENCE_MODEL.md`,
+  `docs/AUDIT_MODEL.md` join `EVALUATION` and `PERFORMANCE` as generated
+  files; every number in the README, résumé, limitations, interview guide,
+  threat model and demo script comes from a generated block.
+
+### Changed
+- Financial evaluation reports explicit ground truth, stages (screening,
+  decisioning, investigation triage), a miss breakdown with the signals
+  present on detected and missed transactions, slices by channel / segment /
+  merchant tier, and held-out seeds. Removing the leaks and adding the
+  `txn-2.0` features moved transaction-level recall and precision; the
+  account-level false positives caused by the unbounded cycle finder are
+  gone because the finder is bounded, not because it was tuned.
+- Every published number is labelled as one of three kinds: structural
+  guarantee, synthetic evaluation, live-model evaluation.
+- Terminology: the audit trail is a *tamper-evident application audit
+  chain*; risk point values are *Sentinel heuristics*, never industry
+  standards; transaction monitoring is a *synthetic investigation simulation*.
+- Version 2.1.0.
+
 ## [2.0.1] — 2026-09-24
 
 A hostile senior-engineer review of the finished 2.0.0 system (fintech

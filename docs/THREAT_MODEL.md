@@ -29,27 +29,44 @@ Every piece of information that enters the decision system carries a
 (`Evidence.__post_init__`). Model output is `MODEL_GENERATED` -- untrusted --
 even though it came from "our" AI.
 
-## Threat taxonomy (twelve classes)
+## Threat taxonomy
 
-| Class | Mechanism | Primary control |
+<!-- gen:threat-taxonomy -->
+| Class | Mechanism | Caught by |
 |---|---|---|
-| direct_injection | explicit override instructions | gateway detection; evidence + policy backstop |
-| authority_spoof | impersonated system / compliance directives | gateway; evidence + policy |
-| document_borne | instructions inside uploads | provenance (DOCUMENT_CONTROLLED); gateway; evidence |
-| fake_policy | fabricated rules / regulations | gateway; the real policy is code |
-| context_poisoning | "you already approved" / "as in the case file" | gateway; the composer holds no conversational state |
-| tool_manipulation | spelled-out tool calls | gateway; capability registry |
-| multi_turn_escalation | payload split or leveraged across turns | session model inspects the whole transcript |
-| unicode_obfuscation | homoglyphs, zero-width, full-width | normalisation before detection |
-| indirect_injection | via third-party content | provenance-aware reclassification |
-| adjudication_gaming | no injection; a false factual claim | **trusted-evidence reconciliation** (the honest hard case) |
-| financial_social_engineering | urgency, loyalty, threats | evidence + policy; pressure changes no fact |
-| capability_escalation | agent induced to request an off-surface capability | model-output inspection; registry; authorization |
+| `direct_injection` | Explicit override instructions placed in the untrusted text. | lexical |
+| `authority_spoof` | Text impersonating a system, compliance, admin or network directive. | lexical |
+| `document_borne` | Instructions hidden inside an uploaded invoice, receipt or application. | lexical |
+| `fake_policy` | Fabricated network rules, regulations or internal policies demanding an action. | lexical |
+| `context_poisoning` | Assertions of prior state -- 'you already approved', 'as noted in the case file'. | lexical |
+| `tool_manipulation` | Text that names or spells out tool / function calls for the agent to make. | lexical |
+| `multi_turn_escalation` | Trust built across a thread; the payload lands (or is split) across later turns. | session |
+| `unicode_obfuscation` | Homoglyphs, zero-width characters or full-width forms used to evade detection. | normalisation |
+| `indirect_injection` | Instructions arriving via third-party content the agent reads (merchant site, email). | lexical |
+| `adjudication_gaming` | No injection at all -- a false factual claim in persuasive prose. The honest hard case. | evidence |
+| `financial_social_engineering` | Urgency, loyalty, sympathy or threat used to pressure a favourable outcome. | lexical |
+| `capability_escalation` | The model is induced to request a capability outside its surface (unfreeze, change payout, release funds, close case, alter risk, skip review). | structural |
+| `model_output_injection` | Untrusted text that mimics the agent's own output format (an 'assistant:' turn, a JSON tool call, a chat-template marker) so a parser or a model treats it as the model's decision. | lexical + structural |
+| `false_evidence` | A verifiable-sounding fact asserted in prose -- a tracking status, a 'your own system shows' claim -- that the trusted records refute. Nothing to detect; the contradiction engine decides. | evidence |
+| `synthetic_evidence` | A fabricated record, ledger extract or verification report presented as if it were the institution's own data. It arrives through an untrusted channel, so it can never become VERIFIED evidence whatever it says. | trust boundary |
 
-Only the first eight are (partly) detectable by inspecting text. The
-security case does **not** depend on detection: the ablation shows detection
-alone leaks the false-claim classes, and trusted-evidence adjudication closes
-them.
+15 classes; rendered from `security/threats.py`. Only the lexical rows are (partly) detectable by inspecting text; `docs/SECURITY_MODEL.md` has the full table with typical targets.
+<!-- /gen:threat-taxonomy -->
+
+Primary controls by kind: the lexical classes are flagged by the gateway and
+backstopped by evidence and policy; `multi_turn_escalation` by the session
+model, which inspects the whole transcript; `unicode_obfuscation` by
+normalisation before detection; `indirect_injection` by provenance-aware
+reclassification; `adjudication_gaming` and `false_evidence` by
+**trusted-evidence reconciliation** (the honest hard case -- nothing to
+detect); `capability_escalation` by model-output inspection, the registry
+and authorization; `model_output_injection` by a parser that reads only the
+provider's structured tool call plus a gateway check for output-format
+mimicry; `synthetic_evidence` by the type system, since an untrusted channel
+cannot produce VERIFIED evidence whatever the text claims to be. The security
+case does **not** depend on detection: the ablation shows detection alone
+leaks the classes with nothing to detect, and trusted-evidence adjudication
+closes them.
 
 ## Controls, mapped to failure modes
 
@@ -61,13 +78,17 @@ them.
 | unknown / unverifiable claim | INSUFFICIENT → REQUIRE_HUMAN_REVIEW | invariant 4 |
 | malformed input | validation → fail-safe human review; numbers coerce to 0 | invariant 5 |
 | high-value effect | policy thresholds + registry human-review thresholds | invariant 6 |
-| audit tampering | hash chain; verify names the first bad record | invariant 7 |
+| audit tampering | tamper-evident chain; verify names the first modified, deleted, inserted or reordered record; a signed checkpoint detects a consistent rewrite | invariant 7, `test_audit_chain.py`, `test_audit_indexing.py` |
+| text mimicking the model's own output | the parser reads only the provider's structured tool call; output-format mimicry is a gateway finding | `test_model_output_separation.py` |
+| fabricated records in prose | an untrusted channel cannot produce VERIFIED evidence (type system) | `test_evidence.py`, `test_trust_boundary.py` |
+| future data influencing a past decision | point-in-time baselines, as-of entity profiles, time-aware graph, bounded monitoring windows; the temporal suite | `test_temporal_leakage.py`, `test_entity_pointintime.py`, `test_graph_temporal.py` |
+| a second decision engine in the console | the console holds no decision logic and calls only real routes | `test_ui_api_contract.py` |
 | silent policy drift | explicit versions, effective dates, replay | invariant 8 |
 | provenance loss | trust preserved through evidence, snapshot, audit | invariant 9 |
 | parallel business logic | one application layer; static check on API/CLI/UI sources | invariant 10 |
-| policy misconfiguration | schema validation at load; unknown fields rejected | `test_policy_engine.py` |
+| policy misconfiguration | schema validation at load; unknown fields rejected; linter for rules that can never fire | `test_policy_engine.py`, `test_policy_lint.py` |
 | information leakage | audit stores hashes; spans hashed; no stack traces; secrets from env only | `test_audit_chain.py`, `test_api_v1.py` |
-| abuse of the API | body cap, per-client rate limit, optional bearer auth, request ids | `test_api_v1.py` |
+| abuse of the API | body cap, per-client rate limit, optional bearer auth (constant-time compare), request ids, static path containment, 403 on control switches | `test_api_v1.py`, `test_api_path_containment.py` |
 
 ## Explicitly out of scope
 
@@ -101,6 +122,16 @@ them.
 - Policy versions are labels. Every decision pins the policy content hash and
   replay reports `policy_drift`, but nothing prevents editing a shipped
   version in place; production would make policy files immutable artifacts.
-- The audit chain detects modification, deletion, insertion and reordering,
-  not a consistent rewrite of the whole chain from genesis; it has no external
-  anchor.
+- The audit chain detects modification, deletion, insertion and reordering.
+  A consistent rewrite of the whole chain from genesis is detected only
+  against a checkpoint (`sentinel audit checkpoint`, HMAC-signed with
+  `SENTINEL_AUDIT_KEY`) that the operator must store outside the audit store;
+  the chain is a tamper-evident application audit chain, not a blockchain and
+  not an immutable ledger.
+- A clean merchant whose upload carries an injection is held for a human
+  rather than approved: a CRITICAL security finding blocks automatic approval
+  by design. The KYB suite reports this as the any-input false-positive rate
+  (`docs/LIMITATIONS.md`).
+- The temporal-leakage suite samples a subset of transactions and three
+  future offsets; the per-feature tests cover the mechanisms, but the suite
+  is a spot check over the generator, not a proof over every record.
