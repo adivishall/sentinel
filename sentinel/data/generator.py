@@ -158,28 +158,42 @@ class Dataset:
         }
 
     def graph(self) -> EntityGraph:
+        """Build the time-aware relationship graph. Every dated relationship carries
+        the moment it came into existence, so queries can be answered as of any time."""
         g = EntityGraph()
+        first_seen = {d.device_id: d.first_seen for d in self.devices}
+        uses: set[tuple[str, str]] = set()
         for a in self.accounts:
-            g.link("customer", a.customer_id, "OWNS", "account", a.account_id)
+            g.link("customer", a.customer_id, "OWNS", "account", a.account_id, ts=a.opened_at)
             for dev in self.account_devices.get(a.account_id, []):
-                g.link("account", a.account_id, "USES", "device", dev)
+                # a registered device is known from the later of registration and account opening
+                ts = max(first_seen.get(dev, a.opened_at), a.opened_at)
+                g.link("account", a.account_id, "USES", "device", dev, ts=ts)
+                uses.add((a.account_id, dev))
         for i in self.instruments:
-            g.link("account", i.account_id, "HAS", "instrument", i.instrument_id)
+            g.link("account", i.account_id, "HAS", "instrument", i.instrument_id, ts=i.added_at)
         for m in self.merchants:
             g.link("merchant", m.merchant_id, "OWNED_BY", "owner", m.owner_id)
             g.link("merchant", m.merchant_id, "HOSTS", "domain", m.domain)
-        for t in self.transactions:
-            g.link("account", t.account_id, "MADE", "transaction", t.transaction_id)
-            g.link("transaction", t.transaction_id, "PAID", "merchant", t.merchant_id)
-            if t.device_id not in self.account_devices.get(t.account_id, []):
-                g.link("account", t.account_id, "USES", "device", t.device_id)
+        for t in sorted(self.transactions, key=lambda x: x.timestamp):
+            g.link("account", t.account_id, "MADE", "transaction", t.transaction_id, ts=t.timestamp)
+            g.link("transaction", t.transaction_id, "PAID", "merchant", t.merchant_id, ts=t.timestamp)
+            if (t.account_id, t.device_id) not in uses:
+                # first use of an unregistered device: known from this transaction onward
+                g.link("account", t.account_id, "USES", "device", t.device_id, ts=t.timestamp)
+                uses.add((t.account_id, t.device_id))
             if t.counterparty_account_id:
                 g.link(
-                    "account", t.account_id, "TRANSFERRED_TO", "account", t.counterparty_account_id
+                    "account",
+                    t.account_id,
+                    "TRANSFERRED_TO",
+                    "account",
+                    t.counterparty_account_id,
+                    ts=t.timestamp,
                 )
         for s in self.sessions:
-            g.link("ip", s.ip, "ORIGINATES", "session", s.session_id)
-            g.link("session", s.session_id, "ON", "account", s.account_id)
+            g.link("ip", s.ip, "ORIGINATES", "session", s.session_id, ts=s.started_at)
+            g.link("session", s.session_id, "ON", "account", s.account_id, ts=s.started_at)
         return g
 
     def summary(self) -> dict[str, object]:
@@ -322,11 +336,14 @@ class _Gen:
                     "segment": seg,
                 }
 
-    def _device(self, since: datetime) -> Device:
+    def _device(self, since: datetime, *, exact: bool = False) -> Device:
+        """A device first seen at ``since`` (``exact``) or within 60 days after it.
+        Scenario devices use ``exact`` so the device exists at the scenario time."""
+        seen = since if exact else since + timedelta(days=self.rng.randint(0, 60))
         d = Device(
             self.nid("DEV"),
             f"fp-{self.rng.getrandbits(32):08x}",
-            _iso(since + timedelta(days=self.rng.randint(0, 60))),
+            _iso(seen),
             self.rng.choice(["android", "ios", "web", "web"]),
         )
         self.ds.devices.append(d)
@@ -511,8 +528,9 @@ class _Gen:
             p = self.cust_profile[aid]
             when = AS_OF - timedelta(days=r.randint(1, 5), hours=r.randint(1, 20))
             self._txn(aid, when=when, country=str(p["home"]))
-            new_dev = self._device(when)
-            self.ds.account_devices[aid].append(new_dev.device_id)
+            # The attacker's device is NOT registered on the account: it is first seen
+            # at the takeover itself, which is exactly what ``new_device`` must detect.
+            new_dev = self._device(when, exact=True)
             self.ds.sessions.append(
                 LoginSession(
                     self.nid("SES"),
@@ -698,7 +716,7 @@ class _Gen:
             )
 
         # H: graph-linked ring -- three fresh accounts sharing a device and a payout instrument
-        shared_dev = self._device(AS_OF - timedelta(days=20))
+        shared_dev = self._device(AS_OF - timedelta(days=20), exact=True)
         ring: list[str] = []
         for _ in range(3):
             cid = self.nid("CUST")
