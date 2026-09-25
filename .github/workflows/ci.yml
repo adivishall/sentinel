@@ -33,8 +33,11 @@ jobs:
           python -m pytest tests/test_invariants.py -q
           python -m sentinel eval run --suite security --out /tmp/results
           python -m sentinel eval run --suite heldout --out /tmp/results
+          python -m sentinel eval run --suite surfaces --out /tmp/results
+          python -m sentinel eval run --suite kyb --out /tmp/results
           python -m sentinel eval run --suite ablation --out /tmp/results
           python -m sentinel eval run --suite integrity --out /tmp/results
+          python -m sentinel eval run --suite temporal --out /tmp/results
       - name: CLI + audit chain smoke
         env:
           SENTINEL_FORCE_OFFLINE: "1"
@@ -42,7 +45,9 @@ jobs:
         run: |
           python -m sentinel data generate --seed 42 --customers 100 --merchants 20 --transactions 2000
           python -m sentinel analyze --transactions 40 --disputes 10 --applications 5 --sessions 10 --accounts 4
-          python -m sentinel security attack --scenario document_injection
+          python -m sentinel security attack --scenario document_injection --compare
           python -m sentinel audit verify
+          python -m sentinel audit checkpoint --out /tmp/audit-checkpoint.json
+          python -m sentinel audit verify --checkpoint /tmp/audit-checkpoint.json
       - name: Docker build
         run: docker build -t sentinel .

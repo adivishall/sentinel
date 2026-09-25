@@ -13,7 +13,6 @@ scripts/
 submission/
 social/
 data/
-console/
 .env
 .DS_Store
 results/*.png

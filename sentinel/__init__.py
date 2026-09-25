@@ -16,11 +16,11 @@ dependency direction is strictly downward:
     agents      LLM provider abstraction + the (deliberately naive) agents
     decision    the canonical decision composer and workflows
     cases       investigation / case management
-    audit       tamper-evident hash chain
+    audit       tamper-evident application audit chain
     data        deterministic synthetic data generator + SQLite repositories
     replay      re-run a decision under a different policy / risk model
     evaluation  security, financial, integrity and performance benchmarks
     api / cli / app   the application layer (one engine, three surfaces)
 """
 
-__version__ = "2.0.1"
+__version__ = "2.1.0"

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sentinel-decision-security"
-version = "2.0.1"
+version = "2.1.0"
 description = "Financial Decision Security Infrastructure for AI-native finance: AI may recommend; trusted evidence, deterministic risk controls and explicit policy authorize."
 readme = "README.md"
 requires-python = ">=3.11"
