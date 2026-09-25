@@ -476,7 +476,7 @@ def build_routes(app: SentinelApp) -> Router:
         "GET",
         "/v1/audit",
         lambda q, b, p: {
-            "events": [e.to_dict() for e in app.runtime.audit.events()[-_lim(q) :]][::-1],
+            "events": [e.to_dict() for e in app.runtime.audit.tail(_lim(q))][::-1],
             "head": app.runtime.audit.head,
             "length": len(app.runtime.audit),
         },
@@ -751,8 +751,11 @@ class SentinelHandler(BaseHTTPRequestHandler):
         rel = "index.html" if path in ("", "/", "/index.html") else path.lstrip("/")
         if rel.startswith("ui/"):
             rel = rel[3:]
-        target = (UI_DIR / rel).resolve()
-        if not str(target).startswith(str(UI_DIR.resolve())) or not target.is_file():
+        try:
+            target = (UI_DIR / rel).resolve(strict=True)
+        except (OSError, RuntimeError):
+            return False
+        if not target.is_relative_to(UI_DIR.resolve()) or not target.is_file():
             return False
         ctype = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
         data = target.read_bytes()
