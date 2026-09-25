@@ -644,7 +644,11 @@ class SentinelApp:
             "headline": (
                 "The AI was persuaded. The financial system was not."
                 if (b.ai and b.ai.requested_capability and not d.executed)
-                else ("Legitimate request approved." if d.executed else "Held for a human.")
+                else (
+                    f"{d.executed} executed on a claim the trusted records do not support."
+                    if (d.executed and not b.reconciliation.supports_claim)
+                    else ("Legitimate request approved." if d.executed else "Held for a human.")
+                )
             ),
             "decision": to_dict(d),
             "security": to_dict(b.security),
