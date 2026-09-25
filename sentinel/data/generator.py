@@ -174,6 +174,7 @@ _MCCS = [
     ("4816", "digital services", "medium", 1.5),
 ]
 _COUNTRIES = ["IN"] * 92 + ["AE", "SG", "GB", "US", "DE", "AU", "CA", "FR"]
+_FOREIGN = ["AE", "SG", "GB", "US"]  # where legitimate trips (and takeovers) go
 _SEGMENTS = [
     ("retail", 0.75, math.log(1800), 0.6),
     ("premium", 0.15, math.log(6000), 0.7),
@@ -313,6 +314,7 @@ class _Gen:
         self.owners: list[str] = []
         self._opened: dict[str, datetime] = {}  # account -> opened_at (temporal floor)
         self._dev_seen: dict[str, datetime] = {}  # device -> first_seen
+        self._mreg: dict[str, datetime] = {}  # merchant -> registered_at (temporal floor)
 
     def nid(self, prefix: str) -> str:
         self._ids[prefix] = self._ids.get(prefix, 0) + 1
@@ -349,6 +351,7 @@ class _Gen:
                     flags,
                 )
             )
+            self._mreg[self.ds.merchants[-1].merchant_id] = reg
             self.cust_profile.setdefault("_merchant_prop", {})[self.ds.merchants[-1].merchant_id] = prop  # type: ignore[index]
 
     # ---- customers ----------------------------------------------------------------------
@@ -377,11 +380,13 @@ class _Gen:
             hours = list(range(start, min(23, start + r.randint(5, 9))))
             for _a in range(n_acc):
                 aid = self.nid("ACC")
-                opened = created + timedelta(days=r.randint(0, 30))
+                opened = min(created + timedelta(days=r.randint(0, 30)), AS_OF - timedelta(days=1))
                 self._opened[aid] = opened
                 inst = PaymentInstrument(
                     self.nid("INS"), aid, "card", f"{r.randint(1000, 9999)}", _iso(opened), home
                 )
+                # every bank instrument names the underlying bank account, so a shared
+                # payout destination is found by identity, not by the field being set
                 payout = PaymentInstrument(
                     self.nid("INS"),
                     aid,
@@ -389,6 +394,7 @@ class _Gen:
                     f"{r.randint(1000, 9999)}",
                     _iso(opened),
                     home,
+                    external_ref=f"BANK-{r.getrandbits(32):08x}",
                 )
                 self.ds.instruments += [inst, payout]
                 self.ds.accounts.append(
@@ -402,6 +408,9 @@ class _Gen:
                     )
                 )
                 self.ds.account_devices[aid] = [d.device_id for d in devices]
+                # the observed window: the last ``days`` days, or the account's life if shorter
+                window = max(opened + timedelta(days=1), AS_OF - timedelta(days=self.days))
+                span = (AS_OF - window).days
                 self.cust_profile[aid] = {
                     "mu": mu,
                     "sigma": sigma,
@@ -413,12 +422,27 @@ class _Gen:
                     "activity": r.lognormvariate(0, 0.5),
                     "customer": cid,
                     "segment": seg,
+                    "trips": self._trips(home, window, span),
                 }
+                # About one account in ten replaces its phone late in the window. The new
+                # device is NOT registered on the account, so its first uses carry the same
+                # ``new_device`` signal a takeover does; that is what makes the signal honest.
+                if span >= 60 and r.random() < 0.10:
+                    switch = AS_OF - timedelta(days=r.uniform(0.05, 0.25) * span)
+                    self.cust_profile[aid]["new_phone"] = (
+                        self._device(switch, exact=True).device_id,
+                        switch,
+                    )
 
     def _device(self, since: datetime, *, exact: bool = False) -> Device:
-        """A device first seen at ``since`` (``exact``) or within 60 days after it.
-        Scenario devices use ``exact`` so the device exists at the scenario time."""
-        seen = since if exact else since + timedelta(days=self.rng.randint(0, 60))
+        """A device first seen at ``since`` (``exact``) or within 60 days after it, never
+        after the world's clock. Scenario devices use ``exact`` so the device exists at
+        the scenario time."""
+        seen = (
+            since
+            if exact
+            else min(since + timedelta(days=self.rng.randint(0, 60)), AS_OF - timedelta(days=1))
+        )
         d = Device(
             self.nid("DEV"),
             f"fp-{self.rng.getrandbits(32):08x}",
@@ -428,6 +452,66 @@ class _Gen:
         self.ds.devices.append(d)
         self._dev_seen[d.device_id] = seen
         return d
+
+    def _trips(
+        self, home: str, window: datetime, span: int
+    ) -> list[tuple[datetime, datetime, str]]:
+        """Zero to two trips of 3-10 days, each in one foreign country, inside the
+        observed window; foreign activity happens only on a trip, not by teleport."""
+        r = self.rng
+        if span < 120:
+            return []
+        n = r.choices([0, 1, 2], [0.6, 0.3, 0.1])[0]
+        if span < 200:
+            n = min(n, 1)
+        trips: list[tuple[datetime, datetime, str]] = []
+        prev_end = window
+        for offset in sorted(r.uniform(0, span - 10) for _ in range(n)):
+            length = r.randint(3, 10)
+            t0 = max(window + timedelta(days=offset), prev_end + timedelta(days=1))
+            t1 = min(t0 + timedelta(days=length), AS_OF)
+            trips.append((t0, t1, r.choice([c for c in _FOREIGN if c != home])))
+            prev_end = t1
+        return trips
+
+    def _country_at(self, p: dict[str, object], when: datetime) -> str:
+        trips: list[tuple[datetime, datetime, str]] = p.get("trips", [])  # type: ignore[assignment]
+        for t0, t1, country in trips:
+            if t0 <= when < t1:
+                return country
+        return str(p["home"])
+
+    def _device_for(self, p: dict[str, object], when: datetime) -> str:
+        """The device an account uses at ``when``: mostly its primary, sometimes its
+        registered second one, and after a phone change mostly the (unregistered) new phone."""
+        r = self.rng
+        devs: list[str] = p["devices"]  # type: ignore[assignment]
+        phone: tuple[str, datetime] | None = p.get("new_phone")  # type: ignore[assignment]
+        if phone is not None and when >= phone[1] and r.random() < 0.85:
+            return phone[0]
+        dev = devs[0] if r.random() < 0.85 or len(devs) == 1 else devs[1]
+        if self._dev_seen.get(dev, when) > when:
+            dev = devs[0]  # the second device did not exist yet
+        return dev
+
+    def _merchant_for(self, p: dict[str, object], when: datetime) -> str:
+        """A favourite (85%) or any merchant, among those already registered at ``when``."""
+        r = self.rng
+        favs: list[str] = p["favourites"]  # type: ignore[assignment]
+        live = [m for m in favs if self._mreg[m] <= when]
+        if live and r.random() < 0.85:
+            return r.choice(live)
+        pool = [m.merchant_id for m in self.ds.merchants if self._mreg[m.merchant_id] <= when]
+        return r.choice(pool) if pool else min(self._mreg, key=lambda m: self._mreg[m])
+
+    def _after(self, floor: datetime | None, when: datetime) -> datetime:
+        """Temporal floor: a draw that lands before ``floor`` (an account opening, a
+        merchant registration) is re-spread over the entity's actual lifetime rather than
+        piled into its first hours (which would fabricate velocity and travel signals)."""
+        if floor is None or when >= floor + timedelta(hours=1):
+            return when
+        span = max(3600.0, (AS_OF - floor).total_seconds() - 3600.0)
+        return floor + timedelta(hours=1, seconds=self.rng.uniform(0, span))
 
     # ---- baseline transactions -----------------------------------------------------------
     def _txn(
@@ -447,31 +531,22 @@ class _Gen:
     ) -> Transaction:
         r = self.rng
         p = self.cust_profile[aid]
-        # Temporal floor: no transaction before the account existed. A draw that lands
-        # before opening is re-spread over the account's actual lifetime rather than
-        # piled into its first hours (which would fabricate velocity and travel signals).
-        opened = self._opened.get(aid)
-        if opened is not None and when < opened + timedelta(hours=1):
-            span = max(3600.0, (AS_OF - opened).total_seconds() - 3600.0)
-            when = opened + timedelta(hours=1, seconds=r.uniform(0, span))
+        # no transaction before the account existed ...
+        when = self._after(self._opened.get(aid), when)
         amt = amount if amount is not None else max(50, int(r.lognormvariate(float(p["mu"]), float(p["sigma"]))))  # type: ignore[arg-type]
-        favs: list[str] = p["favourites"]  # type: ignore[assignment]
-        mer = merchant or (
-            r.choice(favs) if r.random() < 0.85 else r.choice(self.ds.merchants).merchant_id
-        )
-        devs: list[str] = p["devices"]  # type: ignore[assignment]
-        dev = device or (devs[0] if r.random() < 0.85 or len(devs) == 1 else devs[1])
-        if device is None and self._dev_seen.get(dev, when) > when:
-            dev = devs[0]  # the second device did not exist yet
-        ctry = country or (
-            str(p["home"]) if r.random() < 0.97 else r.choice(["AE", "SG", "GB", "US"])
-        )
+        mer = merchant or self._merchant_for(p, when)
+        # ... nor before the merchant did (an explicitly chosen young shell merchant)
+        when = self._after(self._mreg.get(mer), when)
+        dev = device or self._device_for(p, when)
+        ctry = country or self._country_at(p, when)
         au = (
             auth or r.choices(["otp", "biometric", "password", "none"], [0.85, 0.10, 0.04, 0.01])[0]
         )
-        dl = (
-            delivery
-            or r.choices(
+        # an in-store purchase is handed over on the spot; only shipped orders go missing
+        dl = delivery or (
+            "delivered"
+            if channel == "pos"
+            else r.choices(
                 ["delivered", "not_delivered", "in_transit", "returned"], [0.96, 0.025, 0.01, 0.005]
             )[0]
         )
@@ -499,7 +574,8 @@ class _Gen:
         accounts = [a.account_id for a in self.ds.accounts]
         weights = [float(self.cust_profile[a]["activity"]) for a in accounts]  # type: ignore[arg-type]
         counterparties = accounts
-        for _ in range(self.n_txns):
+        made = 0
+        while made < self.n_txns:
             aid = r.choices(accounts, weights)[0]
             p = self.cust_profile[aid]
             hours: list[int] = p["hours"]  # type: ignore[assignment]
@@ -509,15 +585,38 @@ class _Gen:
                 minute=r.randint(0, 59),
                 second=r.randint(0, 59),
             )
+            when = self._after(self._opened.get(aid), when)
             if r.random() < 0.05:
                 cp = r.choice(counterparties)
                 if cp != aid:
                     self._txn(aid, when=when, channel="transfer", counterparty=cp, amount=max(500, int(r.lognormvariate(float(p["mu"]) + 0.5, 0.5))))  # type: ignore[arg-type]
+                    made += 1
                     continue
+            if r.random() < 0.01:
+                # a shopping session: several purchases within half an hour. Legitimate
+                # velocity exists, so a burst is not by itself a fraud label.
+                for offset in sorted(r.uniform(0, 1800) for _ in range(r.randint(3, 6))):
+                    self._txn(
+                        aid,
+                        when=when + timedelta(seconds=offset),
+                        channel="pos" if r.random() < 0.1 else "ecommerce",
+                    )
+                    made += 1
+                continue
             self._txn(aid, when=when, channel="pos" if r.random() < 0.1 else "ecommerce")
+            made += 1
         self.ds.transactions.sort(key=lambda t: t.timestamp)
 
     # ---- legitimate disputes + KYB applications ---------------------------------------------
+    def _dispute_state(self) -> tuple[str, str]:
+        """(refund_state, merchant_response) of an ordinary dispute: merchants accept some
+        and refund most of those, so a refunded record is not by itself a fraud label."""
+        r = self.rng
+        response = r.choices(["none", "accepted", "contested"], [0.6, 0.25, 0.15])[0]
+        if response == "accepted":
+            return ("refunded" if r.random() < 0.6 else "pending"), response
+        return ("pending" if r.random() < 0.05 else "none"), response
+
     def legit_disputes(self) -> None:
         r = self.rng
         prop: dict[str, float] = self.cust_profile.get("_merchant_prop", {})  # type: ignore[assignment]
@@ -536,6 +635,13 @@ class _Gen:
                 sub = datetime.fromisoformat(t.timestamp) + timedelta(days=r.randint(2, 20))
                 if sub > AS_OF:
                     continue
+                if t.delivery_status == "delivered" and claim == "non_receipt":
+                    # a non-receipt claim on a delivered order is usually false -- but
+                    # parcels do get taken from doorsteps, so not always
+                    label = "legit" if r.random() < 0.10 else "fraud:dispute_fraud"
+                else:
+                    label = "legit"
+                refund, response = self._dispute_state()
                 did = self.nid("DSP")
                 self.ds.disputes.append(
                     Dispute(
@@ -545,36 +651,39 @@ class _Gen:
                         t.amount,
                         _iso(sub),
                         claim,
-                        (
-                            "legit"
-                            if t.delivery_status != "delivered" or claim != "non_receipt"
-                            else "fraud:dispute_fraud"
-                        ),
-                        refund_state="pending" if r.random() < 0.05 else "none",
-                        merchant_response=r.choices(
-                            ["none", "accepted", "contested"], [0.6, 0.25, 0.15]
-                        )[0],
+                        label,
+                        refund_state=refund,
+                        merchant_response=response,
                     )
                 )
                 self.ds.narratives[did] = {
                     "narrative": _LEGIT_NARRATIVES[claim].format(amt=f"{t.amount:,}")
                 }
 
+    def _kyb_ages(self, m: Merchant) -> tuple[datetime, int, int]:
+        """(submitted_at, domain_age_days, business_age_days): an application is filed
+        some time after registration, and the ages on it are measured at filing time."""
+        r = self.rng
+        reg = self._mreg[m.merchant_id]
+        submitted = reg + timedelta(days=r.randint(0, (AS_OF - reg).days))
+        business_age = (submitted - reg).days
+        return submitted, max(1, business_age - r.randint(0, 20)), business_age
+
     def kyb(self) -> None:
         for m in self.ds.merchants:
-            age = (AS_OF - datetime.fromisoformat(m.registered_at)).days
             app_id = self.nid("KYB")
             label = (
                 "legit" if m.registration_status == "verified" and m.prior_flags == 0 else "risky"
             )
+            submitted, domain_age, business_age = self._kyb_ages(m)
             self.ds.kyb_applications.append(
                 KYBApplication(
                     app_id,
                     m.merchant_id,
-                    _iso(self.days_ago(0, 60)),
+                    _iso(submitted),
                     m.registration_status,
-                    max(1, age - self.rng.randint(0, 20)),
-                    age,
+                    domain_age,
+                    business_age,
                     m.prior_flags,
                     m.mcc_risk,
                     label,
@@ -589,25 +698,35 @@ class _Gen:
         r = self.rng
         for a in self.ds.accounts:
             p = self.cust_profile[a.account_id]
-            devs: list[str] = p["devices"]  # type: ignore[assignment]
-            ip = f"10.{r.randint(0, 255)}.{r.randint(0, 255)}.{r.randint(1, 254)}"
-            opened = self._opened.get(a.account_id, AS_OF - timedelta(days=self.days))
+            # a small pool of addresses: home broadband, mobile data, the office
+            ips = [
+                f"10.{r.randint(0, 255)}.{r.randint(0, 255)}.{r.randint(1, 254)}"
+                for _ in range(r.randint(2, 3))
+            ]
             for _ in range(r.randint(3, 12)):
-                started = max(self.days_ago(0, self.days), opened + timedelta(hours=1))
-                dev = r.choice(devs)
-                if self._dev_seen.get(dev, started) > started:
-                    dev = devs[0]
-                self.ds.sessions.append(
-                    LoginSession(
-                        self.nid("SES"),
-                        a.account_id,
-                        dev,
-                        ip,
-                        str(p["home"]),
-                        _iso(started),
-                        mfa_passed=True,
-                    )
-                )
+                started = self._after(self._opened.get(a.account_id), self.days_ago(0, self.days))
+                self._session(a.account_id, self._device_for(p, started), r.choice(ips), started)
+            phone: tuple[str, datetime] | None = p.get("new_phone")  # type: ignore[assignment]
+            if phone is not None:
+                self._session(a.account_id, phone[0], r.choice(ips), phone[1])  # first use
+
+    def _session(self, aid: str, dev: str, ip: str, started: datetime) -> None:
+        """An ordinary login. A few change credentials or the payout account and a few
+        fail the second factor -- routine hygiene, so neither is a fraud label alone."""
+        r = self.rng
+        events = (r.choice(["credential_change", "payout_change"]),) if r.random() < 0.02 else ()
+        self.ds.sessions.append(
+            LoginSession(
+                self.nid("SES"),
+                aid,
+                dev,
+                ip,
+                self._country_at(self.cust_profile[aid], started),
+                _iso(started),
+                mfa_passed=r.random() >= 0.03,
+                events=events,
+            )
+        )
 
     # ---- scenarios -------------------------------------------------------------------------------
     def scenarios(self) -> None:
@@ -621,64 +740,87 @@ class _Gen:
             used.update(chosen)
             return chosen
 
+        def opened_before(days: int):  # the scenario needs an account that already existed
+            return lambda a: self._opened[a] < AS_OF - timedelta(days=days)
+
         pf = self.profile
         # B: account takeover
-        for aid in pick(pf.account_takeovers):
+        for aid in pick(pf.account_takeovers, opened_before(7)):
             p = self.cust_profile[aid]
-            when = AS_OF - timedelta(days=r.randint(1, 5), hours=r.randint(1, 20))
-            self._txn(aid, when=when, country=str(p["home"]))
+            home = str(p["home"])
+            when = AS_OF - timedelta(
+                days=r.randint(1, 5),
+                hours=r.randint(1, 20),
+                minutes=r.randint(0, 59),
+                seconds=r.randint(0, 59),
+            )
+            self._txn(aid, when=when, country=home)
             # The attacker's device is NOT registered on the account: it is first seen
-            # at the takeover itself, which is exactly what ``new_device`` must detect.
-            new_dev = self._device(when, exact=True)
+            # at the takeover login itself, which is exactly what ``new_device`` must detect.
+            login = when + timedelta(minutes=30)
+            new_dev = self._device(login, exact=True)
+            country = r.choice([c for c in (*_FOREIGN, "RO") if c != home])
             self.ds.sessions.append(
                 LoginSession(
                     self.nid("SES"),
                     aid,
                     new_dev.device_id,
-                    f"185.{r.randint(0,255)}.{r.randint(0,255)}.{r.randint(1,254)}",
-                    "RO",
-                    _iso(when + timedelta(minutes=30)),
+                    f"{r.choice([45, 91, 103, 185])}.{r.randint(0, 255)}.{r.randint(0, 255)}.{r.randint(1, 254)}",
+                    country,
+                    _iso(login),
                     mfa_passed=False,
-                    events=("credential_change", "payout_change"),
+                    events=r.choice(
+                        [
+                            ("credential_change",),
+                            ("payout_change",),
+                            ("credential_change", "payout_change"),
+                        ]
+                    ),
                 )
             )
             mean = math.exp(float(p["mu"]))  # type: ignore[arg-type]
-            ids = [
-                self._txn(
-                    aid,
-                    when=when + timedelta(minutes=45 + i * 10),
-                    amount=int(mean * r.uniform(6, 12)),
-                    device=new_dev.device_id,
-                    country="RO",
-                    auth="password",
-                    label="fraud:account_takeover",
-                ).transaction_id
-                for i in range(2)
-            ]
+            at = when + timedelta(minutes=r.randint(35, 60))
+            ids = []
+            for _ in range(2):
+                ids.append(
+                    self._txn(
+                        aid,
+                        when=at,
+                        amount=int(mean * r.uniform(6, 12)),
+                        device=new_dev.device_id,
+                        country=country,
+                        auth=r.choices(["password", "otp", "none"], [0.6, 0.3, 0.1])[0],
+                        label="fraud:account_takeover",
+                    ).transaction_id
+                )
+                at += timedelta(seconds=r.randint(180, 1200))
             self.ds.scenarios.append(
                 ScenarioTag(
                     "account_takeover",
                     "fraud:account_takeover",
                     (aid, new_dev.device_id, *ids),
-                    "New device + new country + large amounts + payout change within an hour of a home-country purchase.",
+                    "New device + new country + large amounts + a credential or payout change within an hour of a home-country purchase.",
                 )
             )
 
         # C: transaction burst
-        for aid in pick(pf.bursts):
-            when = AS_OF - timedelta(days=r.randint(1, 10), hours=r.randint(1, 20))
-            ids = [
-                self._txn(
-                    aid, when=when + timedelta(minutes=i * 3), label="fraud:burst"
-                ).transaction_id
-                for i in range(r.randint(8, 12))
-            ]
+        for aid in pick(pf.bursts, opened_before(12)):
+            when = AS_OF - timedelta(
+                days=r.randint(1, 10),
+                hours=r.randint(1, 20),
+                minutes=r.randint(0, 59),
+                seconds=r.randint(0, 59),
+            )
+            ids = []
+            for _ in range(r.randint(8, 12)):
+                ids.append(self._txn(aid, when=when, label="fraud:burst").transaction_id)
+                when += timedelta(seconds=r.randint(20, 400))
             self.ds.scenarios.append(
                 ScenarioTag(
                     "transaction_burst",
                     "fraud:burst",
                     (aid, *ids),
-                    "Many rapid transactions in under an hour.",
+                    "Many rapid transactions in about an hour.",
                 )
             )
 
@@ -686,16 +828,24 @@ class _Gen:
         hi = [m for m in self.ds.merchants if m.mcc_risk == "high"] or self.ds.merchants[:2]
         for m in r.sample(hi, min(pf.abused_merchants, len(hi))):
             ids = []
+            newest = max(1, min(60, (AS_OF - self._mreg[m.merchant_id]).days - 1))
             for _ in range(60):
                 aid = r.choice(accounts)
                 t = self._txn(
                     aid,
-                    when=self.days_ago(1, 60),
+                    when=self.days_ago(1, newest),
                     merchant=m.merchant_id,
                     label="exposure:merchant_abuse",
                 )
                 ids.append(t.transaction_id)
                 if r.random() < 0.3:
+                    sub = datetime.fromisoformat(t.timestamp) + timedelta(days=r.randint(1, 30))
+                    if sub > AS_OF:
+                        continue
+                    claim = r.choice(
+                        ["unauthorized", "unauthorized", "non_receipt", "duplicate", "cancellation"]
+                    )
+                    refund, response = self._dispute_state()
                     did = self.nid("DSP")
                     self.ds.disputes.append(
                         Dispute(
@@ -703,13 +853,15 @@ class _Gen:
                             t.transaction_id,
                             aid,
                             t.amount,
-                            _iso(datetime.fromisoformat(t.timestamp) + timedelta(days=3)),
-                            "unauthorized",
+                            _iso(sub),
+                            claim,
                             "fraud:merchant_abuse",
+                            refund_state=refund,
+                            merchant_response=response,
                         )
                     )
                     self.ds.narratives[did] = {
-                        "narrative": _LEGIT_NARRATIVES["unauthorized"].format(amt=f"{t.amount:,}")
+                        "narrative": _LEGIT_NARRATIVES[claim].format(amt=f"{t.amount:,}")
                     }
             self.ds.scenarios.append(
                 ScenarioTag(
@@ -720,13 +872,19 @@ class _Gen:
                 )
             )
 
-        # E: dispute fraud -- false non-receipt on delivered orders
+        # E: dispute fraud -- false non-receipt on delivered orders. Only orders old enough
+        # for the dispute to have been filed by now, and never one already disputed.
+        disputed = {d.transaction_id for d in self.ds.disputes}
         delivered = [
             t
             for t in self.ds.transactions
-            if t.delivery_status == "delivered" and t.label == "legit"
+            if t.delivery_status == "delivered"
+            and t.label == "legit"
+            and t.transaction_id not in disputed
+            and t.timestamp <= _iso(AS_OF - timedelta(days=15))
         ]
-        for k, t in enumerate(r.sample(delivered, min(pf.dispute_frauds, len(delivered)))):
+        picked = r.sample(delivered, min(pf.dispute_frauds, len(delivered)))
+        for k, t in enumerate(picked):
             did = self.nid("DSP")
             # every fourth one is a double-dip: the ledger already shows a refund
             self.ds.disputes.append(
@@ -735,12 +893,7 @@ class _Gen:
                     t.transaction_id,
                     t.account_id,
                     t.amount,
-                    _iso(
-                        min(
-                            AS_OF,
-                            datetime.fromisoformat(t.timestamp) + timedelta(days=r.randint(2, 15)),
-                        )
-                    ),
+                    _iso(datetime.fromisoformat(t.timestamp) + timedelta(days=r.randint(2, 15))),
                     "non_receipt",
                     "fraud:dispute_fraud",
                     refund_state="refunded" if k % 4 == 3 else "none",
@@ -760,7 +913,9 @@ class _Gen:
         used.update(d.account_id for d in self.ds.disputes if d.label == "fraud:dispute_fraud")
 
         # F: AI manipulation -- injected documents / narratives on delivered orders
-        for t in r.sample(delivered, min(pf.ai_manipulations, len(delivered))):
+        taken = {t.transaction_id for t in picked}
+        pool = [t for t in delivered if t.transaction_id not in taken]
+        for t in r.sample(pool, min(pf.ai_manipulations, len(pool))):
             did = self.nid("DSP")
             self.ds.disputes.append(
                 Dispute(
@@ -768,12 +923,7 @@ class _Gen:
                     t.transaction_id,
                     t.account_id,
                     t.amount,
-                    _iso(
-                        min(
-                            AS_OF,
-                            datetime.fromisoformat(t.timestamp) + timedelta(days=r.randint(2, 15)),
-                        )
-                    ),
+                    _iso(datetime.fromisoformat(t.timestamp) + timedelta(days=r.randint(2, 15))),
                     "non_receipt",
                     "fraud:ai_manipulation",
                 )
@@ -823,20 +973,27 @@ class _Gen:
             self._ring(hi, ring_no)
 
         # AML: structuring-like transfers
-        for aid in pick(pf.structuring):
+        for aid in pick(pf.structuring, opened_before(14)):
             cp = r.choice([a for a in accounts if a != aid])
-            when = AS_OF - timedelta(days=4)
-            ids = [
-                self._txn(
-                    aid,
-                    when=when + timedelta(days=i),
-                    amount=r.randint(40_000, 49_500),
-                    channel="transfer",
-                    counterparty=cp,
-                    label="fraud:structuring",
-                ).transaction_id
-                for i in range(4)
-            ]
+            when = AS_OF - timedelta(
+                days=r.randint(7, 12),
+                hours=r.randint(0, 23),
+                minutes=r.randint(0, 59),
+                seconds=r.randint(0, 59),
+            )
+            ids = []
+            for _ in range(4):  # gaps of 12-48 h keep all four inside a week
+                ids.append(
+                    self._txn(
+                        aid,
+                        when=when,
+                        amount=r.randint(40_000, 49_500),
+                        channel="transfer",
+                        counterparty=cp,
+                        label="fraud:structuring",
+                    ).transaction_id
+                )
+                when += timedelta(seconds=r.randint(12 * 3600, 48 * 3600))
             self.ds.scenarios.append(
                 ScenarioTag(
                     "structuring_like",
@@ -847,27 +1004,55 @@ class _Gen:
             )
 
         # AML: dormant activation -- silence then a burst
-        for aid in pick(pf.dormant):
-            cutoff = AS_OF - timedelta(days=120)
+        cutoff = _iso(AS_OF - timedelta(days=120))
+        # an account that received a scenario transfer during the silence cannot be silent
+        hot = {
+            t.counterparty_account_id
+            for t in self.ds.transactions
+            if t.counterparty_account_id and t.label != "legit" and t.timestamp > cutoff
+        }
+        for aid in pick(pf.dormant, lambda a: opened_before(150)(a) and a not in hot):
+            # The silence: the account's own activity after the cutoff goes, and so do the
+            # legitimate transfers into it and its logins; only the activation remains.
             removed = {
                 t.transaction_id
                 for t in self.ds.transactions
-                if t.account_id == aid and datetime.fromisoformat(t.timestamp) > cutoff
+                if t.timestamp > cutoff
+                and (
+                    t.account_id == aid or (t.counterparty_account_id == aid and t.label == "legit")
+                )
             }
             self.ds.transactions = [
                 t for t in self.ds.transactions if t.transaction_id not in removed
             ]
-            orphaned = [d for d in self.ds.disputes if d.transaction_id in removed]
-            for d in orphaned:
-                self.ds.narratives.pop(d.dispute_id, None)
-            self.ds.disputes = [d for d in self.ds.disputes if d.transaction_id not in removed]
-            when = AS_OF - timedelta(days=2)
-            ids = [
-                self._txn(
-                    aid, when=when + timedelta(hours=i * 5), label="fraud:dormant_activation"
-                ).transaction_id
-                for i in range(6)
+            orphaned = {d.dispute_id for d in self.ds.disputes if d.transaction_id in removed}
+            self.ds.disputes = [d for d in self.ds.disputes if d.dispute_id not in orphaned]
+            for did in orphaned:
+                self.ds.narratives.pop(did, None)
+            gone = removed | orphaned
+            self.ds.scenarios = [  # tags written earlier must not point at deleted records
+                ScenarioTag(
+                    s.scenario,
+                    s.label,
+                    tuple(e for e in s.entity_ids if e not in gone),
+                    s.description,
+                )
+                for s in self.ds.scenarios
             ]
+            when = AS_OF - timedelta(
+                hours=r.randint(51, 72), minutes=r.randint(0, 59), seconds=r.randint(0, 59)
+            )
+            self.ds.sessions = [
+                s
+                for s in self.ds.sessions
+                if not (s.account_id == aid and cutoff < s.started_at < _iso(when))
+            ]
+            ids = []
+            for _ in range(6):
+                ids.append(
+                    self._txn(aid, when=when, label="fraud:dormant_activation").transaction_id
+                )
+                when += timedelta(seconds=r.randint(3600, 36_000))
             self.ds.scenarios.append(
                 ScenarioTag(
                     "dormant_activation",
@@ -881,61 +1066,49 @@ class _Gen:
 
     def _ring(self, hi: list[Merchant], ring_no: int) -> None:
         r = self.rng
-        shared_dev = self._device(AS_OF - timedelta(days=20), exact=True)
+        t0 = AS_OF - timedelta(days=18, seconds=r.randint(0, 86399))  # the ring is set up
+        opened = t0 + timedelta(days=1)
+        shared_dev = self._device(t0 - timedelta(days=2), exact=True)
+        # Three accounts, three instrument records, ONE underlying bank account: the
+        # shared payout destination is the ring's tell -- by identity, not by look.
+        payout_last4, payout_ref = f"{r.randint(1000, 9999)}", f"BANK-{r.getrandbits(32):08x}"
+        favourites = [m.merchant_id for m in r.sample(hi, min(2, len(hi)))] or [
+            self.ds.merchants[0].merchant_id
+        ]
         ring: list[str] = []
         for _ in range(3):
             cid = self.nid("CUST")
             self.ds.customers.append(
-                Customer(
-                    cid,
-                    f"{r.choice(_FIRST)} {r.choice(_LAST)}",
-                    "IN",
-                    "retail",
-                    _iso(AS_OF - timedelta(days=18)),
-                )
+                Customer(cid, f"{r.choice(_FIRST)} {r.choice(_LAST)}", "IN", "retail", _iso(t0))
             )
             aid = self.nid("ACC")
             inst = PaymentInstrument(
-                self.nid("INS"),
-                aid,
-                "card",
-                f"{r.randint(1000, 9999)}",
-                _iso(AS_OF - timedelta(days=17)),
-                "IN",
+                self.nid("INS"), aid, "card", f"{r.randint(1000, 9999)}", _iso(opened), "IN"
             )
             self.ds.instruments.append(inst)
-            # Three accounts, three instrument records, ONE underlying bank account:
-            # the shared payout destination is the ring's tell.
             payout_id = self.nid("INS")
             self.ds.instruments.append(
                 PaymentInstrument(
                     payout_id,
                     aid,
                     "bank_account",
-                    "7777",
-                    _iso(AS_OF - timedelta(days=17)),
+                    payout_last4,
+                    _iso(opened),
                     "IN",
-                    external_ref=f"BANK-RING-{7777 + ring_no}",
+                    external_ref=payout_ref,
                 )
             )
             self.ds.accounts.append(
-                Account(
-                    aid,
-                    cid,
-                    _iso(AS_OF - timedelta(days=17)),
-                    "active",
-                    payout_id,
-                    mfa_enabled=False,
-                )
+                Account(aid, cid, _iso(opened), "active", payout_id, mfa_enabled=r.random() < 0.9)
             )
-            self._opened[aid] = AS_OF - timedelta(days=17)
+            self._opened[aid] = opened
             self.ds.account_devices[aid] = [shared_dev.device_id]
             self.cust_profile[aid] = {
                 "mu": math.log(9000),
                 "sigma": 0.4,
                 "home": "IN",
                 "devices": [shared_dev.device_id],
-                "favourites": [m.merchant_id for m in hi[:2]] or [self.ds.merchants[0].merchant_id],
+                "favourites": favourites,
                 "hours": [1, 2, 3, 4],
                 "instrument": inst.instrument_id,
                 "activity": 1.0,
@@ -945,23 +1118,26 @@ class _Gen:
             ring.append(aid)
         ids = []
         for i, aid in enumerate(ring):
-            when = AS_OF - timedelta(days=2, hours=3 - i)
-            for j in range(5):
+            when = AS_OF - timedelta(
+                days=2, hours=3 - i, minutes=r.randint(0, 59), seconds=r.randint(0, 59)
+            )
+            for _ in range(5):
                 ids.append(
                     self._txn(
                         aid,
-                        when=when + timedelta(minutes=j * 6),
+                        when=when,
                         device=shared_dev.device_id,
                         auth="password",
                         label="fraud:graph_linked",
                     ).transaction_id
                 )
+                when += timedelta(seconds=r.randint(120, 900))
             nxt = ring[(i + 1) % len(ring)]
             ids.append(
                 self._txn(
                     aid,
-                    when=when + timedelta(minutes=40),
-                    amount=45_000,
+                    when=when + timedelta(seconds=r.randint(120, 900)),
+                    amount=r.randint(30_000, 49_000),
                     channel="transfer",
                     counterparty=nxt,
                     device=shared_dev.device_id,
@@ -986,15 +1162,15 @@ class _Gen:
         pool = bad + [m for m in self.ds.merchants if m.registration_status == "verified"]
         for m in pool[: min(self.profile.kyb_attacks, len(pool))]:
             app_id = self.nid("KYB")
-            age = (AS_OF - datetime.fromisoformat(m.registered_at)).days
+            submitted, domain_age, business_age = self._kyb_ages(m)
             self.ds.kyb_applications.append(
                 KYBApplication(
                     app_id,
                     m.merchant_id,
-                    _iso(self.days_ago(0, 10)),
+                    _iso(submitted),
                     m.registration_status,
-                    max(1, age),
-                    age,
+                    domain_age,
+                    business_age,
                     m.prior_flags,
                     m.mcc_risk,
                     "attack:document_borne",

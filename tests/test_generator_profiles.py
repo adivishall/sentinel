@@ -42,9 +42,14 @@ def test_profiles_are_deterministic_and_named():
 
 
 def test_multiple_rings_share_distinct_payout_instruments():
+    """Every bank instrument names its underlying account, so a ring is found by the
+    identity being shared, not by the field being set; each ring shares its own."""
     ds = generate(42, 80, 16, 1200, profile="fraud-heavy")
-    refs = {i.external_ref for i in ds.instruments if i.external_ref}
-    assert len(refs) == 2
+    assert all(i.external_ref for i in ds.instruments if i.kind == "bank_account")
+    assert not any("RING" in (i.external_ref or "") for i in ds.instruments)
     g = ds.graph()
-    for ref in refs:
+    refs = {i.external_ref for i in ds.instruments if i.external_ref}
+    shared = {ref for ref in refs if len(g.accounts_sharing_instrument(ref)) > 1}
+    assert len(shared) == 2
+    for ref in shared:
         assert len(g.accounts_sharing_instrument(ref)) == 3
