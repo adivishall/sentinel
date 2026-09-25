@@ -10,20 +10,20 @@ machine-dependent -- reproduce locally.
 
 | Component | Workload | p50 ms | p95 ms | p99 ms | ops/s |
 |---|---|---:|---:|---:|---:|
-| `normalize` | 310-char narrative | 0.0176 | 0.0182 | 0.0243 | 56,195 |
-| `gateway_inspect` | same narrative, 13 signals | 0.2223 | 0.2308 | 0.246 | 4,481 |
-| `claim_classify` | same narrative | 0.0186 | 0.0189 | 0.0228 | 53,282 |
-| `evidence_reconcile` | ledger facts + claim | 0.0343 | 0.0357 | 0.0424 | 28,793 |
-| `risk_score_transaction` | 40-txn baseline, 33 rules | 0.0145 | 0.0152 | 0.0205 | 67,001 |
-| `graph_linked_accounts` | 8,219-node graph | 0.0045 | 0.0046 | 0.0047 | 218,168 |
-| `graph_neighborhood_d2` | depth-2 neighbourhood | 0.1205 | 0.1261 | 0.1577 | 8,171 |
-| `policy_evaluate` | 14 rules, 26-field context (the composer's real context) | 0.0132 | 0.0135 | 0.0169 | 70,650 |
-| `decision_compose` | full DecisionInputs | 0.0366 | 0.038 | 0.0441 | 27,088 |
-| `audit_append` | in-memory chain | 0.0088 | 0.0101 | 0.0132 | 110,118 |
-| `e2e_dispute_pipeline` | gateway → agent → evidence → policy → authorization | 0.4847 | 0.5025 | 0.526 | 2,050 |
+| `normalize` | 310-char narrative | 0.0178 | 0.0184 | 0.0187 | 56,809 |
+| `gateway_inspect` | same narrative, 13 signals | 0.2226 | 0.2258 | 0.2295 | 4,490 |
+| `claim_classify` | same narrative | 0.2557 | 0.26 | 0.2672 | 3,907 |
+| `evidence_reconcile` | ledger facts + claim | 0.0342 | 0.0347 | 0.0391 | 28,995 |
+| `risk_score_transaction` | 40-txn baseline, 33 rules | 0.0145 | 0.0147 | 0.0168 | 68,335 |
+| `graph_linked_accounts` | 8,403-node graph | 0.0039 | 0.004 | 0.0041 | 250,753 |
+| `graph_neighborhood_d2` | depth-2 neighbourhood | 0.053 | 0.0555 | 0.0586 | 18,562 |
+| `policy_evaluate` | 14 rules, 26-field context (the composer's real context) | 0.0145 | 0.0147 | 0.0174 | 65,707 |
+| `decision_compose` | full DecisionInputs | 0.0372 | 0.0385 | 0.0431 | 26,672 |
+| `audit_append` | in-memory chain | 0.0086 | 0.0098 | 0.0107 | 113,888 |
+| `e2e_dispute_pipeline` | gateway → agent → evidence → policy → authorization | 0.7163 | 0.7267 | 0.7677 | 1,392 |
 
 Context: a real back-office LLM call is 300–2,000 ms. The full protected
-pipeline adds ≈0.5025 ms at p95 -- about three orders of magnitude
+pipeline adds ≈0.7267 ms at p95 -- about three orders of magnitude
 below the decision it protects. The per-decision SQLite writes (risk
 assessment, evidence, decision + snapshot, audit event) are not in this
 figure; the API's in-process metrics (`GET /v1/system`) report them live.

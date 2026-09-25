@@ -125,6 +125,20 @@ def _live_row(m: dict[str, Any]) -> dict[str, Any]:
     return rows[0] if rows else {"status": "not_run", "model": "—"}
 
 
+def _meth(r: dict[str, Any], file: str) -> str:
+    """One line per section: what kind of number, on what, how, and what it cannot claim."""
+    m = r.get("methodology")
+    if not m:
+        return ""
+    sample = m.get("sample") or {}
+    ss = ", ".join(f"{k}={v}" for k, v in sample.items() if not isinstance(v, (dict, list)))
+    return (
+        f"> **Methodology** (`results/{file}.json`): {m['kind']}. *Dataset:* {m['dataset']}. "
+        f"*Method:* {m['method']}. *Limitations:* {m['limitations']}."
+        + (f" *Sample:* {ss}." if ss else "")
+    )
+
+
 def _scn(d: dict[str, Any]) -> str:
     return ", ".join(
         f"{k.replace('fraud:', '')} {pct(v['recall'])} (n={v['n']})" for k, v in d.items()
@@ -225,6 +239,7 @@ def render_evaluation(R: dict[str, Any], tests: int) -> str:
         [
             [name, pct(v["asr"]), pct(v["fp"]), pct(v["escalation_executed"]), ABLATION_DEFS[name]]
             for name, v in a.items()
+            if name != "methodology"
         ],
         "lrrrl",
     )
@@ -280,6 +295,49 @@ def render_evaluation(R: dict[str, Any], tests: int) -> str:
     )
     missed_scn = [sc.replace("fraud:", "") for sc, v in mb.items() if v["missed"]]
     total_missed = sum(v["missed"] for v in mb.values())
+    burst_note = (
+        f" `rapid_fire` needs {int(_thr('rapid_fire_count'))} transactions inside "
+        f"{int(_thr('rapid_window_minutes'))} minutes and `rapid_succession` a short gap against a "
+        f"≥ {int(_thr('baseline_gap_hours'))} h median, so the first transactions of a burst cannot "
+        "carry the short-window velocity signals, and a burst spread over more than the window "
+        "carries fewer of them; the account-level monitor is where a burst is meant to be caught "
+        "(account-level burst recall above)."
+        if "burst" in missed_scn
+        else ""
+    )
+    miss_prose = (
+        f"The {total_missed} transaction-level misses on this seed are {' / '.join(missed_scn)} "
+        f"transactions.{burst_note} The missed and false-positive examples are listed in "
+        "`results/financial.json` under `transaction_level`."
+        if total_missed
+        else "No transaction-level misses on this seed."
+    )
+    ss = tl.get("signal_stats", {})
+    sig_rows = tbl(
+        [
+            "Factor",
+            "Family",
+            "Points",
+            "Fired on fraud (rate)",
+            "Fired on legit (rate)",
+            "Precision when fired",
+        ],
+        [
+            [
+                f"`{c}`",
+                v["family"],
+                v["points"],
+                f"{v['fired_on_fraud']} ({pct(v['fraud_fire_rate'])})",
+                f"{v['fired_on_legit']} ({pct(v['legit_fire_rate'], 2)})",
+                pct(v["precision_when_fired"]),
+            ]
+            for c, v in list(ss.items())[:20]
+        ],
+        "llrrrr",
+    )
+    fam_line = ", ".join(
+        f"{k} {pct(v['precision_when_fired'])}" for k, v in tl.get("family_stats", {}).items()
+    )
 
     def _slice(d: dict[str, Any], label: str) -> str:
         return tbl(
@@ -352,15 +410,33 @@ def render_evaluation(R: dict[str, Any], tests: int) -> str:
         "lrrrr",
     )
     model_rows = tbl(
-        ["Provider", "Model", "Status", "ASR no controls", "ASR Sentinel", "FP", "Note"],
+        [
+            "Provider",
+            "Model",
+            "Date",
+            "Status",
+            "ASR no controls",
+            "ASR Sentinel",
+            "FP",
+            "Latency p95 ms",
+            "Tokens in / out",
+            "Note",
+        ],
         [
             [
                 x["provider"],
                 f"`{x['model']}`",
+                x.get("date") or str(x.get("timestamp", ""))[:10],
                 x["status"],
                 pct(x.get("asr_unguarded")),
                 pct(x.get("asr_guarded")),
                 pct(x.get("fp_rate")),
+                x.get("agent_latency_p95_ms", "—"),
+                (
+                    f"{x['input_tokens']} / {x['output_tokens']}"
+                    if x.get("input_tokens") is not None
+                    else "—"
+                ),
                 x.get("reason", ""),
             ]
             for x in m["results"]
@@ -368,28 +444,66 @@ def render_evaluation(R: dict[str, Any], tests: int) -> str:
     )
     w = p["workloads"]
     td = t["dataset"]
+    seeds = ", ".join(str(x) for x in td["seeds"])
+    offs = ", ".join(str(d) for d in t["future_offsets_days"])
+    bykind = t.get("perturbation_by_kind", {})
+    txn_ch = sum(v["transaction_changed"] for v in bykind.values())
+    mon_ch = sum(v["monitoring_changed"] for v in bykind.values())
+    ub = t.get("leakage_upper_95")
+    ub_s = f"{ub:.3%}" if ub is not None else "n/a -- leaks found"
     temporal_rows = tbl(
-        ["Check", "Rate", "kind"],
+        ["Check", "Changed / tested", "Rate (exact)", "kind"],
         [
             [
-                f"truncation: a transaction's risk assessment differs when records after it are removed (sample {td['sample']} of {td['transactions']:,})",
-                pct(t["truncation_mismatch_rate"]),
+                f"truncation: a transaction's risk assessment differs when records after it are removed (seeds {seeds}, {td['transactions']:,} transactions)",
+                f"{t['truncation_mismatch_count']} / {td['sample']}",
+                f"{t['truncation_mismatch_rate']:.6f}",
                 "structural",
             ],
             [
-                f"perturbation: adding records {', '.join(str(d) for d in t['future_offsets_days'])} days after T1 changes the T1 transaction assessment",
-                pct(t["perturbation_transaction_change_rate"]),
+                f"perturbation: records added {offs} days after T1 change the T1 transaction assessment",
+                f"{txn_ch} / {t['comparisons']:,}",
+                f"{t['perturbation_transaction_change_rate']:.6f}",
                 "structural",
             ],
             [
-                "perturbation: the same future records change the T1 monitoring assessment",
-                pct(t["perturbation_monitoring_change_rate"]),
+                "perturbation: the same future records change the T1 account-monitor assessment",
+                f"{mon_ch} / {t['comparisons']:,}",
+                f"{t['perturbation_monitoring_change_rate']:.6f}",
                 "structural",
+            ],
+            [
+                "**every check above**",
+                f"**{t['leakage_count']} / {t['decisions_tested']:,}**",
+                f"**{t['leakage_rate']:.6f}**",
+                f"95% upper bound {ub_s}",
             ],
         ],
-        "lrl",
+        "lrrl",
     )
     n_all_attacks = s["n_attacks"] + h["n_attacks"] + sf["n_attacks"]
+    temporal_kinds = tbl(
+        [
+            "Future record kind",
+            "What is appended (at every offset)",
+            "records",
+            "transaction changed",
+            "monitoring changed",
+            "leaks / tested",
+        ],
+        [
+            [
+                f"`{kd}`",
+                v["description"],
+                f"{v['future_records']:,}",
+                f"{v['transaction_changed']} / {v['n']}",
+                f"{v['monitoring_changed']} / {v['n']}",
+                f"{v['leakage_count']} / {v['tested']}",
+            ]
+            for kd, v in t.get("perturbation_by_kind", {}).items()
+        ],
+        "llrrrr",
+    )
     cl_cat = tbl(
         ["Category", "n", "accuracy", "read as claim", "non-claim", "abstain", "misclassified"],
         [
@@ -468,6 +582,8 @@ prose, decides support.
 Blocked-by distribution (an attack can be stopped by several controls at
 once): {blocked}.
 
+{_meth(s, "security")}
+
 ## B. Held-out generalisation (`results/heldout.json`)
 
 The development corpus and the detector share an author, so a 0% there could
@@ -492,6 +608,8 @@ authorization path. The unguarded figure is depressed because the offline
 victim agent is itself lexical; the held-out set validates the platform, not
 the baseline's realism.
 
+{_meth(h, "heldout")}
+
 ## C. Other surfaces -- transaction, account security, investigation (`results/surfaces.json`)
 
 {sf['n_attacks']} attacks that arrive through the non-dispute workflows: descriptors and
@@ -507,6 +625,8 @@ text-free request would have allowed).
 {surf_target}
 
 {surf_class}
+
+{_meth(sf, "surfaces")}
 
 ## D. Second surface -- merchant onboarding, balanced KYB (`results/kyb.json`)
 
@@ -537,6 +657,8 @@ approved, because a CRITICAL security finding blocks automatic approval. It is
 reported rather than tuned away. The benign-input rate is the classifier's
 behaviour on ordinary applications.
 
+{_meth(k, "kyb")}
+
 ## E. Beating the obvious defence (`results/baselines.json`)
 
 | Defence | Attack success |
@@ -547,6 +669,8 @@ behaviour on ordinary applications.
 
 The hardened prompt still fails on: {hardened_fail}. A customer lying about a
 fact is not an injection, and "ignore instructions" says nothing about a lie.
+
+{_meth(b, "baselines")}
 
 ## F. Ablation -- which control carries the result (`results/ablation.json`)
 
@@ -562,6 +686,8 @@ fact is not an injection, and "ignore instructions" says nothing about a lie.
 - The FP column is the simulated agent's: with adjudication off, the naive
   agent denies {pct(a['no_controls']['fp'])} of deserved refunds because it does not
   recognise their wording.
+
+{_meth(a, "ablation")}
 
 ## G. Financial risk on labelled synthetic data (`results/financial.json`)
 
@@ -597,13 +723,18 @@ positives ({ml['definition']}) and is reported for completeness, not as a result
 
 {miss_rows}
 
-All {total_missed} transaction-level misses on this seed are {' / '.join(missed_scn)} transactions.
-`rapid_fire` needs {int(_thr('rapid_fire_count'))} transactions inside {int(_thr('rapid_window_minutes'))} minutes and
-`rapid_succession` needs a short gap against a ≥ {int(_thr('baseline_gap_hours'))} h median, so the
-first transactions of every burst cannot carry the short-window velocity
-signals; the account-level monitor is where a burst is meant to be caught
-(account-level burst recall above). The account-level misses are listed in
-`results/financial.json` under `account_level`.
+{miss_prose}
+
+### Signals
+
+How often each factor fires on fraud-labelled and on legitimate transactions
+(seed {f['dataset']['seed']}; {tl['fraud_n']} fraud, {tl['legit_n']:,} legitimate). A factor that fires on many
+legitimate transactions is a weak signal on this generator; nothing was tuned
+to change that, and the point values are documented in `docs/RISK_ENGINE.md`.
+
+{sig_rows}
+
+Family precision when fired: {fam_line}.
 
 ### Slices
 
@@ -636,6 +767,8 @@ Fraud-labelled transactions allowed: {pct(ps['fraud_allowed_rate'])}. Legitimate
 blocked or denied: {pct(ps['legit_blocked_or_denied_rate'])}. The risk model is a transparent rule
 table, not ML; these numbers describe it honestly on this generator.
 
+{_meth(f, "financial")}
+
 ## H. Decision integrity (`results/integrity.json`)
 
 The invariant, stated precisely: **untrusted text and model output cannot
@@ -662,20 +795,45 @@ honest shape of the property: text can choose which fact is checked, and a
 refund the ledger supports is paid even when the message around it is an
 attack. This is a structural property of the composer; it is **not** a claim
 about the robustness of any model (the model's recommendation is recorded and
-never consulted by the decision).
+never consulted by the decision). On an unsupporting ledger the ceiling is a
+human review: a message the classifier cannot read is INSUFFICIENT and held, a
+readable false claim is denied, and nothing executes.
+
+{_meth(i, "integrity")}
 
 ## I. Temporal correctness (`results/temporal.json`)
 
 The invariant: **data available after T must never influence a decision made
-at T.** Seed {td['seed']}, {td['transactions']:,} transactions; every check re-scores a transaction with
-records truncated to its own timestamp, then again with records added
-{', '.join(str(d) for d in t['future_offsets_days'])} days later.
+at T.** Two generator worlds (seeds {seeds}; {td['transactions']:,} transactions), a stratified sample
+of {td['sample']} transactions (half fraud-labelled, half legitimate, spread over the timeline).
+Every sampled transaction is re-scored with records truncated to its own
+timestamp, then again with one kind of future record appended at every offset
+({offs} days later) -- {len(t['kinds'])} kinds, {t['comparisons']:,} perturbation runs over {t['future_records']:,} future
+records -- and each time both the transaction assessment and the account
+monitor at T1 must be byte-identical. **{t['leakage_count']} leaks in {t['decisions_tested']:,} decisions
+tested.** Rates are exact counts, not rounded; with zero leaks the one-sided
+95% (Clopper-Pearson) upper bound on the per-decision leak rate is {ub_s}.
+Comparisons from one sample are correlated, so the conservative reading is
+per sample: 0 of {td['sample']}, upper bound {t['sample_leakage_upper_95']:.2%}.
+
+The 2.2.0 extension added `account_status`, `payout_change` and
+`security_event`. On a 24-transaction probe before the fix, a freeze after T1
+changed 24/24 transaction assessments and 24/24 monitor results, and a payout
+change after T1 changed 24/24 transaction assessments: both read the
+account's *current* fields. Status is now read as of the decision
+(`Account.status_at`) and payout sharing from the bank accounts held at T1;
+the rows below are after the fix.
 
 {temporal_rows}
 
+{temporal_kinds}
+
 Expected: {t['expected']}. `tests/test_temporal_leakage.py` and
 `tests/test_entity_pointintime.py` pin the same property per feature (baselines,
-device knowledge, entity profiles, graph edges, monitoring windows).
+device knowledge, entity profiles, graph edges, monitoring windows). This is a
+deterministic check over the generator's world, not a proof over every record.
+
+{_meth(t, "temporal")}
 
 ## J. Performance (`results/performance.json`)
 
@@ -689,9 +847,16 @@ Sequential, single-threaded, persistence excluded; machine-dependent.
 A live LLM call (hundreds of milliseconds) dominates real latency by three
 orders of magnitude; Sentinel's own controls are not the bottleneck.
 
+{_meth(p, "performance")}
+
 ## K. Model / provider evaluation (`results/models.json`)
 
 {model_rows}
+
+Each provider row records the model, the run date, per-class outcomes, agent
+latency and the provider's token totals where its SDK reports them
+(`results/models_rows.json` has one line per attack). Run any provider with
+`sentinel eval run --suite models --provider anthropic`.
 
 Live results depend on provider/model/date and are not claimed to generalise.
 Run `SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models` with your own
@@ -705,16 +870,23 @@ deterministic, weighted pattern classifier with an explicit confidence and an
 explicit **abstain** (`sentinel/security/claims.py`). An abstain becomes
 INSUFFICIENT and is held for a human; a recognised non-claim ("it arrived but
 I don't like it") is UNSUPPORTED and denied; a read claim only selects which
-trusted field is checked. Benchmark: {cl['n']} hand-authored phrasings in five
+trusted field is checked. Benchmark: {cl['n']} hand-authored phrasings in seven
 categories. **The benchmark and the classifier share an author**, so these are
-regression floors on these phrasings, not a generalisation claim.
+regression floors on these phrasings, not a generalisation claim -- with one
+exception made as honest as an author can make it: `uncommon_legitimate` is a
+held-out set of {cl['uncommon_n']} unusual but legitimate phrasings (Indian English, slang,
+typos, formal register) written and labelled *before* the classifier was run on
+it. {cl['category_notes']['uncommon_legitimate'][0].upper() + cl['category_notes']['uncommon_legitimate'][1:]}. `development` is the set the patterns were then
+extended against: a fit, reported apart and excluded from the error rates.
 
 {cl_cat}
 
 | Metric | Value | meaning |
 |---|---:|---|
 | Coverage | {pct(cl['coverage'])} | legitimate paraphrases read as a claim |
-| False positives | {pct(cl['false_positive_rate'])} | legitimate paraphrases not read as their own type (held for a human or misclassified) |
+| Held-out uncommon wording | {cl['uncommon_recognised']} / {cl['uncommon_n']} | recognised as its own type (first run, before any change: 7 / 21); every miss abstained -- a human, never a wrong type |
+| False negatives | {cl['false_negatives']} / {cl['false_negative_n']} ({pct(cl['false_negative_rate'])}) | legitimate claims (paraphrases + held-out) not read as their own type: held for a human |
+| False positives | {cl['false_positives']} / {cl['false_positive_n']} ({pct(cl['false_positive_rate'])}) | ambiguous, unsupported and contradictory messages read confidently as a claim |
 | Misclassification | {pct(cl['misclassification_rate'])} | messages read as a type other than the labelled one |
 | Adversarial wrong type | {pct(cl['adversarial_wrong_type_rate'])} | attack prose read as a claim it does not assert |
 | Abstain rate | {pct(cl['abstain_rate'])} | all messages held for a human (100% of the ambiguous and contradictory sets by design) |
@@ -723,7 +895,9 @@ The composer's guarantee does not depend on any of this: whatever the
 classifier reads, a consequential capability executes only when the ledger
 supports the claim. What the classifier changes is the *cost* side -- how
 often a legitimate customer is held for a human -- and that is what the
-false-positive column measures.
+false-negative row measures.
+
+{_meth(cl, "claims")}
 
 ## Reproduce
 
@@ -945,6 +1119,33 @@ def render_security_model() -> str:
     case_rows = tbl(
         ["Rule", "Priority", "Fires when"], [[f"`{r}`", p, w] for r, p, w in CASE_RULES]
     )
+    from sentinel.api.schemas import USER_OPTIONS, WHAT_IF_OPTIONS
+    from sentinel.cases.service import (
+        DECIDABLE_FROM,
+        RESERVED_ACTORS,
+        TRANSITIONS,
+        required_authorization,
+    )
+    from sentinel.domain.enums import CaseStatus
+
+    assert all(CaseStatus.RESOLVED not in v for v in TRANSITIONS.values())
+    sm_rows = tbl(
+        ["From", "Status moves (any actor)", "Human decision allowed"],
+        [
+            [
+                f"`{st.value}`",
+                ", ".join(f"`{x.value}`" for x in sorted(TRANSITIONS[st], key=lambda c: c.value))
+                or "— (final)",
+                "yes" if st in DECIDABLE_FROM else "no",
+            ]
+            for st in CaseStatus
+        ],
+    )
+    need_rows = ", ".join(
+        f"`{c['capability']}` → {required_authorization(capabilities.Capability(c['capability']))}"
+        for c in rows
+        if c["consequential"]
+    )
     return f"""# Security model
 
 Rendered by `make docs` from `sentinel/domain/enums.py`,
@@ -1022,6 +1223,44 @@ PENDING_HUMAN → REQUIRE_HUMAN_REVIEW; policy STEP_UP with authorization
 GRANTED → STEP_UP; authorization GRANTED → ALLOW (the candidate capability
 executes); anything else → DENY. Only ALLOW executes a capability.
 
+## Evaluation authority (`sentinel/decision/authority.py`)
+
+A caller may request an evaluation; it may not weaken one. An evaluation is
+**authoritative** -- recorded, audited, able to open a case and to execute --
+only when its inputs carry every control, the active version of its policy
+(content hash included) and the active risk model for its surface. The check
+runs in `_finish` on the inputs the decision was actually composed from,
+before anything is written, and raises `ControlDowngrade` otherwise; the
+application sends what-if runs to a runtime that never persists, and every
+decision carries `authoritative`.
+
+| Parameter class | Parameters | Where accepted |
+|---|---|---|
+| user-controllable | {', '.join(f'`{o}`' for o in sorted(USER_OPTIONS))} | every route and command |
+| what-if (system-controlled on the authoritative path) | {', '.join(f'`{o}`' for o in sorted(WHAT_IF_OPTIONS))}, top-level `unguarded`, investigation `as_of` | `/v1/attacks/simulate`, `/v1/scenarios/{{key}}/run`, `/v1/replay`, `sentinel security attack`, `sentinel scenario run`, `sentinel replay run` -- never recorded as decisions |
+| unknown option keys | anything else | refused (400) |
+
+The evaluate routes answer a what-if switch with 403; the authoritative CLI
+commands do not have the flags. Risk models are bound to their surface: a
+transaction model is refused on the login surface rather than silently
+applied.
+
+## Case lifecycle (`sentinel/cases/service.py`)
+
+RESOLVED is not a target anywhere in the status table; a case reaches it only
+through `record_human_decision`, and RESOLVED is final (no transition, no
+second decision, no reopen).
+
+{sm_rows}
+
+A human decision recorded under a reserved system or model actor name
+({', '.join(f'`{a}`' for a in sorted(RESERVED_ACTORS))}, any `agent:` / `ai:` / `model:` prefix) or under the name
+of an agent that recommended on the case is refused. Approving needs the
+level the case's capability requires, read from the registry when the case
+opens: {need_rows}. Denying or escalating needs any human. The reviewer's
+name and level are *declared* -- there is no identity system
+(`docs/LIMITATIONS.md`).
+
 ## Threat taxonomy ({len(TAXONOMY)} classes)
 
 {threat_rows}
@@ -1054,7 +1293,11 @@ because a model asked for one -- and only a human can resolve it.
 | the model's requested capability is never the one executed | `tests/test_invariants.py`, `tests/test_model_output_separation.py` |
 | AI_AGENT is allowed on no consequential capability | `tests/test_capabilities.py` (asserted again by this renderer) |
 | the console holds no decision logic and calls only real routes | `tests/test_ui_api_contract.py` |
-| the evaluate routes refuse `unguarded` / `options.controls` | `tests/test_api_v1.py` |
+| no persisted decision ran with fewer controls, a historical policy or a historical risk model; every evaluate route refuses every what-if switch | `tests/test_evaluation_authority.py` |
+| every consequential capability, requested by a model in every workflow or by a caller, executes only through the full path | `tests/test_capability_trace.py`, `tests/test_policy_adversarial.py` |
+| only a human decision resolves a case; the required review level comes from the registry | `tests/test_case_lifecycle.py` |
+| replay cannot report equivalence for a rewritten record | `tests/test_replay_integrity.py` |
+| every audit corruption is an integrity error, never a crash | `tests/test_audit_corruption.py` |
 | headline results recompute from `results/` | `tests/test_results_regression.py` |
 """
 
@@ -1084,7 +1327,7 @@ def _txn_conditions(m: Any) -> dict[str, str]:
         "rapid_succession": f"gap since the previous transaction < {rg} min while the account's median gap is ≥ {bg} h",
         "recent_account_changes": f"a payout, credential or MFA change on a trusted session in the {sh} h before the transaction",
         "recent_failed_mfa": f"a trusted session in the {sh} h before did not pass the second factor",
-        "shared_payout_instrument": "≥ 2 accounts pay out to this transaction's instrument (as of the transaction)",
+        "shared_payout_instrument": "≥ 2 accounts share a bank account this account held at the time of the transaction",
         "new_device": "device not registered on the account (24 h rule) and first seen < 24 h ago, or never",
         "young_account_shared_device": "account < 30 days old on a device shared by ≥ 3 accounts",
         "shared_device": "device shared by ≥ 3 accounts (as of the transaction)",
@@ -1107,6 +1350,112 @@ def _txn_conditions(m: Any) -> dict[str, str]:
         "linked_entity_high": "worst linked-entity risk 50–74",
         "linked_entity_medium": "worst linked-entity risk 25–49",
     }
+
+
+# source of each transaction feature, its time semantics, and the value range it reads
+FEATURE_META: dict[str, tuple[str, str, str]] = {
+    "amount_anomaly_extreme": (
+        "account baseline (earlier transactions)",
+        "as of the transaction",
+        "z-score, unbounded",
+    ),
+    "amount_anomaly_high": ("account baseline", "as of the transaction", "z-score"),
+    "amount_anomaly_moderate": ("account baseline", "as of the transaction", "z-score"),
+    "amount_ratio_small_baseline": (
+        "account baseline (< 5 transactions)",
+        "as of the transaction",
+        "ratio to mean",
+    ),
+    "velocity_burst": ("account's earlier transactions", "previous 60 minutes", "count"),
+    "velocity_spike": (
+        "account's earlier transactions + baseline daily count",
+        "previous 60 minutes",
+        "count vs baseline",
+    ),
+    "velocity_elevated": (
+        "account's earlier transactions + baseline daily count",
+        "previous 60 minutes",
+        "count vs baseline",
+    ),
+    "rapid_fire": ("account's earlier transactions", "previous 10 minutes", "count"),
+    "rapid_succession": (
+        "previous transaction + baseline median gap",
+        "gap to the previous transaction",
+        "minutes vs hours",
+    ),
+    "recent_account_changes": ("authentication service sessions", "previous 24 hours", "event set"),
+    "recent_failed_mfa": ("authentication service sessions", "previous 24 hours", "boolean"),
+    "shared_payout_instrument": (
+        "entity graph (account -> bank-account instrument, by identity)",
+        "instruments added and edges dated at or before the transaction; not the account's current payout field",
+        "account count",
+    ),
+    "new_device": (
+        "entity graph (account -> device)",
+        "registered or used >= 24 h before the transaction",
+        "boolean + hours",
+    ),
+    "young_account_shared_device": (
+        "account record + entity graph",
+        "as of the transaction",
+        "days, account count",
+    ),
+    "shared_device": (
+        "entity graph (device -> accounts)",
+        "edges dated at or before the transaction",
+        "account count",
+    ),
+    "impossible_travel": ("account's earlier transactions", "previous 2 hours", "country change"),
+    "new_country": ("account baseline (usual countries)", "as of the transaction", "boolean"),
+    "merchant_risk_critical": ("merchant entity profile", "as of the transaction", "0-100"),
+    "merchant_risk_high": (
+        "merchant entity profile + MCC tier",
+        "as of the transaction",
+        "0-100 / tier",
+    ),
+    "merchant_risk_medium": (
+        "merchant entity profile + MCC tier",
+        "as of the transaction",
+        "0-100 / tier",
+    ),
+    "account_age_new": ("account record", "as of the transaction", "days"),
+    "account_age_young": ("account record", "as of the transaction", "days"),
+    "new_instrument": ("payment instrument record", "as of the transaction", "days"),
+    "auth_none": ("payment-switch record", "the transaction itself", "enum"),
+    "auth_weak": ("payment-switch record", "the transaction itself", "enum"),
+    "chargeback_high": (
+        "disputes filed before the transaction",
+        "as of the transaction",
+        "rate 0-1",
+    ),
+    "chargeback_some": (
+        "disputes filed before the transaction",
+        "as of the transaction",
+        "rate 0-1",
+    ),
+    "unusual_hour": (
+        "account baseline (usual hours, >= 10 transactions)",
+        "as of the transaction",
+        "hour",
+    ),
+    "new_merchant": ("account baseline (merchants seen)", "as of the transaction", "boolean"),
+    "repeat_merchant_burst": ("account's earlier transactions", "previous 60 minutes", "count"),
+    "linked_entity_critical": (
+        "worst linked device / account profile",
+        "as of the transaction, account status included (Account.status_at)",
+        "0-100",
+    ),
+    "linked_entity_high": (
+        "worst linked device / account profile",
+        "as of the transaction, account status included (Account.status_at)",
+        "0-100",
+    ),
+    "linked_entity_medium": (
+        "worst linked device / account profile",
+        "as of the transaction",
+        "0-100",
+    ),
+}
 
 
 def _mon_conditions(m: Any) -> dict[str, str]:
@@ -1213,13 +1562,21 @@ def render_risk_engine() -> str:
             ["CRITICAL", "75–100", scoring.recommended_action(RiskLevel.CRITICAL)],
         ],
     )
+    active = {m.version: surface for surface, m in scoring.ACTIVE.items()}
     models = tbl(
-        ["Version", "Factors", "Thresholds", "Description"],
+        ["Version", "Surface", "Status", "Factors", "Thresholds", "Description"],
         [
-            [f"`{v}`", len(m.weights), len(m.thresholds), m.description or "—"]
+            [
+                f"`{v}`",
+                scoring.surface_of(m),
+                "**active**" if v in active else "historical (replay / what-if only)",
+                len(m.weights),
+                len(m.thresholds),
+                m.description or "—",
+            ]
             for v, m in scoring.MODELS.items()
         ],
-        "lrrl",
+        "lllrrl",
     )
     tv = [scoring.TRANSACTION_V1, scoring.TRANSACTION_V1_1, scoring.TRANSACTION_V2]
     cond = _txn_conditions(scoring.TRANSACTION_DEFAULT)
@@ -1235,6 +1592,12 @@ def render_risk_engine() -> str:
             for code, label, _ in transaction.RULES
         ],
         "llllrrr",
+    )
+    missing_meta = [c for c in codes if c not in FEATURE_META]
+    assert not missing_meta, f"undocumented feature metadata: {missing_meta}"
+    meta_rows = tbl(
+        ["Factor", "Source (trusted record)", "Time semantics", "Reads"],
+        [[f"`{code}`", *FEATURE_META[code]] for code, _, _ in transaction.RULES],
     )
     thr_rows = tbl(
         ["Threshold"] + [f"`{m.version}`" for m in tv],
@@ -1333,6 +1696,11 @@ calibrated on real payment data.
 
 {models}
 
+Authoritative evaluation always scores with the active model of its surface
+(`scoring.ACTIVE`); a request cannot select another, and a model is only ever
+applied to its own surface (`scoring.model_for`). Historical models exist for
+replay and what-if comparison (`docs/SECURITY_MODEL.md`, evaluation authority).
+
 `txn-1.0` → `txn-1.1` exists so replay can show a *model* change (geography
 weighted up, device weighted down, moderate-amount threshold raised).
 `txn-2.0`, the default, adds short-window velocity and inter-arrival timing
@@ -1349,8 +1717,11 @@ only disputes filed earlier; device knowledge asks the time-aware graph
 whether the device was used on the account at least 24 h *before*; entity
 profiles are cached per `(entity, as_of)` and read only records at or before
 `as_of`; every graph edge carries a timestamp and queries take `as_of`; the
-monitoring cycle finder accepts only hops inside its window. Data available
-after T never influences a decision made at T. `results/temporal.json`
+monitoring cycle finder accepts only hops inside its window; an account's
+status counts from when it took effect (`Account.status_at`) and payout
+sharing reads the bank accounts held at T, not the current payout field (both
+were current-state reads until the 2.2.0 temporal extension found them). Data
+available after T never influences a decision made at T. `results/temporal.json`
 measures it; `tests/test_temporal_leakage.py` and
 `tests/test_entity_pointintime.py` pin it.
 
@@ -1364,6 +1735,14 @@ merchant's entity profile; device and instrument sharing from the graph as of
 the transaction; the worst linked-entity profile.
 
 {txn_rows}
+
+Where each feature comes from and what point in time it reads. Every source
+is a trusted record; prose never enters. Point values are heuristics and every
+one of them is a design choice, not a measurement: `docs/EVALUATION.md` §G
+reports how often each factor fires on fraud-labelled and on legitimate
+transactions, which is the honest measure of how much each one is worth.
+
+{meta_rows}
 
 Thresholds:
 
@@ -1433,6 +1812,23 @@ def render_policy_engine() -> str:
         ],
     )
     pols = DEFAULT_REGISTRY.all()
+    from sentinel.policy.loader import MANIFEST, POLICY_DIR, policy_digest
+
+    pinned = json.loads((POLICY_DIR / MANIFEST).read_text())["policies"]
+    for pol in pols:
+        assert pinned.get(pol.key) == policy_digest(pol), f"{pol.key} not pinned"
+    ids = sorted({pol.policy_id for pol in pols})
+    ver_rows = tbl(
+        ["Policy", "Active (authoritative)", "Historical (replay / what-if only)"],
+        [
+            [
+                f"`{pid}`",
+                f"v{DEFAULT_REGISTRY.active(pid).version}",
+                ", ".join(f"v{v}" for v in DEFAULT_REGISTRY.historical(pid)) or "—",
+            ]
+            for pid in ids
+        ],
+    )
     pol_rows = tbl(
         [
             "Policy",
@@ -1495,13 +1891,22 @@ is evaluated, the most severe matching outcome wins
 (ALLOW < STEP_UP < REQUIRE_HUMAN_REVIEW < TEMPORARY_HOLD < BLOCK), and every
 match is explained. There is no `else`, no scripting and no model call.
 
-Operators: {ops}. Numeric comparisons on a non-number are false; `in` /
-`not_in` require a list; `contains` works on lists and strings.
+Operators: {ops}. `in` / `not_in` require a list; `contains` works on lists
+and strings. Every value a rule reads must have its catalog type (below): a
+string where a number is expected raises, it is not "false".
 
 ## Fail-closed by construction
 
 - **Validation at load** rejects unknown fields, operators, outcomes and
-  type mismatches, so a misconfiguration is caught before any decision.
+  type mismatches; unknown keys in the document, a rule or a condition (a
+  misspelt `unless`, an `"enabled": false` the engine would ignore); a
+  missing `default_outcome` (no implicit ALLOW); and a value a field can never
+  take (an unknown capability, an impossible enum value) -- a gate that could
+  never fire. A misconfiguration is caught before any decision.
+- **Typed context at evaluation.** A value of the wrong type (an amount of
+  `"999999"`, a boolean where a number is expected) raises
+  `PolicyEvaluationError` instead of making a numeric rule quietly false; the
+  composer turns it into a fail-safe `REQUIRE_HUMAN_REVIEW`.
 - **A rule may reference a field only if the composer always provides it or
   the policy declares it in `required_fields`.** At evaluation, a context
   missing any referenced field raises `PolicyEvaluationError`; the composer
@@ -1513,6 +1918,14 @@ Operators: {ops}. Numeric comparisons on a non-number are false; `in` /
   reports `policy_drift` when the served version no longer has the content the
   decision was made under. A version number is a label a file edit can reuse;
   the hash is what is trusted.
+- **Pinned versions.** `policies/MANIFEST.json` pins the full SHA-256 of every
+  shipped version. A version edited in place, added without pinning or deleted
+  raises `PolicyIntegrityError` before anything is registered, and a store that
+  recorded decisions under a version with other content refuses to open.
+  `sentinel policy pin` pins *new* versions only and refuses to re-pin a
+  changed one: a policy change is a new version. This guards against an
+  accidental in-place edit; it is not a defence against someone who can edit
+  both the policy and the manifest (that is code review and signed releases).
 - **A trusted fact can never overwrite a computed field**: the composer
   writes its own fields first and only fills gaps from the workflow's facts.
 
@@ -1538,12 +1951,24 @@ contradictory conditions on one field; an empty numeric range; a rule with
 the same conditions as an earlier one. `tests/test_policy_lint.py` covers
 each finding. All shipped versions lint clean (table below).
 
+## Versions: active, historical, what-if
+
+An authoritative evaluation -- one that is recorded, audited, can open a case
+and can execute -- always runs the **active** version of its policy
+(`PolicyRegistry.active`) and the active risk model of its surface. No request
+parameter selects another: the evaluate routes refuse `options.policy_version`
+and `options.risk_model` with 403, the authoritative CLI commands do not have
+the flags, and the engine itself refuses to record a run whose inputs name a
+non-active version (`sentinel/decision/authority.py`). **Historical** versions
+stay loadable only so a recorded decision can be replayed under the policy it
+was made with, or compared with another; replay, the attack simulator and
+scenario runs are **what-ifs** and are never recorded as decisions.
+
+{ver_rows}
+
 ## Shipped policies
 
 {pol_rows}
-
-Old versions stay loadable so any decision can be replayed under the policy
-it was made with, or under a later one, with a field-level diff.
 
 {rules_md}
 """
@@ -1797,10 +2222,20 @@ from 0. `detail` is redacted before hashing: any of {raw} is replaced by its
 SHA-256 and length, so **no untrusted prose is ever persisted in the chain**
 (detector spans are hashed too).
 
-## Verification (`sentinel audit verify`, `GET /v1/audit/verify`)
+A decision's event also records, in `detail`, the SHA-256 of the decision's
+input snapshot (`snapshot_hash`), the risk-model version and the engine
+version. Replay checks the stored snapshot against that hash and takes the
+recorded side of its comparison from the event, so a decision row and a
+snapshot edited consistently in the database cannot replay as "no change"
+(`tests/test_replay_integrity.py`).
+
+## Verification (`sentinel audit verify [--file PATH]`, `GET /v1/audit/verify`)
 
 Recomputes the chain from genesis and reports every problem with its
-record index:
+record index; `--file` verifies an exported JSONL chain (`sentinel audit
+export`) without opening a store. A failure prints **AUDIT INTEGRITY ERROR**
+with the problem count and the first bad record and exits with status 2 --
+never a parser traceback, never a silent pass:
 
 | Tampering | Detected by |
 |---|---|
@@ -1808,11 +2243,14 @@ record index:
 | an event deleted | `sequence` gap on the following record, and its `previous_hash` no longer matches |
 | an event inserted | `sequence` collision and a broken link on the record after it |
 | events reordered | `previous_hash` mismatch |
-| a record unreadable | reported as unreadable; verification stops there |
+| a record unreadable (malformed JSON, truncated line, missing field) | reported as unreadable with the reason; verification continues, so later problems are reported too, and the link from the unreadable record is not assumed |
 | the chain truncated at the end | the stored length / head no longer match a checkpoint |
 
-`tests/test_audit_chain.py` and `tests/test_data_store_replay.py` exercise
-each row, including a byte edited on disk in the JSONL and SQLite backends.
+`tests/test_audit_chain.py`, `tests/test_data_store_replay.py`,
+`tests/test_rc_hardening.py` and `tests/test_audit_corruption.py` exercise each
+row -- malformed JSON, a truncated line, a missing field, a wrong hash, a wrong
+predecessor, deleted / inserted / reordered lines, a cut last line -- through
+the library and the CLI, and edited rows in the SQLite store.
 
 ## Backends and lookups
 
@@ -1853,6 +2291,13 @@ stored prefix must still hash to the checkpointed head.
 
 def blocks(R: dict[str, Any], tests: int) -> dict[str, str]:
     s, h, sf, k, b, a, f, i, t, p, m, cl = (R[x] for x in SUITES)
+    td = t["dataset"]
+    seeds = ", ".join(str(x) for x in td["seeds"])
+    offs = ", ".join(str(d) for d in t["future_offsets_days"])
+    txn_ch = sum(v["transaction_changed"] for v in t["perturbation_by_kind"].values())
+    mon_ch = sum(v["monitoring_changed"] for v in t["perturbation_by_kind"].values())
+    ub = t.get("leakage_upper_95")
+    ub_s = f"{ub:.3%}" if ub is not None else "n/a -- leaks found"
     from sentinel.policy.loader import DEFAULT_REGISTRY
     from sentinel.risk import scoring
     from sentinel.security.threats import TAXONOMY
@@ -1938,9 +2383,8 @@ point-in-time behavioural baselines, a time-aware relationship graph and
 as-of entity profiles -- explainable to the factor and replayable under
 another model version. Transaction-level recall by scenario:
 {_scn(f['recall_by_scenario'])}; account-level: {_scn(al['recall_by_scenario'])}.
-All {total_missed} transaction-level misses on seed {seed} are {missed_scn} transactions whose
-short-window velocity signals had not yet formed; the monitoring cycle
-finder is bounded to {cycle_days} days ([details](docs/EVALUATION.md#g-financial-risk-on-labelled-synthetic-data-resultsfinancialjson))."""
+The {total_missed} transaction-level misses on seed {seed} are {missed_scn} transactions{" whose short-window velocity signals had not yet formed" if "burst" in missed_scn else ""};
+the monitoring cycle finder is bounded to {cycle_days} days ([details](docs/EVALUATION.md#g-financial-risk-on-labelled-synthetic-data-resultsfinancialjson))."""
     out[
         "performance"
     ] = f"""### Performance (offline, own overhead)
@@ -1950,11 +2394,12 @@ sequential single-thread; policy evaluation {p['components']['policy_evaluate'][
 {p['workloads']['policy_context_fields']}-field context; gateway inspection {p['components']['gateway_inspect']['p95_ms']} ms p95 ([all components](docs/PERFORMANCE.md))."""
     out[
         "temporal"
-    ] = f"""| Temporal-leakage benchmark (`results/temporal.json`, seed {t['dataset']['seed']}, {t['dataset']['transactions']:,} transactions, sample {t['dataset']['sample']}) | Rate |
+    ] = f"""| Temporal-leakage benchmark (`results/temporal.json`: seeds {seeds}, {td['transactions']:,} transactions, {td['sample']} sampled, {len(t['kinds'])} future-record kinds at +{offs} days, {t['future_records']:,} future records) | Changed / tested |
 |---|---:|
-| assessment changes when records after the transaction are removed (truncation) | **{pct(t['truncation_mismatch_rate'])}** |
-| transaction assessment changes when records are added {', '.join(str(d) for d in t['future_offsets_days'])} days later (perturbation) | **{pct(t['perturbation_transaction_change_rate'])}** |
-| monitoring assessment changes under the same perturbation | **{pct(t['perturbation_monitoring_change_rate'])}** |"""
+| assessment changes when records after the transaction are removed (truncation) | **{t['truncation_mismatch_count']} / {td['sample']}** |
+| transaction assessment changes when future records are added (perturbation) | **{txn_ch} / {t['comparisons']:,}** |
+| account-monitor assessment changes under the same perturbation | **{mon_ch} / {t['comparisons']:,}** |
+| all checks (exact; 95% upper bound {ub_s}) | **{t['leakage_count']} / {t['decisions_tested']:,}** |"""
     out[
         "corpus-counts"
     ] = f"""Development corpus: {s['n_attacks']} attacks + {s['n_controls']} controls across {n_classes}
@@ -1974,13 +2419,18 @@ the protected path, not a claim about any real model; the live-model row in
     ] = f"""The point values were tuned on seed {seed}; the suite also runs seeds
 {' and '.join(str(x) for x in f['seeds']['held_out'])} and reports the range (transaction precision {rng(sr['transaction_level']['precision'])},
 recall {rng(sr['transaction_level']['recall'])}; account recall {rng(sr['account_level']['recall'])}). Transaction-level recall
-on seed {seed} is {pct(tl['recall'])}: all {total_missed} misses are {missed_scn} transactions ({pct(f['recall_by_scenario']['fraud:burst']['recall'])} burst
-recall, n={f['recall_by_scenario']['fraud:burst']['n']}) whose short-window velocity signals had not yet formed -- the
-account-level monitor is where a burst is meant to be caught, and its burst
-recall is {pct(al['recall_by_scenario']['fraud:burst']['recall'])} (n={al['recall_by_scenario']['fraud:burst']['n']}). Account-level recall is {pct(al['recall'])} ({al['fn']} misses of
+on seed {seed} is {pct(tl['recall'])}: the {total_missed} misses are {missed_scn} transactions ({pct(f['recall_by_scenario']['fraud:burst']['recall'])} burst
+recall, n={f['recall_by_scenario']['fraud:burst']['n']}); a burst's first transactions carry no short-window velocity signal
+and, since the generator stopped emitting fixed three-minute gaps, a burst spread
+over more than the ten-minute window carries fewer of them -- the account-level
+monitor is where a burst is meant to be caught, and its burst recall is
+{pct(al['recall_by_scenario']['fraud:burst']['recall'])} (n={al['recall_by_scenario']['fraud:burst']['n']}). Account-level recall is {pct(al['recall'])} ({al['fn']} misses of
 {al['tp'] + al['fn']} labelled accounts; {al['fp']} false positives). Merchant level has n={f['merchant_level']['bad_merchants']} positives and is
 reported for completeness only. Account-level scenarios remain the mirror
-image of the monitoring rules, so their recall says little about generality."""
+image of the monitoring rules, so their recall says little about generality.
+Legitimate accounts now burst, travel, switch phones and fail MFA at realistic
+rates, so every signal also fires on legitimate transactions; the per-signal
+table in `docs/EVALUATION.md` §G shows how often."""
     out[
         "kyb-caveat"
     ] = f"""The KYB any-input false-positive rate is {pct(k['fp_rate'])}: {k['fp_attack_input_held']} of the {k['by_category']['malicious_document_clean_records']['n']}
@@ -1990,12 +2440,15 @@ approval. On benign input the rate is {pct(k['fp_rate_benign_input'])} and no me
 say to reject went live ({pct(k['fn_rate'])} FN). This is the cost of the design and is
 reported, not tuned away."""
     out["claims"] = f"""The claim classifier is deterministic and explainable (weighted pattern
-families, a negation guard, a hedge detector) and reports a confidence; on a
-{cl['n']}-phrasing benchmark that shares its author it reads {pct(cl['coverage'])} of legitimate
-paraphrases, holds {pct(cl['false_positive_rate'])} of them for a human, never reads attack prose as a
-claim it does not assert ({pct(cl['adversarial_wrong_type_rate'])}), and abstains on {pct(cl['by_category']['ambiguous']['abstain_rate'])} of the
-ambiguous and {pct(cl['by_category']['contradictory']['abstain_rate'])} of the contradictory phrasings. Unseen phrasings still
-degrade to a human review, which is a cost, not a breach (`docs/EVALUATION.md` §L)."""
+families, a negation guard, a hedge detector) and reports a confidence. On a
+{cl['n']}-phrasing benchmark that shares its author it reads {pct(cl['coverage'])} of ordinary legitimate
+paraphrases and never reads attack prose as a claim it does not assert
+({pct(cl['adversarial_wrong_type_rate'])}); ambiguous and contradictory messages abstain. On a **held-out**
+set of {cl['uncommon_n']} uncommon legitimate phrasings it recognised 7 on the first run and
+{cl['uncommon_recognised']} after the patterns were extended against a separate development set
+(optimistic: the author had seen the misses); every miss abstains, i.e. goes
+to a human -- a cost, not a breach. False negatives {cl['false_negatives']} / {cl['false_negative_n']}, false
+positives {cl['false_positives']} / {cl['false_positive_n']} (`docs/EVALUATION.md` §L)."""
     out["threat-taxonomy"] = (
         tbl(
             ["Class", "Mechanism", "Caught by"],
@@ -2033,14 +2486,16 @@ degrade to a human review, which is a cost, not a breach (`docs/EVALUATION.md` �
   explainable risk engine (point-in-time behavioural baselines,
   device/geography/velocity, as-of entity profiles, a time-aware relationship
   graph, transaction-monitoring patterns) over a coherent synthetic world with
-  labelled fraud scenarios and a temporal-leakage benchmark at {pct(t['truncation_mismatch_rate'])};
+  labelled fraud scenarios and a temporal-leakage benchmark ({t['leakage_count']} leaks in {t['decisions_tested']:,} decisions);
   transaction-level precision {pct(tl['precision'])} / recall {pct(tl['recall'])} at {pct(tl['false_positive_rate'], 2)} FPR and
   account-level precision {pct(al['precision'])} / recall {pct(al['recall'])} on the development seed, with
   held-out seeds reported (Python, SQLite).
 - **Capability / policy enforcement.** Implemented schema-validated,
-  versioned, fail-closed policy-as-code (every referenced field must be
-  present; policy content is hashed and pinned by every decision; a linter
-  catches rules that can never fire) and a capability registry (risk,
+  versioned, fail-closed policy-as-code (every referenced field present and
+  correctly typed; shipped versions pinned by digest; content hashed into
+  every decision; a linter for rules that can never fire), engine-enforced
+  evaluation authority (no request can select an older policy or risk model
+  or switch a control off), and a capability registry (risk,
   reversibility, monetary impact, allowed actors, human-review thresholds) in
   which no AI actor may execute a consequential capability; off-surface
   requests become CRITICAL security events and P1 cases, never executions.
@@ -2055,9 +2510,11 @@ degrade to a human review, which is a cost, not a breach (`docs/EVALUATION.md` �
 - **Explainability & auditability.** Every decision carries evidence with
   provenance, contradictions, matched policy rules and an authorization
   reason; decisions are replayable under other policy/risk-model versions
-  with a field-level diff and policy / engine drift detection; the
-  tamper-evident audit chain stores hashes, never prose, names the first
-  modified, deleted or reordered record, and exports HMAC-signed checkpoints.
+  with a field-level diff and policy / engine drift detection, anchored to
+  the audit chain so a rewritten record cannot replay as unchanged; the
+  tamper-evident audit chain stores hashes, never prose, reports every
+  modified, deleted, inserted, reordered or unreadable record, and exports
+  HMAC-signed checkpoints.
 - **Engineering.** Standard-library-only core (SQLite, http.server), one
   application layer behind a versioned API, a CLI and an API-backed console
   with no decision logic; {tests} tests including property-tested security
@@ -2095,8 +2552,9 @@ deterministically under a different policy version."
   the held-out set, the other surfaces and KYB (structural, by construction),
   with **{pct(s['fp_rate'])}** false positives on deserved refunds -- including the
   urgent-but-legitimate phrasings -- which is the empirical part.
-- **{pct(t['truncation_mismatch_rate'])}** temporal leakage on the benchmark: a decision at T1 reads only
-  records at or before T1, per feature and per entity profile.
+- **{t['leakage_count']} of {t['decisions_tested']:,}** decisions changed by future records on the
+  temporal benchmark (nine record kinds, four offsets, two seeds): a decision at T1
+  reads only records at or before T1, per feature and per entity profile.
 - Model output is typed untrusted and cannot become evidence; an agent
   pushed off its tool surface produces a CRITICAL event, a BLOCK and a P1
   case, never an execution.
@@ -2114,8 +2572,8 @@ attacks: {pct(i['text_beyond_ledger_ceiling'])} exceeded the ledger-supported ce
 without support, {pct(i['model_influence_protected'])} of {i['model_influence_n']} recommendation replays changed anything, vs
 {pct(i['text_influence_permissive_unguarded'])} permissive influence with no controls); zero unauthorised capability
 executions across {n_all} attacks on four surfaces and {kc['attacks']} hostile KYB applications --
-which is 0 by construction and is kept as a regression check; {pct(t['truncation_mismatch_rate'])} temporal
-leakage; audit tampering is detected. Empirical ones, on synthetic data:
+which is 0 by construction and is kept as a regression check; {t['leakage_count']} temporal leaks in
+{t['decisions_tested']:,} decisions tested; audit tampering is detected. Empirical ones, on synthetic data:
 {pct(s['fp_rate'])} false positives on deserved refunds, {pct(h['fp_rate'])} on unseen legitimate wording,
 {pct(k['fp_rate'])} of clean-but-hostile KYB applications held for a human, and the financial
 figures with their held-out-seed range. Nothing about a live model: the live
@@ -2141,12 +2599,15 @@ approved -- deserved refunds, whatever the prose around them."""
 point values were tuned while looking at seed {seed}, so the suite also runs two
 seeds they never saw and reports the range (transaction precision
 {rng(sr['transaction_level']['precision'])}, recall {rng(sr['transaction_level']['recall'])}). Transaction-level recall is {pct(tl['recall'])}
-on the development seed and every miss is a burst transaction whose
-short-window signals had not yet formed; the account-level monitor catches
-{pct(al['recall_by_scenario']['fraud:burst']['recall'])} of the burst accounts. Account-level recall is {pct(al['recall'])} at
+on the development seed and the misses are {missed_scn} transactions; a burst's
+first transactions carry no short-window signal, and the account-level monitor
+catches {pct(al['recall_by_scenario']['fraud:burst']['recall'])} of the burst accounts. Legitimate accounts burst, travel
+and switch phones too, so the signals are not free. Account-level recall is {pct(al['recall'])} at
 {pct(al['false_positive_rate'])} FPR. A review found the per-transaction baseline counting
 disputes filed *after* the transaction; fixing that leak (and then every other
-aggregation) is why there is now a temporal-leakage benchmark, at {pct(t['truncation_mismatch_rate'])}."""
+aggregation) is why there is a temporal-leakage benchmark; extending it in 2.2.0 found two
+more current-state reads (account status, payout destination), now fixed: {t['leakage_count']} leaks
+in {t['decisions_tested']:,} decisions tested."""
     out[
         "demo-flagship"
     ] = f"""Flagship attack (`make attack`): the gateway flags the document CRITICAL, the

@@ -82,6 +82,8 @@ prose, decides support.
 Blocked-by distribution (an attack can be stopped by several controls at
 once): ai_security_gateway 60, capability_authorization 135, capability_registry 30, policy:dispute-refund@v3 135, trusted_evidence 135.
 
+> **Methodology** (`results/security.json`): synthetic (hand-authored corpus, offline simulated agent); guarded attack success is structural. *Dataset:* development attack corpus, seeds x amounts straddling the auto-limit, plus legitimate controls. *Method:* each case runs with no controls and with full controls; success = an unauthorised consequential capability executed; detection recall counts the gateway's flag; false positives count deserved refunds not executed. *Limitations:* the corpus and the detector share an author; the unguarded rate is a property of the simulator; every attack ledger is unsupporting so the guarded rate is 0 by construction. *Sample:* n_attacks=150, n_controls=21, n_deserved_controls=10.
+
 ## B. Held-out generalisation (`results/heldout.json`)
 
 The development corpus and the detector share an author, so a 0% there could
@@ -122,6 +124,8 @@ authorization path. The unguarded figure is depressed because the offline
 victim agent is itself lexical; the held-out set validates the platform, not
 the baseline's realism.
 
+> **Methodology** (`results/heldout.json`): synthetic; guarded attack success is structural. *Dataset:* independently worded held-out set, disjoint from the development corpus by test. *Method:* as the development corpus. *Limitations:* small; validates the claim classifier and the platform, not the simulator's realism. *Sample:* n_attacks=20, n_controls=6, n_deserved_controls=4.
+
 ## C. Other surfaces -- transaction, account security, investigation (`results/surfaces.json`)
 
 30 attacks that arrive through the non-dispute workflows: descriptors and
@@ -129,7 +133,7 @@ memos on a payment authorisation, a customer message on a login session with a
 requested capability, and case notes on an investigation. Success = a consequential capability executed that the text-free baseline did not execute (incl. any off-surface capability).
 Each attack is also compared with the same request carrying no untrusted text:
 untrusted text **loosened** the outcome in 0.0% of cases (structural) and
-tightened it in 43.3% (synthetic: the gateway held something a
+tightened it in 30.0% (synthetic: the gateway held something a
 text-free request would have allowed).
 
 | Workflow | n | No controls | Detection recall | Sentinel |
@@ -160,6 +164,8 @@ text-free request would have allowed).
 | model_output_injection | 3 | 0.0% | 100.0% | 0.0% |
 | tool_manipulation | 3 | 66.7% | 100.0% | 0.0% |
 | unicode_obfuscation | 1 | 100.0% | 100.0% | 0.0% |
+
+> **Methodology** (`results/surfaces.json`): synthetic; guarded attack success and 'loosened' are structural. *Dataset:* attacks arriving through the transaction, account-security and investigation workflows. *Method:* each attack is compared with the same request carrying no untrusted text; success = a consequential capability executed that the text-free baseline did not. *Limitations:* small per-workflow counts; the offline agent's behaviour on these surfaces is the simulator's. *Sample:* n_attacks=30.
 
 ## D. Second surface -- merchant onboarding, balanced KYB (`results/kyb.json`)
 
@@ -204,6 +210,8 @@ approved, because a CRITICAL security finding blocks automatic approval. It is
 reported rather than tuned away. The benign-input rate is the classifier's
 behaviour on ordinary applications.
 
+> **Methodology** (`results/kyb.json`): synthetic; guarded attack success is structural; false positives are empirical. *Dataset:* balanced onboarding applications across eight categories with records-only ground truth. *Method:* outcomes compared with what the acquirer records alone imply (approve / review / reject). *Limitations:* records are synthetic; a clean merchant with a hostile upload is held by design and counted in the any-input false-positive rate. *Sample:* attacks=24, controls=23, corpus_cases=47, corpus_attacks=24, corpus_controls=23, corpus_records_approve=19, corpus_records_reject=12, corpus_records_review=16.
+
 ## E. Beating the obvious defence (`results/baselines.json`)
 
 | Defence | Attack success |
@@ -214,6 +222,8 @@ behaviour on ordinary applications.
 
 The hardened prompt still fails on: adjudication_gaming 100.0%, financial_social_engineering 100.0%, model_output_injection 50.0%, false_evidence 100.0%. A customer lying about a
 fact is not an injection, and "ignore instructions" says nothing about a lie.
+
+> **Methodology** (`results/baselines.json`): synthetic (offline simulated agent). *Dataset:* development attack corpus. *Method:* the naive agent, the same agent with a hardened system prompt, and Sentinel. *Limitations:* the hardened prompt's behaviour is the simulator's reading of an instruction, not a measured LLM.
 
 ## F. Ablation -- which control carries the result (`results/ablation.json`)
 
@@ -239,9 +249,11 @@ fact is not an injection, and "ignore instructions" says nothing about a lie.
   agent denies 40.0% of deserved refunds because it does not
   recognise their wording.
 
+> **Methodology** (`results/ablation.json`): synthetic; the 0% rows are structural. *Dataset:* development attack corpus. *Method:* eight control configurations of the same composer over the same cases. *Limitations:* configurations that believe the model's verdict inherit the simulator's behaviour.
+
 ## G. Financial risk on labelled synthetic data (`results/financial.json`)
 
-Dataset: seed 42, 150 customers, 30 merchants, 3,184 transactions; risk model
+Dataset: seed 42, 150 customers, 30 merchants, 3,183 transactions; risk model
 `txn-2.0`. Positive = risk level HIGH or CRITICAL. Labels come from the
 generator's injected scenarios and are read only by this suite.
 
@@ -275,87 +287,112 @@ to catch it:
 
 | Level | Precision | Recall | FPR | FNR | tp / fp / fn / tn |
 |---|---:|---:|---:|---:|---|
-| transaction | 93.5% | 79.6% | 0.10% | 20.4% | 43 / 3 / 11 / 3127 |
-| account (monitoring) | 100.0% | 80.0% | 0.00% | 20.0% | 8 / 0 / 2 / 151 |
+| transaction | 86.7% | 67.2% | 0.19% | 32.8% | 39 / 6 / 19 / 3119 |
+| account (monitoring) | 90.0% | 90.0% | 0.68% | 10.0% | 9 / 1 / 1 / 146 |
 | merchant (profile) | 100.0% | 66.7% | 0.00% | 33.3% | 2 / 0 / 1 / 27 |
 
-Transaction-level recall by scenario: account_takeover 100.0% (n=6), burst 63.3% (n=30), graph_linked 100.0% (n=18).
-Account-level: burst 66.7% (n=3), dormant_activation 50.0% (n=2), graph_linked 100.0% (n=3), structuring 100.0% (n=2). Merchant level has n=3
+Transaction-level recall by scenario: account_takeover 100.0% (n=6), burst 44.1% (n=34), graph_linked 100.0% (n=18).
+Account-level: burst 100.0% (n=3), dormant_activation 50.0% (n=2), graph_linked 100.0% (n=3), structuring 100.0% (n=2). Merchant level has n=3
 positives (abused (scenario) or shell registration or >= 2 prior flags) and is reported for completeness, not as a result.
 
 ### Where the misses are
 
 | Scenario | n | detected | missed | signals on detected (count) | signals on missed (count) |
 |---|---:|---:|---:|---|---|
-| account_takeover | 6 | 6 | 0 | recent_account_changes (6), recent_failed_mfa (6), new_device (6), impossible_travel (6), new_country (6), auth_weak (6) | — |
-| burst | 30 | 19 | 11 | rapid_fire (19), rapid_succession (15), velocity_spike (15), chargeback_some (10), new_merchant (6), velocity_burst (6) | rapid_succession (8), new_merchant (4), chargeback_high (3), merchant_risk_medium (3), chargeback_some (3), velocity_elevated (2) |
-| graph_linked | 18 | 18 | 0 | shared_payout_instrument (18), young_account_shared_device (18), shared_device (18), account_age_young (18), merchant_risk_high (15), auth_weak (15) | — |
+| account_takeover | 6 | 6 | 0 | recent_account_changes (6), recent_failed_mfa (6), new_device (6), new_country (5), auth_weak (4), amount_anomaly_extreme (3) | — |
+| burst | 34 | 15 | 19 | velocity_spike (15), rapid_succession (15), velocity_burst (10), rapid_fire (6), merchant_risk_medium (6), chargeback_some (5) | rapid_succession (16), velocity_elevated (6), chargeback_some (5), velocity_spike (4), merchant_risk_medium (3), rapid_fire (1) |
+| graph_linked | 18 | 18 | 0 | shared_payout_instrument (18), young_account_shared_device (18), shared_device (18), account_age_young (18), auth_weak (15), merchant_risk_high (14) | — |
 
-All 11 transaction-level misses on this seed are burst transactions.
-`rapid_fire` needs 3 transactions inside 10 minutes and
-`rapid_succession` needs a short gap against a ≥ 6 h median, so the
-first transactions of every burst cannot carry the short-window velocity
-signals; the account-level monitor is where a burst is meant to be caught
-(account-level burst recall above). The account-level misses are listed in
-`results/financial.json` under `account_level`.
+The 19 transaction-level misses on this seed are burst transactions. `rapid_fire` needs 3 transactions inside 10 minutes and `rapid_succession` a short gap against a ≥ 6 h median, so the first transactions of a burst cannot carry the short-window velocity signals, and a burst spread over more than the window carries fewer of them; the account-level monitor is where a burst is meant to be caught (account-level burst recall above). The missed and false-positive examples are listed in `results/financial.json` under `transaction_level`.
+
+### Signals
+
+How often each factor fires on fraud-labelled and on legitimate transactions
+(seed 42; 58 fraud, 3,125 legitimate). A factor that fires on many
+legitimate transactions is a weak signal on this generator; nothing was tuned
+to change that, and the point values are documented in `docs/RISK_ENGINE.md`.
+
+| Factor | Family | Points | Fired on fraud (rate) | Fired on legit (rate) | Precision when fired |
+|---|---|---:|---:|---:|---:|
+| `new_merchant` | anomaly | 4 | 16 (27.6%) | 978 (31.30%) | 1.6% |
+| `merchant_risk_medium` | entity | 5 | 12 (20.7%) | 384 (12.29%) | 3.0% |
+| `chargeback_some` | entity | 5 | 11 (19.0%) | 373 (11.94%) | 2.9% |
+| `merchant_risk_high` | entity | 10 | 16 (27.6%) | 367 (11.74%) | 4.2% |
+| `unusual_hour` | anomaly | 6 | 4 (6.9%) | 356 (11.39%) | 1.1% |
+| `chargeback_high` | entity | 10 | 0 (0.0%) | 140 (4.48%) | 0.0% |
+| `auth_weak` | security | 8 | 20 (34.5%) | 118 (3.78%) | 14.5% |
+| `amount_anomaly_extreme` | anomaly | 22 | 7 (12.1%) | 131 (4.19%) | 5.1% |
+| `rapid_succession` | velocity | 15 | 33 (56.9%) | 91 (2.91%) | 26.6% |
+| `amount_anomaly_moderate` | anomaly | 10 | 6 (10.3%) | 108 (3.46%) | 5.3% |
+| `amount_anomaly_high` | anomaly | 16 | 2 (3.5%) | 57 (1.82%) | 3.4% |
+| `account_age_young` | entity | 5 | 18 (31.0%) | 31 (0.99%) | 36.7% |
+| `new_country` | device_geo | 15 | 5 (8.6%) | 37 (1.18%) | 11.9% |
+| `velocity_elevated` | velocity | 10 | 6 (10.3%) | 29 (0.93%) | 17.1% |
+| `velocity_spike` | velocity | 20 | 19 (32.8%) | 5 (0.16%) | 79.2% |
+| `rapid_fire` | velocity | 20 | 7 (12.1%) | 14 (0.45%) | 33.3% |
+| `new_device` | device_geo | 17 | 6 (10.3%) | 13 (0.42%) | 31.6% |
+| `auth_none` | security | 12 | 1 (1.7%) | 18 (0.58%) | 5.3% |
+| `young_account_shared_device` | device_geo | 14 | 18 (31.0%) | 0 (0.00%) | 100.0% |
+| `shared_payout_instrument` | entity | 20 | 18 (31.0%) | 0 (0.00%) | 100.0% |
+
+Family precision when fired: anomaly 2.1%, velocity 35.0%, device_geo 49.0%, entity 5.5%, security 18.5%.
 
 ### Slices
 
 | Channel | n | fraud n | recall | FPR |
 |---|---:|---:|---:|---:|
-| ecommerce | 2741 | 51 | 78.4% | 0.11% |
-| pos | 302 | 0 | — | 0.00% |
-| transfer | 141 | 3 | 100.0% | 0.00% |
+| ecommerce | 2760 | 55 | 65.5% | 0.22% |
+| pos | 271 | 0 | — | 0.00% |
+| transfer | 152 | 3 | 100.0% | 0.00% |
 
 | Account segment | n | fraud n | recall | FPR |
 |---|---:|---:|---:|---:|
-| premium | 672 | 0 | — | 0.15% |
-| retail | 2119 | 40 | 80.0% | 0.10% |
-| small_business | 393 | 14 | 78.6% | 0.00% |
+| premium | 473 | 0 | — | 0.63% |
+| retail | 2457 | 58 | 67.2% | 0.13% |
+| small_business | 253 | 0 | — | 0.00% |
 
 | Merchant risk tier | n | fraud n | recall | FPR |
 |---|---:|---:|---:|---:|
-| high | 361 | 19 | 94.7% | 0.58% |
-| low | 2428 | 23 | 69.6% | 0.04% |
-| medium | 395 | 12 | 75.0% | 0.00% |
+| high | 383 | 16 | 100.0% | 0.54% |
+| low | 2404 | 30 | 46.7% | 0.17% |
+| medium | 396 | 12 | 75.0% | 0.00% |
 
 ### Held-out seeds (point values never inspected against these)
 
 | Seed | Level | Precision | Recall | FPR | tp / fp / fn / tn |
 |---|---|---:|---:|---:|---|
-| seed 7 | transaction | 91.5% | 76.8% | 0.13% | 43 / 4 / 13 / 3117 |
-| seed 7 | account (monitoring) | 100.0% | 90.0% | 0.00% | 9 / 0 / 1 / 144 |
-| seed 7 | merchant (profile) | 50.0% | 66.7% | 7.41% | 2 / 2 / 1 / 25 |
-| seed 2024 | transaction | 95.6% | 78.2% | 0.06% | 43 / 2 / 12 / 3123 |
-| seed 2024 | account (monitoring) | 100.0% | 90.0% | 0.00% | 9 / 0 / 1 / 150 |
+| seed 7 | transaction | 87.8% | 65.5% | 0.16% | 36 / 5 / 19 / 3086 |
+| seed 7 | account (monitoring) | 90.9% | 100.0% | 0.67% | 10 / 1 / 0 / 148 |
+| seed 7 | merchant (profile) | 100.0% | 66.7% | 0.00% | 2 / 0 / 1 / 27 |
+| seed 2024 | transaction | 77.3% | 65.4% | 0.32% | 34 / 10 / 18 / 3090 |
+| seed 2024 | account (monitoring) | 100.0% | 90.0% | 0.00% | 9 / 0 / 1 / 153 |
 | seed 2024 | merchant (profile) | 75.0% | 100.0% | 3.70% | 3 / 1 / 0 / 26 |
 
-- seed 7: transaction account_takeover 100.0% (n=6), burst 59.4% (n=32), graph_linked 100.0% (n=18); account burst 66.7% (n=3), dormant_activation 100.0% (n=2), graph_linked 100.0% (n=3), structuring 100.0% (n=2)
-- seed 2024: transaction account_takeover 100.0% (n=6), burst 61.3% (n=31), graph_linked 100.0% (n=18); account burst 66.7% (n=3), dormant_activation 100.0% (n=2), graph_linked 100.0% (n=3), structuring 100.0% (n=2)
+- seed 7: transaction account_takeover 100.0% (n=6), burst 38.7% (n=31), graph_linked 100.0% (n=18); account burst 100.0% (n=3), dormant_activation 100.0% (n=2), graph_linked 100.0% (n=3), structuring 100.0% (n=2)
+- seed 2024: transaction account_takeover 100.0% (n=6), burst 35.7% (n=28), graph_linked 100.0% (n=18); account burst 100.0% (n=3), dormant_activation 50.0% (n=2), graph_linked 100.0% (n=3), structuring 100.0% (n=2)
 
 Range across all three seeds:
 
 | Level | Precision | Recall | FPR |
 |---|---:|---:|---:|
-| transaction | 91.5%–95.6% | 76.8%–79.6% | 0.06%–0.13% |
-| account (monitoring) | 100.0%–100.0% | 80.0%–90.0% | 0.00%–0.00% |
-| merchant (profile) | 50.0%–100.0% | 66.7%–100.0% | 0.00%–7.41% |
+| transaction | 77.3%–87.8% | 65.4%–67.2% | 0.16%–0.32% |
+| account (monitoring) | 90.0%–100.0% | 90.0%–100.0% | 0.00%–0.68% |
+| merchant (profile) | 75.0%–100.0% | 66.7%–100.0% | 0.00%–3.70% |
 
 ### Calibration (observed fraud-labelled rate per risk band, seed 42)
 
 | Transaction band | n | observed fraud rate |
 |---|---:|---:|
-| LOW | 2960 | 0.1% |
-| MEDIUM | 178 | 3.9% |
-| HIGH | 27 | 88.9% |
-| CRITICAL | 19 | 100.0% |
+| LOW | 2933 | 0.3% |
+| MEDIUM | 205 | 4.9% |
+| HIGH | 29 | 82.8% |
+| CRITICAL | 16 | 93.8% |
 
 | Account band | n | observed fraud rate |
 |---|---:|---:|
-| LOW | 152 | 0.7% |
-| HIGH | 4 | 100.0% |
-| CRITICAL | 4 | 100.0% |
-| MEDIUM | 1 | 100.0% |
+| LOW | 147 | 0.7% |
+| HIGH | 7 | 85.7% |
+| CRITICAL | 3 | 100.0% |
 
 ### Decisioning
 
@@ -364,14 +401,16 @@ Policy outcomes on a 400-transaction sample through the full pipeline
 
 | Outcome | n |
 |---|---:|
-| ALLOW | 315 |
-| STEP_UP | 32 |
-| REQUIRE_HUMAN_REVIEW | 34 |
-| DENY | 19 |
+| ALLOW | 321 |
+| STEP_UP | 30 |
+| REQUIRE_HUMAN_REVIEW | 28 |
+| DENY | 21 |
 
-Fraud-labelled transactions allowed: 7.4%. Legitimate transactions
-blocked or denied: 0.0%. The risk model is a transparent rule
+Fraud-labelled transactions allowed: 15.5%. Legitimate transactions
+blocked or denied: 0.3%. The risk model is a transparent rule
 table, not ML; these numbers describe it honestly on this generator.
+
+> **Methodology** (`results/financial.json`): synthetic (labelled generator scenarios); empirical on that generator. *Dataset:* seeded synthetic world; development seed plus two held-out seeds. *Method:* transaction-level risk band on every transaction, monitoring on every account, merchant profiles; positive = HIGH or CRITICAL; labels come from the generator and are read only here. *Limitations:* point values were tuned on the development seed; scenarios mirror the rules they are meant to trip; not real payment data. *Sample:* dataset_seed=42, dataset_customers=150, dataset_merchants=30, dataset_transactions=3183.
 
 ## H. Decision integrity (`results/integrity.json`)
 
@@ -384,14 +423,14 @@ and 14 deserved controls:
 | Question | Sentinel | No controls | kind |
 |---|---:|---:|---|
 | Attacker text made the decision **more permissive** (unsupporting ledgers) | **0.0%** | 83.5% | structural |
-| Attacker text changed the outcome at all (tightening only) | 38.2% | — | synthetic |
+| Attacker text changed the outcome at all (tightening only) | 58.2% | — | synthetic |
 | Injection appended to a deserved claim **loosened** it (n=84) | **0.0%** | — | structural |
 | Injection appended to a deserved claim tightened it (held for a human) | 100.0% | — | synthetic |
 | A different model recommendation changed the outcome (n=360) | **0.0%** | — | structural |
 | *Supporting ledger:* attacker text exceeded the ledger-supported ceiling | **0.0%** | — | structural |
 | *Supporting ledger:* a capability executed without ledger support | **0.0%** | — | structural |
-| *Supporting ledger:* attacker text changed the outcome vs a neutral message (selected the claim) | 62.4% | — | by design |
-| *Supporting ledger:* attacker text was approved (a deserved refund, whatever the prose) | 9.4% | — | by design |
+| *Supporting ledger:* attacker text changed the outcome vs a neutral message (selected the claim) | 44.1% | — | by design |
+| *Supporting ledger:* attacker text was approved (a deserved refund, whatever the prose) | 8.2% | — | by design |
 
 The structural rows are expected to be 0 -- the attack ledgers do not support
 the claims -- and are kept as regression checks. The last two rows are the
@@ -399,67 +438,154 @@ honest shape of the property: text can choose which fact is checked, and a
 refund the ledger supports is paid even when the message around it is an
 attack. This is a structural property of the composer; it is **not** a claim
 about the robustness of any model (the model's recommendation is recorded and
-never consulted by the decision).
+never consulted by the decision). On an unsupporting ledger the ceiling is a
+human review: a message the classifier cannot read is INSUFFICIENT and held, a
+readable false claim is denied, and nothing executes.
+
+> **Methodology** (`results/integrity.json`): structural on unsupporting ledgers; by-design rows on supporting ledgers. *Dataset:* development + held-out attack texts over fixed ledgers. *Method:* the same trusted facts with different untrusted text and different model recommendations; count outcomes above the ledger-supported ceiling and executions without support. *Limitations:* a property of the composer, not of any model's robustness. *Sample:* n_attacks=170, n_legit=14, model_influence_n=360, legit_plus_injection_n=84.
 
 ## I. Temporal correctness (`results/temporal.json`)
 
 The invariant: **data available after T must never influence a decision made
-at T.** Seed 42, 2,585 transactions; every check re-scores a transaction with
-records truncated to its own timestamp, then again with records added
-1, 30, 90 days later.
+at T.** Two generator worlds (seeds 42, 7; 5,191 transactions), a stratified sample
+of 192 transactions (half fraud-labelled, half legitimate, spread over the timeline).
+Every sampled transaction is re-scored with records truncated to its own
+timestamp, then again with one kind of future record appended at every offset
+(1, 7, 30, 90 days later) -- 9 kinds, 1,728 perturbation runs over 19,392 future
+records -- and each time both the transaction assessment and the account
+monitor at T1 must be byte-identical. **0 leaks in 3,648 decisions
+tested.** Rates are exact counts, not rounded; with zero leaks the one-sided
+95% (Clopper-Pearson) upper bound on the per-decision leak rate is 0.082%.
+Comparisons from one sample are correlated, so the conservative reading is
+per sample: 0 of 192, upper bound 1.55%.
 
-| Check | Rate | kind |
-|---|---:|---|
-| truncation: a transaction's risk assessment differs when records after it are removed (sample 24 of 2,585) | 0.0% | structural |
-| perturbation: adding records 1, 30, 90 days after T1 changes the T1 transaction assessment | 0.0% | structural |
-| perturbation: the same future records change the T1 monitoring assessment | 0.0% | structural |
+The 2.2.0 extension added `account_status`, `payout_change` and
+`security_event`. On a 24-transaction probe before the fix, a freeze after T1
+changed 24/24 transaction assessments and 24/24 monitor results, and a payout
+change after T1 changed 24/24 transaction assessments: both read the
+account's *current* fields. Status is now read as of the decision
+(`Account.status_at`) and payout sharing from the bank accounts held at T1;
+the rows below are after the fix.
 
-Expected: all rates 0.0: a decision at T1 reads only records at or before T1. `tests/test_temporal_leakage.py` and
+| Check | Changed / tested | Rate (exact) | kind |
+|---|---:|---:|---|
+| truncation: a transaction's risk assessment differs when records after it are removed (seeds 42, 7, 5,191 transactions) | 0 / 192 | 0.000000 | structural |
+| perturbation: records added 1, 7, 30, 90 days after T1 change the T1 transaction assessment | 0 / 1,728 | 0.000000 | structural |
+| perturbation: the same future records change the T1 account-monitor assessment | 0 / 1,728 | 0.000000 | structural |
+| **every check above** | **0 / 3,648** | **0.000000** | 95% upper bound 0.082% |
+
+| Future record kind | What is appended (at every offset) | records | transaction changed | monitoring changed | leaks / tested |
+|---|---|---:|---:|---:|---:|
+| `dispute` | a dispute filed on the account's latest earlier purchase | 768 | 0 / 192 | 0 / 192 | 0 / 384 |
+| `device_burst` | a new device and an eight-purchase burst abroad on it | 6,912 | 0 / 192 | 0 / 192 | 0 / 384 |
+| `merchant` | a new flagged high-risk merchant and five purchases there | 4,608 | 0 / 192 | 0 / 192 | 0 / 384 |
+| `graph` | a new account on the same payout instrument and a circular transfer through it | 2,304 | 0 / 192 | 0 / 192 | 0 / 384 |
+| `session` | a login with credential and payout changes that failed MFA | 768 | 0 / 192 | 0 / 192 | 0 / 384 |
+| `account_status` | the account frozen after T1 (a current-state field) | 192 | 0 / 192 | 0 / 192 | 0 / 384 |
+| `payout_change` | new bank accounts added after T1 and the payout moved to one of them | 768 | 0 / 192 | 0 / 192 | 0 / 384 |
+| `risk_assessment` | stored HIGH risk assessments for the account, the merchant and a future transaction | 2,304 | 0 / 192 | 0 / 192 | 0 / 384 |
+| `security_event` | stored CRITICAL AI-security events dated after T1 | 768 | 0 / 192 | 0 / 192 | 0 / 384 |
+
+Expected: all counts 0: a decision at T1 reads only records at or before T1. `tests/test_temporal_leakage.py` and
 `tests/test_entity_pointintime.py` pin the same property per feature (baselines,
-device knowledge, entity profiles, graph edges, monitoring windows).
+device knowledge, entity profiles, graph edges, monitoring windows). This is a
+deterministic check over the generator's world, not a proof over every record.
+
+> **Methodology** (`results/temporal.json`): structural (synthetic data). *Dataset:* two seeded synthetic worlds (seeds 42 and 7), a stratified transaction sample (half fraud-labelled). *Method:* truncation equivalence, then nine kinds of future record at +1/7/30/90 days, one kind at a time; the transaction assessment and the account monitor at T1 must be byte-identical; exact counts with a one-sided 95% Clopper-Pearson bound when zero. *Limitations:* a deterministic check over two generator worlds, not a proof over every record; comparisons from one sample are correlated (read the per-sample bound); a current-state field with no recorded start (legacy account status) cannot be point-in-time. *Sample:* comparisons=1728, decisions_tested=3648, dataset_transactions=5191, dataset_sample=192.
 
 ## J. Performance (`results/performance.json`)
 
 macOS-26.5.2-arm64-arm-64bit-Mach-O, Python 3.13.7; offline agent; workloads: 310-char injected
-narrative, 40-transaction baseline, graph of 8,219 nodes / 14,824 edges,
+narrative, 40-transaction baseline, graph of 8,403 nodes / 14,638 edges,
 14-rule policy over a 26-field context, 500 end-to-end iterations.
 Sequential, single-threaded, persistence excluded; machine-dependent.
 
 | Component | p50 ms | p95 ms | p99 ms | ops/s |
 |---|---:|---:|---:|---:|
-| `normalize` | 0.0176 | 0.0182 | 0.0243 | 56,195 |
-| `gateway_inspect` | 0.2223 | 0.2308 | 0.246 | 4,481 |
-| `claim_classify` | 0.0186 | 0.0189 | 0.0228 | 53,282 |
-| `evidence_reconcile` | 0.0343 | 0.0357 | 0.0424 | 28,793 |
-| `risk_score_transaction` | 0.0145 | 0.0152 | 0.0205 | 67,001 |
-| `graph_linked_accounts` | 0.0045 | 0.0046 | 0.0047 | 218,168 |
-| `graph_neighborhood_d2` | 0.1205 | 0.1261 | 0.1577 | 8,171 |
-| `policy_evaluate` | 0.0132 | 0.0135 | 0.0169 | 70,650 |
-| `decision_compose` | 0.0366 | 0.038 | 0.0441 | 27,088 |
-| `audit_append` | 0.0088 | 0.0101 | 0.0132 | 110,118 |
-| `e2e_dispute_pipeline` | 0.4847 | 0.5025 | 0.526 | 2,050 |
+| `normalize` | 0.0178 | 0.0184 | 0.0187 | 56,809 |
+| `gateway_inspect` | 0.2226 | 0.2258 | 0.2295 | 4,490 |
+| `claim_classify` | 0.2557 | 0.26 | 0.2672 | 3,907 |
+| `evidence_reconcile` | 0.0342 | 0.0347 | 0.0391 | 28,995 |
+| `risk_score_transaction` | 0.0145 | 0.0147 | 0.0168 | 68,335 |
+| `graph_linked_accounts` | 0.0039 | 0.004 | 0.0041 | 250,753 |
+| `graph_neighborhood_d2` | 0.053 | 0.0555 | 0.0586 | 18,562 |
+| `policy_evaluate` | 0.0145 | 0.0147 | 0.0174 | 65,707 |
+| `decision_compose` | 0.0372 | 0.0385 | 0.0431 | 26,672 |
+| `audit_append` | 0.0086 | 0.0098 | 0.0107 | 113,888 |
+| `e2e_dispute_pipeline` | 0.7163 | 0.7267 | 0.7677 | 1,392 |
 
 A live LLM call (hundreds of milliseconds) dominates real latency by three
 orders of magnitude; Sentinel's own controls are not the bottleneck.
 
+> **Methodology** (`results/performance.json`): empirical, machine-dependent. *Dataset:* fixed workloads (narrative, baseline, graph, policy) on the local machine. *Method:* sequential single-threaded loops; percentiles over n iterations; persistence excluded. *Limitations:* the platform's own overhead only; a live model call dominates real latency. *Sample:* text_chars=310, baseline_transactions=40, graph_nodes=8403, graph_edges=14638, policy_rules=14, policy_context_fields=26, e2e_iterations=500.
+
 ## K. Model / provider evaluation (`results/models.json`)
 
-| Provider | Model | Status | ASR no controls | ASR Sentinel | FP | Note |
-|---|---|---|---|---|---|---|
-| offline | `offline-simulator` | ok | 90.0% | 0.0% | 0.0% |  |
-| anthropic | `claude-opus-5` | not_run | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
+| Provider | Model | Date | Status | ASR no controls | ASR Sentinel | FP | Latency p95 ms | Tokens in / out | Note |
+|---|---|---|---|---|---|---|---|---|---|
+| offline | `offline-simulator` | 2026-09-25 | ok | 90.0% | 0.0% | 0.0% | 0.139 | — |  |
+| anthropic | `claude-opus-5` | 2026-09-25 | not_run | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
+
+Each provider row records the model, the run date, per-class outcomes, agent
+latency and the provider's token totals where its SDK reports them
+(`results/models_rows.json` has one line per attack). Run any provider with
+`sentinel eval run --suite models --provider anthropic`.
 
 Live results depend on provider/model/date and are not claimed to generalise.
 Run `SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models` with your own
 key to fill the live row; nothing here is fabricated. Until then the only
 attack-success figures in this repository are the offline simulator's.
 
+## L. Claim classifier (`results/claims.json`)
+
+The only value ever derived from prose is a claim type, read by a
+deterministic, weighted pattern classifier with an explicit confidence and an
+explicit **abstain** (`sentinel/security/claims.py`). An abstain becomes
+INSUFFICIENT and is held for a human; a recognised non-claim ("it arrived but
+I don't like it") is UNSUPPORTED and denied; a read claim only selects which
+trusted field is checked. Benchmark: 117 hand-authored phrasings in seven
+categories. **The benchmark and the classifier share an author**, so these are
+regression floors on these phrasings, not a generalisation claim -- with one
+exception made as honest as an author can make it: `uncommon_legitimate` is a
+held-out set of 21 unusual but legitimate phrasings (Indian English, slang,
+typos, formal register) written and labelled *before* the classifier was run on
+it. Held-out: written and labelled in the 2.2.0 review before the classifier was run on it. First run, with the classifier as of commit 9693433: 7/21 recognised, 14 abstained, 0 misread. The patterns were then extended against the separate development set, by an author who had seen those 14 misses, so the current number is optimistic; the remaining misses were deliberately not fitted. `development` is the set the patterns were then
+extended against: a fit, reported apart and excluded from the error rates.
+
+| Category | n | accuracy | read as claim | non-claim | abstain | misclassified |
+|---|---:|---:|---:|---:|---:|---:|
+| legitimate_paraphrase | 35 | 100.0% | 35 | 0 | 0 | 0 |
+| ambiguous | 12 | 100.0% | 0 | 0 | 12 | 0 |
+| unsupported | 10 | 100.0% | 0 | 10 | 0 | 0 |
+| adversarial | 12 | 100.0% | 9 | 0 | 3 | 0 |
+| contradictory | 6 | 100.0% | 0 | 0 | 6 | 0 |
+| uncommon_legitimate | 21 | 81.0% | 17 | 0 | 4 | 0 |
+| development | 21 | 100.0% | 19 | 1 | 1 | 0 |
+
+| Metric | Value | meaning |
+|---|---:|---|
+| Coverage | 100.0% | legitimate paraphrases read as a claim |
+| Held-out uncommon wording | 17 / 21 | recognised as its own type (first run, before any change: 7 / 21); every miss abstained -- a human, never a wrong type |
+| False negatives | 4 / 56 (7.1%) | legitimate claims (paraphrases + held-out) not read as their own type: held for a human |
+| False positives | 0 / 28 (0.0%) | ambiguous, unsupported and contradictory messages read confidently as a claim |
+| Misclassification | 0.0% | messages read as a type other than the labelled one |
+| Adversarial wrong type | 0.0% | attack prose read as a claim it does not assert |
+| Abstain rate | 22.2% | all messages held for a human (100% of the ambiguous and contradictory sets by design) |
+
+The composer's guarantee does not depend on any of this: whatever the
+classifier reads, a consequential capability executes only when the ledger
+supports the claim. What the classifier changes is the *cost* side -- how
+often a legitimate customer is held for a human -- and that is what the
+false-negative row measures.
+
+> **Methodology** (`results/claims.json`): synthetic (hand-authored phrasings). *Dataset:* seven categories of dispute phrasings, incl. a held-out set of uncommon legitimate wording and the development set used to extend the patterns. *Method:* each phrasing classified once against its label; false negatives over legitimate categories, false positives over ambiguous / unsupported / contradictory. *Limitations:* the benchmark and the classifier share an author; a regression floor, not a generalisation claim; the held-out number after the pattern change is optimistic (the author had seen the first-run misses). *Sample:* n=117.
+
 ## Reproduce
 
 ```bash
 make eval                      # everything above (200 attacks over three corpora + KYB), writes results/*.json and charts
 make docs                      # re-render this file and every generated block from results/ and the code
-sentinel eval run --suite security|heldout|surfaces|kyb|baselines|ablation|financial|integrity|temporal|performance|models|charts
+sentinel eval run --suite security|heldout|surfaces|kyb|baselines|ablation|financial|integrity|temporal|claims|performance|models|charts
 sentinel eval run --suite financial --full     # larger dataset (400 customers / 12k transactions)
-make test                      # 327 tests, incl. tests/test_results_regression.py which recomputes the headline claims
+make test                      # 564 tests, incl. tests/test_results_regression.py which recomputes the headline claims
 ```

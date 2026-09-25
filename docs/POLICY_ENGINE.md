@@ -15,13 +15,22 @@ is evaluated, the most severe matching outcome wins
 (ALLOW < STEP_UP < REQUIRE_HUMAN_REVIEW < TEMPORARY_HOLD < BLOCK), and every
 match is explained. There is no `else`, no scripting and no model call.
 
-Operators: `!=`, `<`, `<=`, `==`, `>`, `>=`, `contains`, `in`, `is_false`, `is_true`, `not_in`. Numeric comparisons on a non-number are false; `in` /
-`not_in` require a list; `contains` works on lists and strings.
+Operators: `!=`, `<`, `<=`, `==`, `>`, `>=`, `contains`, `in`, `is_false`, `is_true`, `not_in`. `in` / `not_in` require a list; `contains` works on lists
+and strings. Every value a rule reads must have its catalog type (below): a
+string where a number is expected raises, it is not "false".
 
 ## Fail-closed by construction
 
 - **Validation at load** rejects unknown fields, operators, outcomes and
-  type mismatches, so a misconfiguration is caught before any decision.
+  type mismatches; unknown keys in the document, a rule or a condition (a
+  misspelt `unless`, an `"enabled": false` the engine would ignore); a
+  missing `default_outcome` (no implicit ALLOW); and a value a field can never
+  take (an unknown capability, an impossible enum value) -- a gate that could
+  never fire. A misconfiguration is caught before any decision.
+- **Typed context at evaluation.** A value of the wrong type (an amount of
+  `"999999"`, a boolean where a number is expected) raises
+  `PolicyEvaluationError` instead of making a numeric rule quietly false; the
+  composer turns it into a fail-safe `REQUIRE_HUMAN_REVIEW`.
 - **A rule may reference a field only if the composer always provides it or
   the policy declares it in `required_fields`.** At evaluation, a context
   missing any referenced field raises `PolicyEvaluationError`; the composer
@@ -33,6 +42,14 @@ Operators: `!=`, `<`, `<=`, `==`, `>`, `>=`, `contains`, `in`, `is_false`, `is_t
   reports `policy_drift` when the served version no longer has the content the
   decision was made under. A version number is a label a file edit can reuse;
   the hash is what is trusted.
+- **Pinned versions.** `policies/MANIFEST.json` pins the full SHA-256 of every
+  shipped version. A version edited in place, added without pinning or deleted
+  raises `PolicyIntegrityError` before anything is registered, and a store that
+  recorded decisions under a version with other content refuses to open.
+  `sentinel policy pin` pins *new* versions only and refuses to re-pin a
+  changed one: a policy change is a new version. This guards against an
+  accidental in-place edit; it is not a defence against someone who can edit
+  both the policy and the manifest (that is code review and signed releases).
 - **A trusted fact can never overwrite a computed field**: the composer
   writes its own fields first and only fills gaps from the workflow's facts.
 
@@ -101,6 +118,27 @@ contradictory conditions on one field; an empty numeric range; a rule with
 the same conditions as an earlier one. `tests/test_policy_lint.py` covers
 each finding. All shipped versions lint clean (table below).
 
+## Versions: active, historical, what-if
+
+An authoritative evaluation -- one that is recorded, audited, can open a case
+and can execute -- always runs the **active** version of its policy
+(`PolicyRegistry.active`) and the active risk model of its surface. No request
+parameter selects another: the evaluate routes refuse `options.policy_version`
+and `options.risk_model` with 403, the authoritative CLI commands do not have
+the flags, and the engine itself refuses to record a run whose inputs name a
+non-active version (`sentinel/decision/authority.py`). **Historical** versions
+stay loadable only so a recorded decision can be replayed under the policy it
+was made with, or compared with another; replay, the attack simulator and
+scenario runs are **what-ifs** and are never recorded as decisions.
+
+| Policy | Active (authoritative) | Historical (replay / what-if only) |
+|---|---|---|
+| `account-security` | v1 | — |
+| `dispute-refund` | v3 | v1, v2 |
+| `investigation` | v1 | — |
+| `merchant-onboarding` | v1 | — |
+| `transaction-authorization` | v2 | v1 |
+
 ## Shipped policies
 
 | Policy | Version | Workflow | Rules | Default | Required fields | Effective from | Content hash | Lint |
@@ -113,9 +151,6 @@ each finding. All shipped versions lint clean (table below).
 | `merchant-onboarding` | 1 | merchant_onboarding | 8 | ALLOW | `evidence_verdict`, `security_severity`, `registration_status`, `prior_flags`, `mcc_risk` | 2026-09-01 | `199f8087247b` | clean |
 | `transaction-authorization` | 1 | transaction | 8 | ALLOW | `amount`, `risk_score`, `risk_level`, `security_severity`, `account_status`, `merchant_risk_level` | 2026-09-01 | `36ca2e834433` | clean |
 | `transaction-authorization` | 2 | transaction | 8 | ALLOW | `amount`, `risk_score`, `risk_level`, `security_severity`, `account_status`, `merchant_risk_level` | 2026-09-20 | `64b50c9ae7ce` | clean |
-
-Old versions stay loadable so any decision can be replayed under the policy
-it was made with, or under a later one, with a field-level diff.
 
 ### `account-security` v1 -- Account security: protective holds are cheap and reversible; unfreezing and payout changes are human-only.
 

@@ -101,6 +101,51 @@ PENDING_HUMAN → REQUIRE_HUMAN_REVIEW; policy STEP_UP with authorization
 GRANTED → STEP_UP; authorization GRANTED → ALLOW (the candidate capability
 executes); anything else → DENY. Only ALLOW executes a capability.
 
+## Evaluation authority (`sentinel/decision/authority.py`)
+
+A caller may request an evaluation; it may not weaken one. An evaluation is
+**authoritative** -- recorded, audited, able to open a case and to execute --
+only when its inputs carry every control, the active version of its policy
+(content hash included) and the active risk model for its surface. The check
+runs in `_finish` on the inputs the decision was actually composed from,
+before anything is written, and raises `ControlDowngrade` otherwise; the
+application sends what-if runs to a runtime that never persists, and every
+decision carries `authoritative`.
+
+| Parameter class | Parameters | Where accepted |
+|---|---|---|
+| user-controllable | `hardened`, `skip_agent` | every route and command |
+| what-if (system-controlled on the authoritative path) | `controls`, `policy_version`, `risk_model`, `unguarded`, top-level `unguarded`, investigation `as_of` | `/v1/attacks/simulate`, `/v1/scenarios/{key}/run`, `/v1/replay`, `sentinel security attack`, `sentinel scenario run`, `sentinel replay run` -- never recorded as decisions |
+| unknown option keys | anything else | refused (400) |
+
+The evaluate routes answer a what-if switch with 403; the authoritative CLI
+commands do not have the flags. Risk models are bound to their surface: a
+transaction model is refused on the login surface rather than silently
+applied.
+
+## Case lifecycle (`sentinel/cases/service.py`)
+
+RESOLVED is not a target anywhere in the status table; a case reaches it only
+through `record_human_decision`, and RESOLVED is final (no transition, no
+second decision, no reopen).
+
+| From | Status moves (any actor) | Human decision allowed |
+|---|---|---|
+| `OPEN` | `ESCALATED`, `INVESTIGATING`, `TRIAGE`, `WAITING_HUMAN` | no |
+| `TRIAGE` | `ESCALATED`, `INVESTIGATING`, `WAITING_HUMAN` | yes |
+| `INVESTIGATING` | `ESCALATED`, `WAITING_HUMAN` | yes |
+| `WAITING_HUMAN` | `ESCALATED`, `INVESTIGATING` | yes |
+| `RESOLVED` | — (final) | no |
+| `ESCALATED` | `INVESTIGATING` | yes |
+
+A human decision recorded under a reserved system or model actor name
+(`agent`, `ai`, `auto`, `automation`, `bot`, `llm`, `model`, `sentinel`, `system`, any `agent:` / `ai:` / `model:` prefix) or under the name
+of an agent that recommended on the case is refused. Approving needs the
+level the case's capability requires, read from the registry when the case
+opens: `APPROVE_REFUND` → HUMAN_REVIEWER, `APPROVE_TRANSACTION` → HUMAN_REVIEWER, `APPROVE_MERCHANT` → HUMAN_REVIEWER, `FREEZE_ACCOUNT` → HUMAN_REVIEWER, `UNFREEZE_ACCOUNT` → HUMAN_REVIEWER, `CHANGE_PAYOUT` → HUMAN_REVIEWER, `RELEASE_FUNDS` → SENIOR_REVIEWER, `CLOSE_CASE` → HUMAN_REVIEWER, `ALTER_RISK` → SENIOR_REVIEWER, `SKIP_REVIEW` → NOBODY. Denying or escalating needs any human. The reviewer's
+name and level are *declared* -- there is no identity system
+(`docs/LIMITATIONS.md`).
+
 ## Threat taxonomy (15 classes)
 
 | Class | Name | Mechanism | Detection kind | Typical targets |
@@ -161,5 +206,9 @@ because a model asked for one -- and only a human can resolve it.
 | the model's requested capability is never the one executed | `tests/test_invariants.py`, `tests/test_model_output_separation.py` |
 | AI_AGENT is allowed on no consequential capability | `tests/test_capabilities.py` (asserted again by this renderer) |
 | the console holds no decision logic and calls only real routes | `tests/test_ui_api_contract.py` |
-| the evaluate routes refuse `unguarded` / `options.controls` | `tests/test_api_v1.py` |
+| no persisted decision ran with fewer controls, a historical policy or a historical risk model; every evaluate route refuses every what-if switch | `tests/test_evaluation_authority.py` |
+| every consequential capability, requested by a model in every workflow or by a caller, executes only through the full path | `tests/test_capability_trace.py`, `tests/test_policy_adversarial.py` |
+| only a human decision resolves a case; the required review level comes from the registry | `tests/test_case_lifecycle.py` |
+| replay cannot report equivalence for a rewritten record | `tests/test_replay_integrity.py` |
+| every audit corruption is an integrity error, never a crash | `tests/test_audit_corruption.py` |
 | headline results recompute from `results/` | `tests/test_results_regression.py` |

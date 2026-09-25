@@ -28,14 +28,19 @@ calibrated on real payment data.
 
 ## Model versions (`scoring.MODELS`)
 
-| Version | Factors | Thresholds | Description |
-|---|---:|---:|---|
-| `txn-1.0` | 28 | 5 | Initial transaction model. |
-| `txn-1.1` | 28 | 5 | Geography weighted up, device weighted down, moderate-amount threshold 2.5σ. |
-| `txn-2.0` | 33 | 10 | v1 plus short-window velocity, inter-arrival timing, recent trusted account-security events and shared payout instruments. |
-| `acct-1.0` | 10 | 1 | — |
-| `mon-1.0` | 10 | 4 | Single strong pattern -> HIGH; combinations -> CRITICAL. Sentinel demo values. |
-| `disp-1.0` | 7 | 0 | — |
+| Version | Surface | Status | Factors | Thresholds | Description |
+|---|---|---|---:|---:|---|
+| `txn-1.0` | transaction | historical (replay / what-if only) | 28 | 5 | Initial transaction model. |
+| `txn-1.1` | transaction | historical (replay / what-if only) | 28 | 5 | Geography weighted up, device weighted down, moderate-amount threshold 2.5σ. |
+| `txn-2.0` | transaction | **active** | 33 | 10 | v1 plus short-window velocity, inter-arrival timing, recent trusted account-security events and shared payout instruments. |
+| `acct-1.0` | login | **active** | 10 | 1 | — |
+| `mon-1.0` | account | **active** | 10 | 4 | Single strong pattern -> HIGH; combinations -> CRITICAL. Sentinel demo values. |
+| `disp-1.0` | dispute | **active** | 7 | 0 | — |
+
+Authoritative evaluation always scores with the active model of its surface
+(`scoring.ACTIVE`); a request cannot select another, and a model is only ever
+applied to its own surface (`scoring.model_for`). Historical models exist for
+replay and what-if comparison (`docs/SECURITY_MODEL.md`, evaluation authority).
 
 `txn-1.0` → `txn-1.1` exists so replay can show a *model* change (geography
 weighted up, device weighted down, moderate-amount threshold raised).
@@ -53,8 +58,11 @@ only disputes filed earlier; device knowledge asks the time-aware graph
 whether the device was used on the account at least 24 h *before*; entity
 profiles are cached per `(entity, as_of)` and read only records at or before
 `as_of`; every graph edge carries a timestamp and queries take `as_of`; the
-monitoring cycle finder accepts only hops inside its window. Data available
-after T never influences a decision made at T. `results/temporal.json`
+monitoring cycle finder accepts only hops inside its window; an account's
+status counts from when it took effect (`Account.status_at`) and payout
+sharing reads the bank accounts held at T, not the current payout field (both
+were current-state reads until the 2.2.0 temporal extension found them). Data
+available after T never influences a decision made at T. `results/temporal.json`
 measures it; `tests/test_temporal_leakage.py` and
 `tests/test_entity_pointintime.py` pin it.
 
@@ -80,7 +88,7 @@ the transaction; the worst linked-entity profile.
 | `rapid_succession` | Unusually short gap since previous transaction | gap since the previous transaction < 15 min while the account's median gap is ≥ 6 h | velocity | — | — | 15 |
 | `recent_account_changes` | Security-sensitive account change shortly before | a payout, credential or MFA change on a trusted session in the 24 h before the transaction | security | — | — | 20 |
 | `recent_failed_mfa` | Failed second factor shortly before | a trusted session in the 24 h before did not pass the second factor | security | — | — | 8 |
-| `shared_payout_instrument` | Payout instrument shared across accounts | ≥ 2 accounts pay out to this transaction's instrument (as of the transaction) | entity | — | — | 20 |
+| `shared_payout_instrument` | Payout instrument shared across accounts | ≥ 2 accounts share a bank account this account held at the time of the transaction | entity | — | — | 20 |
 | `new_device` | New device | device not registered on the account (24 h rule) and first seen < 24 h ago, or never | device_geo | 17 | 12 | 17 |
 | `young_account_shared_device` | Young account on a shared device | account < 30 days old on a device shared by ≥ 3 accounts | device_geo | 14 | 14 | 14 |
 | `shared_device` | Device shared across accounts | device shared by ≥ 3 accounts (as of the transaction) | device_geo | 8 | 8 | 8 |
@@ -102,6 +110,48 @@ the transaction; the worst linked-entity profile.
 | `linked_entity_critical` | Linked entity critical risk | worst linked-entity risk ≥ 75 | entity | 12 | 12 | 12 |
 | `linked_entity_high` | Linked entity high risk | worst linked-entity risk 50–74 | entity | 8 | 8 | 8 |
 | `linked_entity_medium` | Linked entity medium risk | worst linked-entity risk 25–49 | entity | 4 | 4 | 4 |
+
+Where each feature comes from and what point in time it reads. Every source
+is a trusted record; prose never enters. Point values are heuristics and every
+one of them is a design choice, not a measurement: `docs/EVALUATION.md` §G
+reports how often each factor fires on fraud-labelled and on legitimate
+transactions, which is the honest measure of how much each one is worth.
+
+| Factor | Source (trusted record) | Time semantics | Reads |
+|---|---|---|---|
+| `amount_anomaly_extreme` | account baseline (earlier transactions) | as of the transaction | z-score, unbounded |
+| `amount_anomaly_high` | account baseline | as of the transaction | z-score |
+| `amount_anomaly_moderate` | account baseline | as of the transaction | z-score |
+| `amount_ratio_small_baseline` | account baseline (< 5 transactions) | as of the transaction | ratio to mean |
+| `velocity_burst` | account's earlier transactions | previous 60 minutes | count |
+| `velocity_spike` | account's earlier transactions + baseline daily count | previous 60 minutes | count vs baseline |
+| `velocity_elevated` | account's earlier transactions + baseline daily count | previous 60 minutes | count vs baseline |
+| `rapid_fire` | account's earlier transactions | previous 10 minutes | count |
+| `rapid_succession` | previous transaction + baseline median gap | gap to the previous transaction | minutes vs hours |
+| `recent_account_changes` | authentication service sessions | previous 24 hours | event set |
+| `recent_failed_mfa` | authentication service sessions | previous 24 hours | boolean |
+| `shared_payout_instrument` | entity graph (account -> bank-account instrument, by identity) | instruments added and edges dated at or before the transaction; not the account's current payout field | account count |
+| `new_device` | entity graph (account -> device) | registered or used >= 24 h before the transaction | boolean + hours |
+| `young_account_shared_device` | account record + entity graph | as of the transaction | days, account count |
+| `shared_device` | entity graph (device -> accounts) | edges dated at or before the transaction | account count |
+| `impossible_travel` | account's earlier transactions | previous 2 hours | country change |
+| `new_country` | account baseline (usual countries) | as of the transaction | boolean |
+| `merchant_risk_critical` | merchant entity profile | as of the transaction | 0-100 |
+| `merchant_risk_high` | merchant entity profile + MCC tier | as of the transaction | 0-100 / tier |
+| `merchant_risk_medium` | merchant entity profile + MCC tier | as of the transaction | 0-100 / tier |
+| `account_age_new` | account record | as of the transaction | days |
+| `account_age_young` | account record | as of the transaction | days |
+| `new_instrument` | payment instrument record | as of the transaction | days |
+| `auth_none` | payment-switch record | the transaction itself | enum |
+| `auth_weak` | payment-switch record | the transaction itself | enum |
+| `chargeback_high` | disputes filed before the transaction | as of the transaction | rate 0-1 |
+| `chargeback_some` | disputes filed before the transaction | as of the transaction | rate 0-1 |
+| `unusual_hour` | account baseline (usual hours, >= 10 transactions) | as of the transaction | hour |
+| `new_merchant` | account baseline (merchants seen) | as of the transaction | boolean |
+| `repeat_merchant_burst` | account's earlier transactions | previous 60 minutes | count |
+| `linked_entity_critical` | worst linked device / account profile | as of the transaction, account status included (Account.status_at) | 0-100 |
+| `linked_entity_high` | worst linked device / account profile | as of the transaction, account status included (Account.status_at) | 0-100 |
+| `linked_entity_medium` | worst linked device / account profile | as of the transaction | 0-100 |
 
 Thresholds:
 

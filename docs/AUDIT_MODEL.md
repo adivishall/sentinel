@@ -21,10 +21,20 @@ from 0. `detail` is redacted before hashing: any of `document`, `narrative`, `pr
 SHA-256 and length, so **no untrusted prose is ever persisted in the chain**
 (detector spans are hashed too).
 
-## Verification (`sentinel audit verify`, `GET /v1/audit/verify`)
+A decision's event also records, in `detail`, the SHA-256 of the decision's
+input snapshot (`snapshot_hash`), the risk-model version and the engine
+version. Replay checks the stored snapshot against that hash and takes the
+recorded side of its comparison from the event, so a decision row and a
+snapshot edited consistently in the database cannot replay as "no change"
+(`tests/test_replay_integrity.py`).
+
+## Verification (`sentinel audit verify [--file PATH]`, `GET /v1/audit/verify`)
 
 Recomputes the chain from genesis and reports every problem with its
-record index:
+record index; `--file` verifies an exported JSONL chain (`sentinel audit
+export`) without opening a store. A failure prints **AUDIT INTEGRITY ERROR**
+with the problem count and the first bad record and exits with status 2 --
+never a parser traceback, never a silent pass:
 
 | Tampering | Detected by |
 |---|---|
@@ -32,11 +42,14 @@ record index:
 | an event deleted | `sequence` gap on the following record, and its `previous_hash` no longer matches |
 | an event inserted | `sequence` collision and a broken link on the record after it |
 | events reordered | `previous_hash` mismatch |
-| a record unreadable | reported as unreadable; verification stops there |
+| a record unreadable (malformed JSON, truncated line, missing field) | reported as unreadable with the reason; verification continues, so later problems are reported too, and the link from the unreadable record is not assumed |
 | the chain truncated at the end | the stored length / head no longer match a checkpoint |
 
-`tests/test_audit_chain.py` and `tests/test_data_store_replay.py` exercise
-each row, including a byte edited on disk in the JSONL and SQLite backends.
+`tests/test_audit_chain.py`, `tests/test_data_store_replay.py`,
+`tests/test_rc_hardening.py` and `tests/test_audit_corruption.py` exercise each
+row -- malformed JSON, a truncated line, a missing field, a wrong hash, a wrong
+predecessor, deleted / inserted / reordered lines, a cut last line -- through
+the library and the CLI, and edited rows in the SQLite store.
 
 ## Backends and lookups
 
