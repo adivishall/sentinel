@@ -38,6 +38,7 @@ jobs:
           python -m sentinel eval run --suite ablation --out /tmp/results
           python -m sentinel eval run --suite integrity --out /tmp/results
           python -m sentinel eval run --suite temporal --out /tmp/results
+          python -m sentinel eval run --suite claims --out /tmp/results
       - name: CLI + audit chain smoke
         env:
           SENTINEL_FORCE_OFFLINE: "1"

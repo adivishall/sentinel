@@ -10,6 +10,7 @@ from sentinel.evaluation import (
     baselines,
     bench,
     charts,
+    claims,
     financial,
     harness,
     heldout,
@@ -32,13 +33,20 @@ SUITES = (
     "financial",
     "integrity",
     "temporal",
+    "claims",
     "performance",
     "models",
     "charts",
 )
 
 
-def run_suite(name: str = "full", out_dir: str = "results", full: bool = False) -> dict[str, Any]:
+def run_suite(
+    name: str = "full",
+    out_dir: str = "results",
+    full: bool = False,
+    provider: str = "all",
+    sample: int | None = None,
+) -> dict[str, Any]:
     t0 = time.time()
     results: dict[str, Any] = {}
     names = list(SUITES) if name == "full" else [name]
@@ -63,10 +71,12 @@ def run_suite(name: str = "full", out_dir: str = "results", full: bool = False) 
             results[n] = integrity.main(out_dir)
         elif n == "temporal":
             results[n] = temporal.main(out_dir)
+        elif n == "claims":
+            results[n] = claims.main(out_dir)
         elif n == "performance":
             results[n] = bench.main(out_dir)
         elif n == "models":
-            results[n] = models.main(out_dir)
+            results[n] = models.main(out_dir, sample=sample, provider=provider)
         elif n == "charts":
             results[n] = {"charts": charts.main(out_dir)}
         else:
@@ -175,6 +185,17 @@ def run_suite(name: str = "full", out_dir: str = "results", full: bool = False) 
                 )
             },
             "performance": {k2: v.get("p95_ms") for k2, v in p.get("components", {}).items()},
+            "claims": {
+                k2: results.get("claims", {}).get(k2)
+                for k2 in (
+                    "n",
+                    "coverage",
+                    "false_positive_rate",
+                    "misclassification_rate",
+                    "abstain_rate",
+                    "adversarial_wrong_type_rate",
+                )
+            },
         }
         write_json(out_dir, "summary.json", summary)
         results["summary"] = summary

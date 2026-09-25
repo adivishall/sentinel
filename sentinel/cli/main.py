@@ -650,7 +650,9 @@ def cmd_scenario(args: argparse.Namespace) -> int:
 def cmd_eval(args: argparse.Namespace) -> int:
     from sentinel.evaluation.runner import run_suite
 
-    res = run_suite(args.suite, out_dir=args.out, full=args.full)
+    res = run_suite(
+        args.suite, out_dir=args.out, full=args.full, provider=args.provider, sample=args.sample
+    )
     if args.json:
         print(json.dumps(res, indent=2, default=str))
     return 0
@@ -885,6 +887,7 @@ def build_parser() -> argparse.ArgumentParser:
             "financial",
             "integrity",
             "temporal",
+            "claims",
             "performance",
             "models",
             "charts",
@@ -892,6 +895,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ev.add_argument("--out", default="results")
     ev.add_argument("--full", action="store_true", help="larger financial dataset")
+    ev.add_argument(
+        "--provider",
+        default="all",
+        choices=["all", "offline", "anthropic"],
+        help="models suite: which provider(s) to run against the corpus",
+    )
+    ev.add_argument("--sample", type=int, default=None, help="models suite: subsample the corpus")
 
     b = sub.add_parser("bench")
     b.add_argument("--out", default="results")

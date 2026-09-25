@@ -41,6 +41,7 @@ SUITES = (
     "temporal",
     "performance",
     "models",
+    "claims",
 )
 
 GEN_TARGETS = (
@@ -134,7 +135,7 @@ def _scn(d: dict[str, Any]) -> str:
 
 
 def render_evaluation(R: dict[str, Any], tests: int) -> str:
-    s, h, sf, k, b, a, f, i, t, p, m = (R[x] for x in SUITES)
+    s, h, sf, k, b, a, f, i, t, p, m, cl = (R[x] for x in SUITES)
     live = _live_row(m)
     n_classes = len(s["by_class"])
     per_class = s["n_attacks"] // n_classes
@@ -389,6 +390,22 @@ def render_evaluation(R: dict[str, Any], tests: int) -> str:
         "lrl",
     )
     n_all_attacks = s["n_attacks"] + h["n_attacks"] + sf["n_attacks"]
+    cl_cat = tbl(
+        ["Category", "n", "accuracy", "read as claim", "non-claim", "abstain", "misclassified"],
+        [
+            [
+                c,
+                v["n"],
+                pct(v["accuracy"]),
+                v["claim"],
+                v["non_claim"],
+                v["abstain"],
+                v["misclassified"],
+            ]
+            for c, v in cl["by_category"].items()
+        ],
+        "lrrrrrr",
+    )
     return f"""# Evaluation
 
 Every number in this document is produced by one command and written to
@@ -681,12 +698,39 @@ Run `SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models` with your own
 key to fill the live row; nothing here is fabricated. Until then the only
 attack-success figures in this repository are the offline simulator's.
 
+## L. Claim classifier (`results/claims.json`)
+
+The only value ever derived from prose is a claim type, read by a
+deterministic, weighted pattern classifier with an explicit confidence and an
+explicit **abstain** (`sentinel/security/claims.py`). An abstain becomes
+INSUFFICIENT and is held for a human; a recognised non-claim ("it arrived but
+I don't like it") is UNSUPPORTED and denied; a read claim only selects which
+trusted field is checked. Benchmark: {cl['n']} hand-authored phrasings in five
+categories. **The benchmark and the classifier share an author**, so these are
+regression floors on these phrasings, not a generalisation claim.
+
+{cl_cat}
+
+| Metric | Value | meaning |
+|---|---:|---|
+| Coverage | {pct(cl['coverage'])} | legitimate paraphrases read as a claim |
+| False positives | {pct(cl['false_positive_rate'])} | legitimate paraphrases not read as their own type (held for a human or misclassified) |
+| Misclassification | {pct(cl['misclassification_rate'])} | messages read as a type other than the labelled one |
+| Adversarial wrong type | {pct(cl['adversarial_wrong_type_rate'])} | attack prose read as a claim it does not assert |
+| Abstain rate | {pct(cl['abstain_rate'])} | all messages held for a human (100% of the ambiguous and contradictory sets by design) |
+
+The composer's guarantee does not depend on any of this: whatever the
+classifier reads, a consequential capability executes only when the ledger
+supports the claim. What the classifier changes is the *cost* side -- how
+often a legitimate customer is held for a human -- and that is what the
+false-positive column measures.
+
 ## Reproduce
 
 ```bash
 make eval                      # everything above ({n_all_attacks} attacks over three corpora + KYB), writes results/*.json and charts
 make docs                      # re-render this file and every generated block from results/ and the code
-sentinel eval run --suite security|heldout|surfaces|kyb|baselines|ablation|financial|integrity|temporal|performance|models|charts
+sentinel eval run --suite security|heldout|surfaces|kyb|baselines|ablation|financial|integrity|temporal|claims|performance|models|charts
 sentinel eval run --suite financial --full     # larger dataset (400 customers / 12k transactions)
 make test                      # {tests} tests, incl. tests/test_results_regression.py which recomputes the headline claims
 ```
@@ -1808,7 +1852,7 @@ stored prefix must still hash to the checkpointed head.
 
 
 def blocks(R: dict[str, Any], tests: int) -> dict[str, str]:
-    s, h, sf, k, b, a, f, i, t, p, m = (R[x] for x in SUITES)
+    s, h, sf, k, b, a, f, i, t, p, m, cl = (R[x] for x in SUITES)
     from sentinel.policy.loader import DEFAULT_REGISTRY
     from sentinel.risk import scoring
     from sentinel.security.threats import TAXONOMY
@@ -1945,6 +1989,13 @@ rather than approved, because a CRITICAL security finding blocks automatic
 approval. On benign input the rate is {pct(k['fp_rate_benign_input'])} and no merchant the records
 say to reject went live ({pct(k['fn_rate'])} FN). This is the cost of the design and is
 reported, not tuned away."""
+    out["claims"] = f"""The claim classifier is deterministic and explainable (weighted pattern
+families, a negation guard, a hedge detector) and reports a confidence; on a
+{cl['n']}-phrasing benchmark that shares its author it reads {pct(cl['coverage'])} of legitimate
+paraphrases, holds {pct(cl['false_positive_rate'])} of them for a human, never reads attack prose as a
+claim it does not assert ({pct(cl['adversarial_wrong_type_rate'])}), and abstains on {pct(cl['by_category']['ambiguous']['abstain_rate'])} of the
+ambiguous and {pct(cl['by_category']['contradictory']['abstain_rate'])} of the contradictory phrasings. Unseen phrasings still
+degrade to a human review, which is a cost, not a breach (`docs/EVALUATION.md` §L)."""
     out["threat-taxonomy"] = (
         tbl(
             ["Class", "Mechanism", "Caught by"],
