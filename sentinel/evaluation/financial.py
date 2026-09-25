@@ -42,6 +42,64 @@ ACCOUNT_SCENARIOS = (
     "fraud:burst",
 )
 
+# What each synthetic label means and at which level it is supposed to be caught.
+GROUND_TRUTH: dict[str, dict[str, str]] = {
+    "fraud:account_takeover": {
+        "level": "transaction",
+        "definition": "two purchases from a new device in a new country within an hour of a home-country purchase, after a session with credential + payout changes and a failed second factor",
+    },
+    "fraud:burst": {
+        "level": "transaction + account",
+        "definition": "8-12 purchases three minutes apart on an account that normally transacts every few days",
+    },
+    "fraud:graph_linked": {
+        "level": "transaction + account",
+        "definition": "three 17-day-old accounts on one device and one payout bank account, five purchases each at high-risk merchants, then transfers in a circle",
+    },
+    "fraud:structuring": {
+        "level": "account",
+        "definition": "four transfers just under the reporting threshold within a week",
+    },
+    "fraud:dormant_activation": {
+        "level": "account",
+        "definition": "120 days of silence then six purchases in two days",
+    },
+    "exposure:merchant_abuse": {
+        "level": "merchant",
+        "definition": "purchases at a merchant with an injected 30% dispute ratio; the transactions themselves are not fraud",
+    },
+    "legit:high_value": {
+        "level": "decisioning",
+        "definition": "a genuine purchase above the auto-approval limit on a home device; policy must route it to a human, not block it",
+    },
+}
+
+# The signal families a fraud/risk engineer expects each scenario to trip.
+EXPECTED_SIGNALS: dict[str, tuple[str, ...]] = {
+    "fraud:account_takeover": (
+        "new_device",
+        "new_country",
+        "impossible_travel",
+        "recent_account_changes",
+        "recent_failed_mfa",
+        "amount_anomaly_extreme",
+    ),
+    "fraud:burst": (
+        "rapid_fire",
+        "rapid_succession",
+        "velocity_elevated",
+        "velocity_spike",
+        "velocity_burst",
+    ),
+    "fraud:graph_linked": (
+        "young_account_shared_device",
+        "shared_device",
+        "shared_payout_instrument",
+        "account_age_young",
+        "auth_weak",
+    ),
+}
+
 
 def _prf(tp: int, fp: int, fn: int, tn: int) -> dict[str, Any]:
     return {
@@ -77,7 +135,7 @@ def run(
     merchants: int = 30,
     transactions: int = 3000,
     *,
-    model: str = "txn-1.0",
+    model: str = scoring.TRANSACTION_DEFAULT.version,
     policy_sample: int = 400,
     held_out_seeds: tuple[int, ...] = HELD_OUT_SEEDS,
 ) -> dict[str, Any]:
@@ -118,6 +176,16 @@ def _evaluate(
     band: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     hist: Counter[int] = Counter()
     factor_counts: Counter[str] = Counter()
+    # breakdowns: (group key) -> [fraud positives, fraud, legit positives, legit]
+    by_channel: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0, 0])
+    by_segment: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0, 0])
+    by_tier: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0, 0])
+    segment_of = {a.account_id: (app.store.customer(a.customer_id) or a).segment for a in app.store.accounts()}  # type: ignore[union-attr]
+    tier_of = {m.merchant_id: m.mcc_risk for m in app.store.merchants()}
+    missed_rows: list[dict[str, Any]] = []
+    signal_hits: dict[str, Counter[str]] = defaultdict(Counter)
+    signal_hits_missed: dict[str, Counter[str]] = defaultdict(Counter)
+    fp_rows: list[dict[str, Any]] = []
     for t, ra in rows:
         fraud = t.label in TXN_SCENARIOS
         positive = ra.level.rank >= RiskLevel.HIGH.rank
@@ -132,12 +200,59 @@ def _evaluate(
         if fraud:
             per_scn[t.label][1] += 1
             per_scn[t.label][0] += int(positive)
+            for f in ra.factors:
+                (signal_hits if positive else signal_hits_missed)[t.label][f.code] += 1
+            if not positive:
+                missed_rows.append(
+                    {
+                        "transaction_id": t.transaction_id,
+                        "scenario": t.label,
+                        "score": ra.score,
+                        "level": ra.level.value,
+                        "factors": [f"{f.code}:{f.points:+d}" for f in ra.factors],
+                        "components": ra.components,
+                        "missing_expected": [
+                            s
+                            for s in EXPECTED_SIGNALS.get(t.label, ())
+                            if s not in {f.code for f in ra.factors}
+                        ],
+                    }
+                )
+        elif positive:
+            fp_rows.append(
+                {
+                    "transaction_id": t.transaction_id,
+                    "label": t.label,
+                    "score": ra.score,
+                    "factors": [f"{f.code}:{f.points:+d}" for f in ra.factors],
+                }
+            )
+        for grp, key in (
+            (by_channel, t.channel),
+            (by_segment, segment_of.get(t.account_id, "unknown")),
+            (by_tier, tier_of.get(t.merchant_id, "unknown")),
+        ):
+            g = grp[key]
+            g[1 if fraud else 3] += 1
+            g[0 if fraud else 2] += int(positive)
         band[ra.level.value][1] += 1
         band[ra.level.value][0] += int(fraud)
         hist[ra.score // 10 * 10] += 1
         for f in ra.factors:
             factor_counts[f.code] += 1
     n = len(rows)
+
+    def _grp(d: dict[str, list[int]]) -> dict[str, Any]:
+        return {
+            k: {
+                "n": v[1] + v[3],
+                "fraud_n": v[1],
+                "recall": round(v[0] / v[1], 3) if v[1] else None,
+                "legit_n": v[3],
+                "false_positive_rate": round(v[2] / v[3], 4) if v[3] else None,
+            }
+            for k, v in sorted(d.items())
+        }
 
     # ---- account level: transaction monitoring over every account ---------------------
     labels_by_account: dict[str, set[str]] = defaultdict(set)
@@ -208,10 +323,32 @@ def _evaluate(
         },
         "risk_model": model,
         "positive_definition": "risk level HIGH or CRITICAL",
+        "ground_truth": GROUND_TRUTH,
+        "stages": {
+            "screening": "transaction-level risk band on every transaction (transaction_level)",
+            "decisioning": "policy outcome of the full pipeline on a sample (policy_sample)",
+            "investigation_triage": "account-level monitoring over the account's activity (account_level)",
+        },
         "transaction_level": {
             **_prf(tp, fp, fn, tn),
             "scenarios": list(TXN_SCENARIOS),
             "prevalence": round((tp + fn) / max(1, n), 4),
+            "by_channel": _grp(by_channel),
+            "by_account_segment": _grp(by_segment),
+            "by_merchant_tier": _grp(by_tier),
+            "miss_breakdown": {
+                scn: {
+                    "n": per_scn[scn][1],
+                    "detected": per_scn[scn][0],
+                    "missed": per_scn[scn][1] - per_scn[scn][0],
+                    "dominant_signals_detected": dict(signal_hits[scn].most_common(6)),
+                    "dominant_signals_missed": dict(signal_hits_missed[scn].most_common(6)),
+                    "expected_signals": list(EXPECTED_SIGNALS.get(scn, ())),
+                }
+                for scn in sorted(per_scn)
+            },
+            "missed_examples": missed_rows[:40],
+            "false_positive_examples": fp_rows[:20],
         },
         "account_level": {
             **_prf(atp, afp, afn, atn),
