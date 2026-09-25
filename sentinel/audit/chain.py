@@ -72,6 +72,19 @@ def _list(v: object) -> list[object]:
     return list(v) if isinstance(v, (list, tuple)) else []
 
 
+UNREADABLE = "_unreadable"
+
+
+def _decode(raw: str | bytes) -> dict[str, object]:
+    """A stored record, or an ``{_unreadable: reason}`` marker so that verification
+    reports a malformed record at its index instead of crashing before it runs."""
+    try:
+        obj = json.loads(raw)
+    except (ValueError, UnicodeDecodeError) as e:
+        return {UNREADABLE: f"malformed JSON ({type(e).__name__})"}
+    return dict(obj) if isinstance(obj, dict) else {UNREADABLE: "record is not an object"}
+
+
 @dataclass(frozen=True)
 class AuditEvent:
     event_id: str
@@ -235,8 +248,9 @@ class JsonlBackend:
                 for raw in fh:
                     ln = raw.strip()
                     if ln:
-                        rec = json.loads(ln)
-                        self._register(rec, len(offsets))
+                        rec = _decode(ln)
+                        if UNREADABLE not in rec:
+                            self._register(rec, len(offsets))
                         offsets.append(pos)
                     pos += len(raw)
         self._offsets = offsets
@@ -251,7 +265,7 @@ class JsonlBackend:
     def _read_at_offset(self, offset: int) -> dict[str, object]:
         with open(self.path, "rb") as fh:
             fh.seek(offset)
-            return dict(json.loads(fh.readline()))
+            return _decode(fh.readline())
 
     def append(self, record: dict[str, object]) -> None:
         offsets = self._ensure_index()
@@ -271,7 +285,7 @@ class JsonlBackend:
             for ln in fh:
                 ln = ln.strip()
                 if ln:
-                    out.append(json.loads(ln))
+                    out.append(_decode(ln))
         return out
 
     def count(self) -> int:
@@ -306,6 +320,10 @@ def verify_records(records: list[dict[str, object]]) -> ChainVerification:
     prev = GENESIS
     first_bad: int | None = None
     for i, rec in enumerate(records):
+        if UNREADABLE in rec:
+            problems.append(f"record {i}: unreadable ({rec[UNREADABLE]})")
+            first_bad = first_bad if first_bad is not None else i
+            break
         try:
             ev = AuditEvent.from_dict(rec)
         except (KeyError, ValueError, TypeError) as e:
@@ -415,6 +433,13 @@ class AuditChain:
         detail: dict[str, object] | None = None,
     ) -> AuditEvent:
         with self._lock:
+            stored = self.backend.count()
+            if stored != self._length:
+                raise AuditIntegrityError(
+                    f"audit chain is inconsistent: the store holds {stored} events but the chain "
+                    f"expects {self._length} (a record was deleted or inserted underneath the "
+                    "chain); refusing to append -- run `sentinel audit verify`"
+                )
             seq = self._length
             prev = self._head
             body = {
@@ -491,15 +516,17 @@ class AuditChain:
                 problems.append("checkpoint signature does not verify (wrong key or edited file)")
         elif key is not None:
             problems.append("checkpoint is unsigned; it cannot be authenticated with the key")
+        first_bad = v.first_bad_sequence
         if v.length < cp.length:
             problems.append(
                 f"chain has {v.length} events but the checkpoint attests {cp.length} (truncated)"
             )
+            first_bad = v.length if first_bad is None else first_bad
         elif cp.length > 0:
             ev = self.at(cp.length - 1)
             if ev is None or ev.event_hash != cp.head_hash:
                 problems.append(
                     f"event #{cp.length - 1} hash does not match the checkpoint head (rewritten history)"
                 )
-        first_bad = v.first_bad_sequence
+                first_bad = cp.length - 1 if first_bad is None else first_bad
         return ChainVerification(not problems, v.length, tuple(problems), first_bad, v.head_hash)

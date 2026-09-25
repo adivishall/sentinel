@@ -12,7 +12,9 @@ import threading
 from dataclasses import asdict
 from typing import Any
 
+from sentinel.audit.chain import UNREADABLE as _UNREADABLE
 from sentinel.audit.chain import AuditIntegrityError
+from sentinel.audit.chain import _decode as _decode_audit
 from sentinel.domain.cases import Case, CaseEvent, HumanDecision
 from sentinel.domain.decisions import Decision
 from sentinel.domain.entities import (
@@ -941,9 +943,31 @@ class SqliteAuditBackend:
                 "-- run `sentinel audit verify`"
             ) from e
 
+    _COLS = "sequence, event_id, decision_id, event_hash, payload"
+
+    @staticmethod
+    def _checked(r: Any) -> dict[str, object]:
+        """The hashed payload, cross-checked against the index columns a lookup used:
+        a side column edited to redirect a lookup is tampering that verify() (which
+        reads payloads only) would not see."""
+        rec = _decode_audit(r["payload"])
+        if _UNREADABLE in rec:
+            return rec
+        if (
+            rec.get("sequence") != r["sequence"]
+            or rec.get("event_id") != r["event_id"]
+            or rec.get("decision_id") != r["decision_id"]
+            or rec.get("event_hash") != r["event_hash"]
+        ):
+            raise AuditIntegrityError(
+                f"audit index columns for sequence {r['sequence']} do not match the hashed "
+                "record (index tampered); run `sentinel audit verify`"
+            )
+        return rec
+
     def read_all(self) -> list[dict[str, object]]:
         return [
-            json.loads(r["payload"])
+            _decode_audit(r["payload"])
             for r in self.store._rows("SELECT payload FROM audit_events ORDER BY sequence")
         ]
 
@@ -951,29 +975,33 @@ class SqliteAuditBackend:
         return self.store.count("audit_events")
 
     def at(self, sequence: int) -> dict[str, object] | None:
-        r = self.store._one("SELECT payload FROM audit_events WHERE sequence = ?", (sequence,))
-        return dict(json.loads(r["payload"])) if r else None
+        r = self.store._one(
+            f"SELECT {self._COLS} FROM audit_events WHERE sequence = ?", (sequence,)
+        )
+        return self._checked(r) if r else None
 
     def tail(self, n: int) -> list[dict[str, object]]:
         rows = self.store._rows(
-            "SELECT payload FROM audit_events ORDER BY sequence DESC LIMIT ?", (max(0, n),)
+            f"SELECT {self._COLS} FROM audit_events ORDER BY sequence DESC LIMIT ?", (max(0, n),)
         )
-        return [json.loads(r["payload"]) for r in rows][::-1]
+        return [self._checked(r) for r in rows][::-1]
 
     def find(
         self, event_id: str | None = None, decision_id: str | None = None
     ) -> dict[str, object] | None:
         if event_id is not None:
-            r = self.store._one("SELECT payload FROM audit_events WHERE event_id = ?", (event_id,))
+            r = self.store._one(
+                f"SELECT {self._COLS} FROM audit_events WHERE event_id = ?", (event_id,)
+            )
             if r:
-                return dict(json.loads(r["payload"]))
+                return self._checked(r)
         if decision_id is not None:
             r = self.store._one(
-                "SELECT payload FROM audit_events WHERE decision_id = ? ORDER BY sequence LIMIT 1",
+                f"SELECT {self._COLS} FROM audit_events WHERE decision_id = ? ORDER BY sequence LIMIT 1",
                 (decision_id,),
             )
             if r:
-                return dict(json.loads(r["payload"]))
+                return self._checked(r)
         return None
 
 
