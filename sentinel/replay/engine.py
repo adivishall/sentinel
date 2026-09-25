@@ -75,6 +75,32 @@ class ReplayResult:
     # was actually recorded -- the engine changed since the decision was made.
     original_drift: bool = False
 
+    @property
+    def engine_drift(self) -> bool:
+        """Alias: the recorded outcome no longer reproduces from its own snapshot."""
+        return self.original_drift
+
+    @property
+    def decision_diff(self) -> list[dict[str, Any]]:
+        return [{"field": d.field, "before": d.before, "after": d.after} for d in self.diffs]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "replay_id": self.replay_id,
+            "decision_id": self.decision_id,
+            "overrides": self.overrides,
+            "original": self.original,
+            "replayed": self.replayed,
+            "changed": self.changed,
+            "decision_diff": self.decision_diff,
+            "diffs": self.decision_diff,
+            "explanation": self.explanation,
+            "created_at": self.created_at,
+            "policy_drift": self.policy_drift,
+            "engine_drift": self.engine_drift,
+            "original_drift": self.original_drift,
+        }
+
 
 def _summary(d: Decision) -> dict[str, Any]:
     return {
