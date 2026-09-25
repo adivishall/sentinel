@@ -56,11 +56,7 @@ def find_contradictions(evidence: EvidenceSet) -> tuple[Contradiction, ...]:
                     field=c.field,
                     claimed=c.value,
                     recorded=f.value,
-                    impact=(
-                        "claim unsupported"
-                        if c.kind.value != "model_assertion"
-                        else "model assertion rejected"
-                    ),
+                    impact="claim unsupported",
                 )
             )
     return tuple(out)

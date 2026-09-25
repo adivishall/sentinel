@@ -1,4 +1,4 @@
-"""Case management: open, transition, attach, resolve. Storage is behind a
+"""Case management: open, transition, resolve. Storage is behind a
 small repository protocol so the SQLite store can back it without the
 service knowing."""
 
@@ -171,22 +171,6 @@ class CaseService:
             now,
         )
         case = replace(case, status=to, events=case.events + (ev,), updated_at=now)
-        self.repo.save(case)
-        return case
-
-    def attach_decision(self, case_id: str, d: Decision, *, actor: str = "sentinel") -> Case:
-        case = self._require(case_id)
-        now = now_iso()
-        ev = CaseEvent(
-            new_id("CEV"), case_id, "evidence_attached", actor, {"decision_id": d.decision_id}, now
-        )
-        case = replace(
-            case,
-            decision_ids=case.decision_ids + (d.decision_id,),
-            evidence_ids=tuple(dict.fromkeys(case.evidence_ids + d.evidence_ids)),
-            events=case.events + (ev,),
-            updated_at=now,
-        )
         self.repo.save(case)
         return case
 

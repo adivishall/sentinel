@@ -98,16 +98,6 @@ class PolicyRegistry:
         except KeyError:
             raise KeyError(f"policy {policy_id!r} has no version {v}; have {versions}") from None
 
-    def latest_for(self, workflow: Workflow) -> Policy:
-        candidates = [p for p in self._policies.values() if p.workflow is workflow]
-        if not candidates:
-            raise KeyError(f"no policy registered for workflow {workflow.value}")
-        by_id: dict[str, Policy] = {}
-        for p in candidates:
-            if p.policy_id not in by_id or p.version > by_id[p.policy_id].version:
-                by_id[p.policy_id] = p
-        return sorted(by_id.values(), key=lambda p: p.policy_id)[0]
-
     def all(self) -> list[Policy]:
         return sorted(self._policies.values(), key=lambda p: (p.policy_id, p.version))
 

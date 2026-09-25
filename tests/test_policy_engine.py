@@ -47,10 +47,8 @@ def test_builtin_policies_load_and_validate():
     assert {"dispute-refund@v1", "dispute-refund@v2", "dispute-refund@v3"} <= set(keys)
     assert DEFAULT_REGISTRY.versions("dispute-refund") == [1, 2, 3]
     assert DEFAULT_REGISTRY.get("dispute-refund").version == 3  # latest by default
-    for wf in Workflow:
-        if wf is Workflow.AI_SECURITY:
-            continue
-        assert DEFAULT_REGISTRY.latest_for(wf).workflow is wf
+    covered = {p.workflow for p in DEFAULT_REGISTRY.all()}
+    assert covered == set(Workflow) - {Workflow.AI_SECURITY}
 
 
 def test_most_severe_outcome_wins_and_all_matches_reported():

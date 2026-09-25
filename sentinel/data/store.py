@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-from dataclasses import asdict
 from typing import Any
 
 from sentinel.audit.chain import UNREADABLE as _UNREADABLE
@@ -590,13 +589,6 @@ class SentinelStore:
         r = self._one("SELECT payload FROM risk_assessments WHERE assessment_id = ?", (aid,))
         return json.loads(r["payload"]) if r else None
 
-    def latest_risk_for(self, entity_type: str, entity_id: str) -> dict[str, Any] | None:
-        r = self._one(
-            "SELECT payload FROM risk_assessments WHERE entity_type = ? AND entity_id = ? ORDER BY computed_at DESC LIMIT 1",
-            (entity_type, entity_id),
-        )
-        return json.loads(r["payload"]) if r else None
-
     def save_security_event(self, ev: SecurityEvent) -> None:
         self._exec(
             "INSERT OR REPLACE INTO security_events VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -754,11 +746,6 @@ class SentinelStore:
                 (*params, limit),
             )
         ]
-
-    def decision_rows(self) -> list[sqlite3.Row]:
-        return self._rows(
-            "SELECT decision_id, workflow, subject_type, subject_id, amount, final_action, risk_score, risk_level, evidence_verdict, security_severity, policy_id, policy_version, policy_outcome, authorization, executed_capability, case_id, created_at FROM decisions ORDER BY created_at DESC"
-        )
 
     def evidence_for(self, did: str) -> list[dict[str, Any]]:
         return [
@@ -1065,7 +1052,3 @@ class SqliteCaseRepository:
                 "SELECT payload FROM cases ORDER BY created_at DESC LIMIT ?", (limit,)
             )
         return [self._from(json.loads(r["payload"])) for r in rows]
-
-
-def as_dict(obj: Any) -> dict[str, Any]:
-    return asdict(obj)

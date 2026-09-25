@@ -10,7 +10,7 @@ gateway, hashed for audit -- but nothing can turn it into a verified fact.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from sentinel.domain.enums import TrustClass
 from sentinel.domain.ids import content_hash
@@ -31,32 +31,6 @@ class UntrustedContent:
 
     def sha256(self) -> str:
         return content_hash(self.text)
-
-    def with_text(self, text: str) -> UntrustedContent:
-        return UntrustedContent(text, self.trust, self.source, self.kind)
-
-
-@dataclass(frozen=True)
-class ProvenanceTag:
-    source: str
-    trust: TrustClass
-    content_hash: str
-    kind: ContentKind = "text"
-    evidence_status: str = "UNVERIFIED"
-
-    @classmethod
-    def of(cls, content: UntrustedContent) -> ProvenanceTag:
-        return cls(content.source, content.trust, content.sha256(), content.kind)
-
-
-@dataclass(frozen=True)
-class Provenanced:
-    """A trusted fact bundle tagged with its origin (used for audit/replay)."""
-
-    source: str
-    trust: TrustClass
-    content_hash: str
-    fields: tuple[str, ...] = field(default_factory=tuple)
 
 
 def wrap_untrusted(content: UntrustedContent) -> str:

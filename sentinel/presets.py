@@ -6,8 +6,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sentinel.domain.enums import TrustClass
-
 LEDGER_DELIVERED = {
     "amount": 18_000,
     "merchant": "StyleStreet",
@@ -26,7 +24,6 @@ class AttackPreset:
     narrative: str
     ledger: dict[str, object]
     document: str | None = None
-    document_trust: TrustClass = TrustClass.DOCUMENT_CONTROLLED
     turns: tuple[str, ...] = field(default_factory=tuple)  # multi-turn presets
     target_capability: str = "APPROVE_REFUND"
     workflow: str = "dispute"

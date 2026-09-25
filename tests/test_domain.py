@@ -15,7 +15,6 @@ from sentinel.domain.enums import (
     Severity,
     TrustClass,
 )
-from sentinel.domain.events import EventBus
 from sentinel.domain.evidence import Claim, Evidence, EvidenceSet
 from sentinel.domain.serialization import to_dict
 
@@ -71,7 +70,7 @@ def test_untrusted_evidence_can_never_be_verified():
     with pytest.raises(ValueError):
         Evidence(
             "EV-m",
-            EvidenceKind.MODEL_ASSERTION,
+            EvidenceKind.DOCUMENT_CLAIM,
             "llm",
             TrustClass.MODEL_GENERATED,
             "verdict",
@@ -109,14 +108,3 @@ def test_to_dict_is_json_serialisable():
     d = to_dict(EvidenceSet.of([fact]))
     json.dumps(d)
     assert d["items"][0]["trust"] == "TRUSTED_INTERNAL"
-
-
-def test_event_bus_publishes_and_keeps_history():
-    bus = EventBus(keep=3)
-    seen = []
-    bus.subscribe("X", lambda e: seen.append(e.subject_id))
-    bus.subscribe("*", lambda e: seen.append("*" + e.name))
-    for i in range(5):
-        bus.emit("X", f"s{i}")
-    assert seen[:2] == ["s0", "*X"]
-    assert len(bus.history) == 3  # bounded

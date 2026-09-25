@@ -340,35 +340,12 @@ def build_routes(app: SentinelApp) -> Router:
 
     # ---- reads -------------------------------------------------------------------------------
     def tx_list(q: Any, b: Any, p: Any) -> Any:
-        rows = app.store.transactions(
+        return app.transaction_list(
             account_id=_q(q, "account_id"),
             merchant_id=_q(q, "merchant_id"),
             limit=_lim(q),
             offset=int(_q(q, "offset") or 0),
         )
-        latest = {
-            d["subject_id"]: d for d in app.store.decisions(workflow="transaction", limit=2000)
-        }
-        out = []
-        for t in rows:
-            d = latest.get(t.transaction_id)
-            out.append(
-                {
-                    **to_dict(t),
-                    "decision": (
-                        {
-                            "decision_id": d["decision_id"],
-                            "final_action": d["final_action"],
-                            "risk_score": d["risk_score"],
-                            "risk_level": d["risk_level"],
-                            "case_id": d.get("case_id"),
-                        }
-                        if d
-                        else None
-                    ),
-                }
-            )
-        return {"transactions": out, "total": app.store.count("transactions")}
 
     r.add("GET", "/v1/transactions", tx_list)
     r.add(
@@ -390,27 +367,9 @@ def build_routes(app: SentinelApp) -> Router:
             ]
         },
     )
-    r.add(
-        "GET",
-        "/v1/merchants",
-        lambda q, b, p: {
-            "merchants": [
-                {**to_dict(m), "risk": to_dict(app.world.engine.merchant_risk(m.merchant_id))}
-                for m in app.store.merchants()[: _lim(q)]
-            ]
-        },
-    )
+    r.add("GET", "/v1/merchants", lambda q, b, p: app.merchant_list(_lim(q)))
     r.add("GET", "/v1/merchants/(?P<id>[^/]+)", lambda q, b, p: _merchant_view(app, p["id"]))
-    r.add(
-        "GET",
-        "/v1/accounts",
-        lambda q, b, p: {
-            "accounts": [
-                {**to_dict(a), "risk": to_dict(app.world.engine.account_risk(a.account_id))}
-                for a in app.store.accounts()[: _lim(q)]
-            ]
-        },
-    )
+    r.add("GET", "/v1/accounts", lambda q, b, p: app.account_list(_lim(q)))
     r.add("GET", "/v1/accounts/(?P<id>[^/]+)", lambda q, b, p: _account_view(app, p["id"]))
     r.add(
         "GET",
@@ -515,7 +474,11 @@ def build_routes(app: SentinelApp) -> Router:
         lambda q, b, p: {"cases": [to_dict(c) for c in app.cases(_q(q, "status"), _lim(q))]},
     )
     r.add("POST", "/v1/cases", case_create)
-    r.add("GET", "/v1/cases/(?P<id>[^/]+)", lambda q, b, p: _case_view(app, p["id"]))
+    r.add(
+        "GET",
+        "/v1/cases/(?P<id>[^/]+)",
+        lambda q, b, p: _or404(app.case_view(p["id"]), "case"),
+    )
     r.add(
         "GET",
         "/v1/cases/(?P<id>[^/]+)/review",
@@ -667,16 +630,9 @@ def build_routes(app: SentinelApp) -> Router:
             raise ApiError(404, f"unknown scenario {p['key']!r}")
         return app.run_scenario(p["key"], options=S.run_options(S.obj(b) if b else {}))
 
-    r.add("GET", "/v1/attacks", lambda q, b, p: {"attacks": [to_dict(a) for a in ATTACKS.values()]})
+    r.add("GET", "/v1/attacks", lambda q, b, p: app.attack_catalog())
     r.add("POST", "/v1/attacks/simulate", simulate)
-    r.add(
-        "GET",
-        "/v1/scenarios",
-        lambda q, b, p: {
-            "scenarios": [to_dict(s) for s in SCENARIOS.values()],
-            "tags": app.store.scenarios(),
-        },
-    )
+    r.add("GET", "/v1/scenarios", lambda q, b, p: app.scenario_catalog())
     r.add("POST", "/v1/scenarios/(?P<key>[a-z_]+)/run", scenario_run)
     r.add("GET", "/v1/evaluations", lambda q, b, p: _evaluations())
     return r
@@ -741,19 +697,6 @@ def _decision_view(app: SentinelApp, did: str) -> Any:
         "evidence": app.store.evidence_for(did),
         "audit_event": app.audit_event(did),
         "snapshot_available": app.store.decision_snapshot(did) is not None,
-    }
-
-
-def _case_view(app: SentinelApp, cid: str) -> Any:
-    c = app.case(cid)
-    if c is None:
-        raise ApiError(404, "case not found")
-    return {
-        "case": to_dict(c),
-        "decisions": [app.store.decision(d) for d in c.decision_ids if app.store.decision(d)],
-        "security_events": [
-            app.store.security_event(e) for e in c.security_event_ids if app.store.security_event(e)
-        ],
     }
 
 

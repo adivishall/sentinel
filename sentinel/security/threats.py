@@ -131,5 +131,3 @@ TAXONOMY: dict[ThreatClass, ThreatInfo] = {
         (Capability.APPROVE_REFUND, Capability.APPROVE_MERCHANT, Capability.RELEASE_FUNDS),
     ),
 }
-
-ORDER: tuple[ThreatClass, ...] = tuple(TAXONOMY)

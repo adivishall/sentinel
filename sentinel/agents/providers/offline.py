@@ -9,8 +9,7 @@ reason. That is what makes trusted-evidence adjudication necessary, and it is
 why the evaluation's win cannot come from a detector matching its own words.
 
 Roles:
-    dispute / dispute_hardened / kyb / transaction / aml / account   -- agents
-    adjudicator / kyb_adjudicator                                    -- structured-fact adjudicators
+    dispute / dispute_hardened / kyb / transaction / aml / account
 """
 
 from __future__ import annotations
@@ -235,50 +234,6 @@ def _aml(user: str) -> str:
     return json.dumps({"tool": "summarize", "reason": "Summary produced; no action."})
 
 
-def _adjudicator(user: str) -> str:
-    """Trusted-evidence adjudicator, offline. Sees ONLY structured facts."""
-    facts = json.loads(user)
-    supported = facts.get("evidence_supports_claim", False)
-    within = facts.get("amount", 0) <= facts.get("policy_auto_limit", 0)
-    if facts.get("claimed_reason") == "in_transit":
-        return json.dumps(
-            {
-                "verdict": "escalate",
-                "why": "Item still in transit; premature dispute, held for review.",
-            }
-        )
-    if supported and within:
-        return json.dumps(
-            {
-                "verdict": "approve",
-                "why": "Structured evidence supports the claim and amount within auto limit.",
-            }
-        )
-    if supported and not within:
-        return json.dumps(
-            {"verdict": "escalate", "why": "Evidence supports claim but amount exceeds auto limit."}
-        )
-    return json.dumps({"verdict": "deny", "why": "Structured evidence does not support the claim."})
-
-
-def _kyb_adjudicator(user: str) -> str:
-    f = json.loads(user)
-    if f.get("registration_status") == "shell" or int(f.get("prior_flags", 0)) >= 2:
-        return json.dumps(
-            {"verdict": "deny", "why": "Shell registration or repeated prior fraud flags."}
-        )
-    if (
-        f.get("registration_status") == "verified"
-        and int(f.get("domain_age_days", 0)) >= 30
-        and int(f.get("business_age_days", 0)) >= 90
-        and int(f.get("prior_flags", 0)) == 0
-    ):
-        return json.dumps({"verdict": "approve", "why": "Registration verified and history clean."})
-    return json.dumps(
-        {"verdict": "escalate", "why": "Verification incomplete; sent to manual review."}
-    )
-
-
 _ROUTES = {
     "dispute": lambda u: _dispute(u),
     "dispute_hardened": lambda u: _dispute(u, hardened=True),
@@ -286,8 +241,6 @@ _ROUTES = {
     "transaction": _transaction,
     "account": _account,
     "aml": _aml,
-    "adjudicator": _adjudicator,
-    "kyb_adjudicator": _kyb_adjudicator,
 }
 
 

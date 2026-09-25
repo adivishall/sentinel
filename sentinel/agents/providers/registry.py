@@ -30,7 +30,3 @@ def get_provider() -> LLMProvider:
             _live = AnthropicProvider()
         return _live
     return _OFFLINE
-
-
-def model_name() -> str:
-    return get_provider().model

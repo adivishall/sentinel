@@ -26,9 +26,5 @@ def content_hash(value: object, length: int = 16) -> str:
     return hashlib.sha256(raw).hexdigest()[:length]
 
 
-def full_hash(value: object) -> str:
-    return content_hash(value, length=64)
-
-
 def now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")

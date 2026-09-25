@@ -166,7 +166,7 @@ def test_invariant_3_model_generated_content_is_never_trusted_evidence():
             "EV",
             __import__(
                 "sentinel.domain.enums", fromlist=["EvidenceKind"]
-            ).EvidenceKind.MODEL_ASSERTION,
+            ).EvidenceKind.DOCUMENT_CLAIM,
             "llm",
             TrustClass.MODEL_GENERATED,
             "verdict",
@@ -186,7 +186,7 @@ def test_invariant_3_model_generated_content_is_never_trusted_evidence():
                 trust=TrustClass.MODEL_GENERATED,
                 kind=__import__(
                     "sentinel.domain.enums", fromlist=["EvidenceKind"]
-                ).EvidenceKind.MODEL_ASSERTION,
+                ).EvidenceKind.DOCUMENT_CLAIM,
             )
         ]
     )

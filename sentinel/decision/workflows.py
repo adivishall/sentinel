@@ -29,19 +29,8 @@ from sentinel.domain.enums import (
     Capability,
     EvidenceKind,
     Severity,
-    ThreatClass,
     TrustClass,
     Workflow,
-)
-from sentinel.domain.events import (
-    AUDIT_RECORDED,
-    CASE_CREATED,
-    DECISION_FINALIZED,
-    HUMAN_REVIEW_REQUESTED,
-    POLICY_EVALUATED,
-    SECURITY_THREAT_DETECTED,
-    TRANSACTION_RISK_ASSESSED,
-    EventBus,
 )
 from sentinel.domain.evidence import Claim, Evidence, Reconciliation
 from sentinel.domain.ids import content_hash, new_id, now_iso
@@ -78,11 +67,8 @@ class Runtime:
     gateway: AISecurityGateway = field(default_factory=lambda: GATEWAY)
     cases: CaseService = field(default_factory=CaseService)
     audit: AuditChain = field(default_factory=AuditChain)
-    bus: EventBus = field(default_factory=EventBus)
     provider: LLMProvider | None = None
     persist: bool = True  # write audit events and open cases
-    security_events: list[SecurityEvent] = field(default_factory=list)
-    decisions: list[Decision] = field(default_factory=list)
 
     def agent(self, key: str) -> Agent:
         return Agent(SPECS[key], self.provider)
@@ -173,32 +159,6 @@ def _finish(
             created_at=now_iso(),
         )
         decision = replace(decision, security_event_id=security_event.event_id)
-        if rt.persist:
-            rt.security_events.append(security_event)
-        rt.bus.emit(
-            SECURITY_THREAT_DETECTED,
-            decision.subject_id,
-            severity=sec.severity.value,
-            classes=[t.value for t in sec.threat_classes],
-        )
-    if risk is not None:
-        rt.bus.emit(
-            (
-                TRANSACTION_RISK_ASSESSED
-                if inputs.workflow is Workflow.TRANSACTION
-                else "RiskAssessed"
-            ),
-            decision.subject_id,
-            score=risk.score,
-            level=risk.level.value,
-        )
-    rt.bus.emit(
-        POLICY_EVALUATED,
-        decision.subject_id,
-        policy=decision.policy.policy_id,
-        version=decision.policy.version,
-        outcome=decision.policy.outcome.value,
-    )
 
     case: Case | None = None
     audit_event: AuditEvent | None = None
@@ -210,11 +170,6 @@ def _finish(
                 case_id=case.case_id,
                 human_review=replace(decision.human_review, case_id=case.case_id),
             )
-            rt.bus.emit(
-                CASE_CREATED, case.case_id, rule=case.opened_by_rule, priority=case.priority.value
-            )
-            if decision.human_review.required:
-                rt.bus.emit(HUMAN_REVIEW_REQUESTED, case.case_id, decision_id=decision.decision_id)
         audit_event = rt.audit.append(
             actor="sentinel",
             workflow=decision.workflow.value,
@@ -250,19 +205,6 @@ def _finish(
         decision = replace(decision, audit_event_id=audit_event.event_id)
         if case is not None:
             rt.cases.link_audit(case.case_id, audit_event.event_id)
-        rt.decisions.append(decision)
-        rt.bus.emit(
-            AUDIT_RECORDED,
-            decision.decision_id,
-            event_id=audit_event.event_id,
-            sequence=audit_event.sequence,
-        )
-    rt.bus.emit(
-        DECISION_FINALIZED,
-        decision.decision_id,
-        action=decision.final_action.value,
-        workflow=decision.workflow.value,
-    )
     return DecisionBundle(
         decision,
         sec,
@@ -492,7 +434,14 @@ def run_transaction(
         Evidence.fact(f"EV-TXN-{i:03d}", "payment_switch", k, v)
         for i, (k, v) in enumerate(pairs, start=1)
     ) + tuple(
-        Evidence.fact(f"EV-RISK-{i:03d}", "risk_engine", f.code, f.points, note=f.label)
+        Evidence.fact(
+            f"EV-RISK-{i:03d}",
+            "risk_engine",
+            f.code,
+            f.points,
+            kind=EvidenceKind.RISK_SIGNAL,
+            note=f.label,
+        )
         for i, f in enumerate(risk.factors, start=1)
     )
     rec = reconcile_records_only(fact_ev, why="payment-switch record and risk signals are trusted")
@@ -739,7 +688,14 @@ def run_investigation(
             security, rt.gateway.inspect_model_output(ai, tool_surface=SPECS["aml"].tool_surface)
         )
     fact_ev = tuple(
-        Evidence.fact(f"EV-MON-{i:03d}", "monitoring_engine", f.code, f.points, note=f.detail)
+        Evidence.fact(
+            f"EV-MON-{i:03d}",
+            "monitoring_engine",
+            f.code,
+            f.points,
+            kind=EvidenceKind.RISK_SIGNAL,
+            note=f.detail,
+        )
         for i, f in enumerate(risk.factors, start=1)
     )
     rec = reconcile_records_only(
@@ -828,7 +784,6 @@ def run_ai_security(
             now_iso(),
         )
         if rt.persist:
-            rt.security_events.append(event)
             audit_event = rt.audit.append(
                 actor="sentinel",
                 workflow=Workflow.AI_SECURITY.value,
@@ -839,9 +794,4 @@ def run_ai_security(
                 kind="security",
                 detail={"classes": [t.value for t in sec.threat_classes], "agent": req.agent_key},
             )
-        rt.bus.emit(SECURITY_THREAT_DETECTED, event.event_id, severity=sec.severity.value)
     return AISecurityResult(sec, ai, event, audit_event)
-
-
-def threat_classes_of(sec: SecurityAssessment) -> tuple[ThreatClass, ...]:
-    return sec.threat_classes

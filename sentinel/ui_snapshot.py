@@ -1,6 +1,9 @@
 """Build a static snapshot of the console's data (computed by the real engine)
 so the GitHub Pages demo can render read-only without a backend. The live
-console (``sentinel serve``) never uses it."""
+console (``sentinel serve``) never uses it.
+
+Every payload here comes from the same ``SentinelApp`` builders and API view
+helpers the routes call, so the static copy cannot drift from the live API."""
 
 from __future__ import annotations
 
@@ -22,74 +25,43 @@ def build_snapshot(app: Any, out: str = "ui/snapshot.json") -> str:
         _merchant_view,
         _texts,
     )
+    from sentinel.policy import lint
+    from sentinel.security.capabilities import matrix
 
-    tx_rows = app.store.transactions(limit=100)
-    latest = {d["subject_id"]: d for d in app.store.decisions(workflow="transaction", limit=2000)}
-    transactions = [
-        {
-            **to_dict(t),
-            "decision": (
-                {
-                    k: latest[t.transaction_id].get(k)
-                    for k in ("decision_id", "final_action", "risk_score", "risk_level", "case_id")
-                }
-                if t.transaction_id in latest
-                else None
-            ),
-        }
-        for t in tx_rows
-    ]
-    tx_views = {t.transaction_id: app.transaction_view(t.transaction_id) for t in tx_rows[:24]}
+    transactions = app.transaction_list(limit=100)
+    merchants = app.merchant_list(60)
+    accounts = app.account_list(60)
     cases = [to_dict(c) for c in app.cases(limit=100)]
     attacks = {k: app.simulate_attack(k) for k in ATTACKS}
     compare = {k: app.simulate_attack(k, compare=True) for k in ATTACKS}
     scenarios = {k: app.run_scenario(k) for k in SCENARIOS}
-    from sentinel.policy import lint
-    from sentinel.security.capabilities import matrix
 
-    accounts = app.store.accounts()[:60]
-    merchants = app.store.merchants()[:60]
     snap = {
         "generated_by": "sentinel ui snapshot (real engine output, static copy)",
         "system": app.system_info(),
         "overview": app.overview(),
-        "transactions": {"transactions": transactions, "total": app.store.count("transactions")},
-        "transaction_views": tx_views,
+        "transactions": transactions,
+        "transaction_views": {
+            t["transaction_id"]: app.transaction_view(t["transaction_id"])
+            for t in transactions["transactions"][:24]
+        },
         "disputes": {
             "disputes": [
                 {**to_dict(d), **_texts(app, d.dispute_id), "decision": None}
                 for d in app.store.disputes(limit=60)
             ]
         },
-        "merchants": {
-            "merchants": [
-                {**to_dict(m), "risk": to_dict(app.world.engine.merchant_risk(m.merchant_id))}
-                for m in merchants
-            ]
-        },
+        "merchants": merchants,
         "merchant_views": {
-            m.merchant_id: _merchant_view(app, m.merchant_id) for m in merchants[:12]
+            m["merchant_id"]: _merchant_view(app, m["merchant_id"])
+            for m in merchants["merchants"][:12]
         },
-        "accounts": {
-            "accounts": [
-                {**to_dict(a), "risk": to_dict(app.world.engine.account_risk(a.account_id))}
-                for a in accounts
-            ]
+        "accounts": accounts,
+        "account_views": {
+            a["account_id"]: _account_view(app, a["account_id"]) for a in accounts["accounts"][:12]
         },
-        "account_views": {a.account_id: _account_view(app, a.account_id) for a in accounts[:12]},
         "cases": {"cases": cases},
-        "case_views": {
-            c["case_id"]: {
-                "case": c,
-                "decisions": [
-                    app.store.decision(d) for d in c["decision_ids"] if app.store.decision(d)
-                ],
-                "security_events": [
-                    e for e in (app.store.security_event(x) for x in c["security_event_ids"]) if e
-                ],
-            }
-            for c in cases[:40]
-        },
+        "case_views": {c["case_id"]: app.case_view(c["case_id"]) for c in cases[:40]},
         "case_reviews": {c["case_id"]: app.review_packet(c["case_id"]) for c in cases[:40]},
         "capabilities": {
             "capabilities": matrix(),
@@ -111,12 +83,9 @@ def build_snapshot(app: Any, out: str = "ui/snapshot.json") -> str:
             for d in app.store.decisions(limit=40)
         },
         "replays": {"replays": app.store.replays(50)},
-        "attacks": {"attacks": [to_dict(a) for a in ATTACKS.values()]},
+        "attacks": app.attack_catalog(),
         "attack_results": attacks,
-        "scenarios": {
-            "scenarios": [to_dict(s) for s in SCENARIOS.values()],
-            "tags": app.store.scenarios(),
-        },
+        "scenarios": app.scenario_catalog(),
         "scenario_results": scenarios,
         "evaluations": _evaluations(),
     }

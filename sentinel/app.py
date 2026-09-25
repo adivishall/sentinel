@@ -1,8 +1,7 @@
 """The application layer: one engine, three surfaces (CLI, API, UI).
 
 ``SentinelApp`` owns the store, the runtime (policies, gateway, cases, audit,
-event bus, provider) and the entity graph / risk engine built over the loaded
-dataset. Every surface calls these methods; none of them re-implements a
+provider) and the entity graph / risk engine built over the loaded dataset. Every surface calls these methods; none of them re-implements a
 decision."""
 
 from __future__ import annotations
@@ -891,11 +890,89 @@ class SentinelApp:
             "decisions": decisions,
         }
 
+    # ---- list / catalog payloads shared by the API routes and the static snapshot ----------
+    def transaction_list(
+        self,
+        *,
+        account_id: str | None = None,
+        merchant_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """Transactions with a summary of the latest decision on each."""
+        rows = self.store.transactions(
+            account_id=account_id, merchant_id=merchant_id, limit=limit, offset=offset
+        )
+        latest = {
+            d["subject_id"]: d for d in self.store.decisions(workflow="transaction", limit=2000)
+        }
+        out = []
+        for t in rows:
+            d = latest.get(t.transaction_id)
+            out.append(
+                {
+                    **to_dict(t),
+                    "decision": (
+                        {
+                            k: d.get(k)
+                            for k in (
+                                "decision_id",
+                                "final_action",
+                                "risk_score",
+                                "risk_level",
+                                "case_id",
+                            )
+                        }
+                        if d
+                        else None
+                    ),
+                }
+            )
+        return {"transactions": out, "total": self.store.count("transactions")}
+
+    def merchant_list(self, limit: int = 50) -> dict[str, Any]:
+        return {
+            "merchants": [
+                {**to_dict(m), "risk": to_dict(self.world.engine.merchant_risk(m.merchant_id))}
+                for m in self.store.merchants()[:limit]
+            ]
+        }
+
+    def account_list(self, limit: int = 50) -> dict[str, Any]:
+        return {
+            "accounts": [
+                {**to_dict(a), "risk": to_dict(self.world.engine.account_risk(a.account_id))}
+                for a in self.store.accounts()[:limit]
+            ]
+        }
+
+    def attack_catalog(self) -> dict[str, Any]:
+        return {"attacks": [to_dict(a) for a in ATTACKS.values()]}
+
+    def scenario_catalog(self) -> dict[str, Any]:
+        return {
+            "scenarios": [to_dict(s) for s in SCENARIOS.values()],
+            "tags": self.store.scenarios(),
+        }
+
     def cases(self, status: str | None = None, limit: int = 100) -> list[Case]:
         return self.runtime.cases.list(status=CaseStatus(status) if status else None, limit=limit)
 
     def case(self, case_id: str) -> Case | None:
         return self.runtime.cases.get(case_id)
+
+    def case_view(self, case_id: str) -> dict[str, Any] | None:
+        """A case with the decisions and security events it links to; None if unknown."""
+        c = self.runtime.cases.get(case_id)
+        if c is None:
+            return None
+        return {
+            "case": to_dict(c),
+            "decisions": [d for d in (self.store.decision(x) for x in c.decision_ids) if d],
+            "security_events": [
+                e for e in (self.store.security_event(x) for x in c.security_event_ids) if e
+            ],
+        }
 
     def review_packet(self, case_id: str) -> dict[str, Any] | None:
         """Everything a human reviewer needs, in one object, with the AI recommendation

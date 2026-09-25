@@ -16,7 +16,7 @@ from sentinel.domain.entities import (
 from sentinel.domain.risk import RiskAssessment
 from sentinel.risk import scoring
 from sentinel.risk.behavioral import BehavioralBaseline, parse_ts
-from sentinel.risk.scoring import Features, RiskModel, Rule
+from sentinel.risk.scoring import Features, RiskModel, Rule, num
 
 
 @dataclass(frozen=True)
@@ -115,42 +115,33 @@ def extract_features(
     }
 
 
-def _f(features: Features, key: str, default: object = 0) -> object:
-    return features.get(key, default)
-
-
-def _num(features: Features, key: str) -> float:
-    v = features.get(key, 0)
-    return float(v) if isinstance(v, (int, float)) else 0.0
-
-
 def _amount_extreme(f: Features, m: RiskModel) -> str | None:
-    z = _num(f, "amount_z")
+    z = num(f, "amount_z")
     return (
-        f"{z:.1f}σ above baseline (mean ₹{_num(f, 'baseline_mean'):,.0f})"
+        f"{z:.1f}σ above baseline (mean ₹{num(f, 'baseline_mean'):,.0f})"
         if z >= m.t("z_extreme", 4)
         else None
     )
 
 
 def _amount_high(f: Features, m: RiskModel) -> str | None:
-    z = _num(f, "amount_z")
+    z = num(f, "amount_z")
     return f"{z:.1f}σ above baseline" if m.t("z_high", 3) <= z < m.t("z_extreme", 4) else None
 
 
 def _amount_moderate(f: Features, m: RiskModel) -> str | None:
-    z = _num(f, "amount_z")
+    z = num(f, "amount_z")
     return f"{z:.1f}σ above baseline" if m.t("z_moderate", 2) <= z < m.t("z_high", 3) else None
 
 
 def _amount_ratio(f: Features, m: RiskModel) -> str | None:
-    if _num(f, "baseline_n") < 5 and _num(f, "amount_ratio") >= 10:
-        return f"{_num(f, 'amount_ratio'):.0f}x the (thin) baseline mean"
+    if num(f, "baseline_n") < 5 and num(f, "amount_ratio") >= 10:
+        return f"{num(f, 'amount_ratio'):.0f}x the (thin) baseline mean"
     return None
 
 
 def _velocity_spike(f: Features, m: RiskModel) -> str | None:
-    v, d = _num(f, "velocity_1h"), _num(f, "baseline_daily_count")
+    v, d = num(f, "velocity_1h"), num(f, "baseline_daily_count")
     return (
         f"{int(v)} transactions in the last hour"
         if v >= max(5.0, m.t("velocity_spike_x", 5) * d)
@@ -159,7 +150,7 @@ def _velocity_spike(f: Features, m: RiskModel) -> str | None:
 
 
 def _velocity_elevated(f: Features, m: RiskModel) -> str | None:
-    v, d = _num(f, "velocity_1h"), _num(f, "baseline_daily_count")
+    v, d = num(f, "velocity_1h"), num(f, "baseline_daily_count")
     if v >= max(5.0, m.t("velocity_spike_x", 5) * d):
         return None
     return (
@@ -170,12 +161,12 @@ def _velocity_elevated(f: Features, m: RiskModel) -> str | None:
 
 
 def _velocity_burst(f: Features, m: RiskModel) -> str | None:
-    v = _num(f, "velocity_1h")
+    v = num(f, "velocity_1h")
     return f"{int(v)} transactions in the last hour" if v >= 8 else None
 
 
 def _rapid_fire(f: Features, m: RiskModel) -> str | None:
-    v = _num(f, "velocity_short")
+    v = num(f, "velocity_short")
     if v >= m.t("rapid_fire_count", 3):
         return (
             f"{int(v)} transactions in the previous {int(m.t('rapid_window_minutes', 10))} minutes"
@@ -185,7 +176,7 @@ def _rapid_fire(f: Features, m: RiskModel) -> str | None:
 
 def _rapid_succession(f: Features, m: RiskModel) -> str | None:
     gap = f.get("gap_minutes")
-    base = _num(f, "baseline_median_gap_hours")
+    base = num(f, "baseline_median_gap_hours")
     if isinstance(gap, (int, float)) and gap < m.t("rapid_gap_minutes", 15):
         if base >= m.t("baseline_gap_hours", 6):
             return f"{gap:.0f} min after the previous transaction; this account's median gap is {base:.0f}h"
@@ -204,13 +195,9 @@ _SENSITIVE_EVENTS = ("payout_change", "credential_change", "mfa_change")
 
 
 def _young_shared(f: Features, m: RiskModel) -> str | None:
-    if _num(f, "account_age_days") < 30 and _num(f, "device_shared_accounts") >= 3:
-        return f"account {int(_num(f, 'account_age_days'))} days old on a device shared by {int(_num(f, 'device_shared_accounts'))} accounts"
+    if num(f, "account_age_days") < 30 and num(f, "device_shared_accounts") >= 3:
+        return f"account {int(num(f, 'account_age_days'))} days old on a device shared by {int(num(f, 'device_shared_accounts'))} accounts"
     return None
-
-
-def _bool(key: str, detail: str) -> Rule:
-    return (key, detail, lambda f, m: detail if f.get(key) else None)  # type: ignore[return-value]
 
 
 RULES: tuple[Rule, ...] = (
@@ -235,8 +222,8 @@ RULES: tuple[Rule, ...] = (
         "shared_payout_instrument",
         "Payout instrument shared across accounts",
         lambda f, m: (
-            f"{int(_num(f, 'payout_shared_accounts'))} accounts pay out to the same instrument"
-            if _num(f, "payout_shared_accounts") >= 2
+            f"{int(num(f, 'payout_shared_accounts'))} accounts pay out to the same instrument"
+            if num(f, "payout_shared_accounts") >= 2
             else None
         ),
     ),
@@ -247,7 +234,7 @@ RULES: tuple[Rule, ...] = (
             (
                 "device never seen on this account"
                 if f.get("device_age_hours") is None
-                else f"device first seen on this account {_num(f, 'device_age_hours'):.1f}h ago"
+                else f"device first seen on this account {num(f, 'device_age_hours'):.1f}h ago"
             )
             if f.get("is_new_device")
             else None
@@ -259,7 +246,7 @@ RULES: tuple[Rule, ...] = (
         "Device shared across accounts",
         lambda f, m: (
             f"{f.get('device_shared_accounts')} accounts"
-            if _num(f, "device_shared_accounts") >= 3
+            if num(f, "device_shared_accounts") >= 3
             else None
         ),
     ),
@@ -279,8 +266,8 @@ RULES: tuple[Rule, ...] = (
         "merchant_risk_critical",
         "Critical-risk merchant",
         lambda f, m: (
-            f"merchant score {int(_num(f, 'merchant_risk_score'))}"
-            if _num(f, "merchant_risk_score") >= 75
+            f"merchant score {int(num(f, 'merchant_risk_score'))}"
+            if num(f, "merchant_risk_score") >= 75
             else None
         ),
     ),
@@ -288,11 +275,11 @@ RULES: tuple[Rule, ...] = (
         "merchant_risk_high",
         "High-risk merchant",
         lambda f, m: (
-            f"merchant score {int(_num(f, 'merchant_risk_score'))}"
-            if 50 <= _num(f, "merchant_risk_score") < 75
+            f"merchant score {int(num(f, 'merchant_risk_score'))}"
+            if 50 <= num(f, "merchant_risk_score") < 75
             else (
                 "high-risk MCC"
-                if f.get("merchant_mcc_risk") == "high" and _num(f, "merchant_risk_score") < 50
+                if f.get("merchant_mcc_risk") == "high" and num(f, "merchant_risk_score") < 50
                 else None
             )
         ),
@@ -302,7 +289,7 @@ RULES: tuple[Rule, ...] = (
         "Medium-risk merchant",
         lambda f, m: (
             "medium-risk MCC"
-            if f.get("merchant_mcc_risk") == "medium" and _num(f, "merchant_risk_score") < 50
+            if f.get("merchant_mcc_risk") == "medium" and num(f, "merchant_risk_score") < 50
             else None
         ),
     ),
@@ -310,8 +297,8 @@ RULES: tuple[Rule, ...] = (
         "account_age_new",
         "Very new account",
         lambda f, m: (
-            f"{int(_num(f, 'account_age_days'))} days old"
-            if _num(f, "account_age_days") < 7
+            f"{int(num(f, 'account_age_days'))} days old"
+            if num(f, "account_age_days") < 7
             else None
         ),
     ),
@@ -319,15 +306,15 @@ RULES: tuple[Rule, ...] = (
         "account_age_young",
         "Young account",
         lambda f, m: (
-            f"{int(_num(f, 'account_age_days'))} days old"
-            if 7 <= _num(f, "account_age_days") < 30
+            f"{int(num(f, 'account_age_days'))} days old"
+            if 7 <= num(f, "account_age_days") < 30
             else None
         ),
     ),
     (
         "new_instrument",
         "New payment instrument",
-        lambda f, m: "instrument added < 1 day ago" if _num(f, "instrument_age_days") < 1 else None,
+        lambda f, m: "instrument added < 1 day ago" if num(f, "instrument_age_days") < 1 else None,
     ),
     (
         "auth_none",
@@ -343,8 +330,8 @@ RULES: tuple[Rule, ...] = (
         "chargeback_high",
         "High chargeback history",
         lambda f, m: (
-            f"{_num(f, 'chargeback_rate'):.1%} chargeback rate"
-            if _num(f, "chargeback_rate") >= 0.1
+            f"{num(f, 'chargeback_rate'):.1%} chargeback rate"
+            if num(f, "chargeback_rate") >= 0.1
             else None
         ),
     ),
@@ -352,8 +339,8 @@ RULES: tuple[Rule, ...] = (
         "chargeback_some",
         "Some chargeback history",
         lambda f, m: (
-            f"{_num(f, 'chargeback_rate'):.1%} chargeback rate"
-            if 0.03 <= _num(f, "chargeback_rate") < 0.1
+            f"{num(f, 'chargeback_rate'):.1%} chargeback rate"
+            if 0.03 <= num(f, "chargeback_rate") < 0.1
             else None
         ),
     ),
@@ -371,14 +358,14 @@ RULES: tuple[Rule, ...] = (
         "repeat_merchant_burst",
         "Repeated merchant burst",
         lambda f, m: (
-            f"{int(_num(f, 'same_merchant_1h'))} at same merchant in 1h"
-            if _num(f, "same_merchant_1h") >= 3
+            f"{int(num(f, 'same_merchant_1h'))} at same merchant in 1h"
+            if num(f, "same_merchant_1h") >= 3
             else None
         ),
     ),
-    ("linked_entity_critical", "Linked entity critical risk", lambda f, m: ", ".join(f.get("linked_entity_ids", []) or []) if _num(f, "linked_entity_risk") >= 75 else None),  # type: ignore[arg-type]
-    ("linked_entity_high", "Linked entity high risk", lambda f, m: ", ".join(f.get("linked_entity_ids", []) or []) if 50 <= _num(f, "linked_entity_risk") < 75 else None),  # type: ignore[arg-type]
-    ("linked_entity_medium", "Linked entity medium risk", lambda f, m: ", ".join(f.get("linked_entity_ids", []) or []) if 25 <= _num(f, "linked_entity_risk") < 50 else None),  # type: ignore[arg-type]
+    ("linked_entity_critical", "Linked entity critical risk", lambda f, m: ", ".join(f.get("linked_entity_ids", []) or []) if num(f, "linked_entity_risk") >= 75 else None),  # type: ignore[arg-type]
+    ("linked_entity_high", "Linked entity high risk", lambda f, m: ", ".join(f.get("linked_entity_ids", []) or []) if 50 <= num(f, "linked_entity_risk") < 75 else None),  # type: ignore[arg-type]
+    ("linked_entity_medium", "Linked entity medium risk", lambda f, m: ", ".join(f.get("linked_entity_ids", []) or []) if 25 <= num(f, "linked_entity_risk") < 50 else None),  # type: ignore[arg-type]
 )
 
 

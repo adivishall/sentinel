@@ -121,14 +121,11 @@ class ClaimType(StrEnum):
 class EvidenceKind(StrEnum):
     LEDGER_FACT = "ledger_fact"
     ACQUIRER_RECORD = "acquirer_record"
-    DEVICE_RECORD = "device_record"
     SESSION_RECORD = "session_record"
     RISK_SIGNAL = "risk_signal"
-    GRAPH_FACT = "graph_fact"
     USER_CLAIM = "user_claim"
     MERCHANT_CLAIM = "merchant_claim"
     DOCUMENT_CLAIM = "document_claim"
-    MODEL_ASSERTION = "model_assertion"
 
 
 class EvidenceStatus(StrEnum):

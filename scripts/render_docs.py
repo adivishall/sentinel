@@ -1563,19 +1563,16 @@ def render_evidence_model() -> str:
         TrustClass,
     )
     from sentinel.evidence.contradiction import COMPATIBILITY
-    from sentinel.security.trust_boundary import UNTRUSTED_LEDGER_KEYS, DisputeFacts, KYBFacts
+    from sentinel.security.trust_boundary import DisputeFacts, KYBFacts
 
     kind_src = {
         "ledger_fact": "the institution's payment ledger (`DisputeFacts`)",
         "acquirer_record": "verified acquirer records (`KYBFacts`)",
-        "device_record": "device service",
         "session_record": "authentication service",
-        "risk_signal": "the risk engine (a trusted computation)",
-        "graph_fact": "the relationship graph",
+        "risk_signal": "the risk or monitoring engine (a trusted computation over records)",
         "user_claim": "cardholder prose",
         "merchant_claim": "merchant application copy",
         "document_claim": "an uploaded document",
-        "model_assertion": "the agent's recommendation",
     }
     for k in EvidenceKind:
         assert k.value in kind_src, f"undocumented evidence kind {k}"
@@ -1706,8 +1703,10 @@ only chooses which field to read.
 ## Trusted facts
 
 `TrustedFacts` subclasses are built from records only (`from_ledger`,
-`from_records`); the keys {', '.join(f'`{k}`' for k in sorted(UNTRUSTED_LEDGER_KEYS))} are never copied
-from a records mapping. Every field renders itself as VERIFIED evidence.
+`from_records`), and each constructor reads its declared fields by name: any
+other key on the mapping (a `narrative`, `document` or `note`) is never
+copied (`tests/test_trust_boundary.py`). Every field renders itself as
+VERIFIED evidence.
 
 {dfields}
 
@@ -1748,12 +1747,13 @@ text and document can add claims and contradictions; they cannot add facts.
 investigations): the evidence is the trusted records themselves and the
 verdict is SUPPORTED; policy and the registry carry the decision.
 
-## The model's recommendation as evidence
+## The model's recommendation is not evidence
 
 The agent's tool call is interpreted into an `AIRecommendation`
-(`MODEL_GENERATED`) and recorded as a `model_assertion` claim with status
-CLAIMED, for explainability and measurement. It is never VERIFIED, never
-reconciled as a fact and never read by the composer's trusted view.
+(`MODEL_GENERATED`) and recorded on the `Decision` as `ai_recommendation`, for
+explainability and measurement. It is never added to an `EvidenceSet`, never
+reconciled and never read by the composer's trusted view; an `Evidence` item
+with `MODEL_GENERATED` trust cannot be VERIFIED even if one is built by hand.
 `tests/test_model_output_separation.py` and `tests/test_evidence.py` pin this.
 """
 

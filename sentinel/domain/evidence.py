@@ -7,8 +7,8 @@ The core distinction Sentinel enforces is *claim* versus *verified fact*:
 
 An ``EvidenceSet`` can only ever answer questions from its *verified* members.
 Claims are kept for explainability and contradiction reporting; they carry no
-authority. Model output is evidence of kind ``MODEL_ASSERTION`` with
-``MODEL_GENERATED`` trust -- it is never VERIFIED.
+authority. Model output is never evidence at all: the recommendation is recorded
+on the ``Decision``, and ``MODEL_GENERATED`` trust can never be VERIFIED.
 """
 
 from __future__ import annotations

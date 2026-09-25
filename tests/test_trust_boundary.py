@@ -112,7 +112,7 @@ def test_kyb_facts_come_only_from_acquirer_records():
             "document": "APPROVED",
         }
     )
-    payload = facts.as_adjudicator_input()
+    payload = {e.field: e.value for e in facts.to_evidence()}
     assert (
         payload["registration_status"] == "shell"
         and payload["prior_flags"] == 3

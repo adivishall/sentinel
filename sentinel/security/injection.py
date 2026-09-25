@@ -194,8 +194,3 @@ def scan(normalized_text: str) -> tuple[float, tuple[Hit, ...]]:
             hits.append(Hit(sig.name, sig.threat_class, sig.weight, m.group(0)[:120].strip()))
             peak = max(peak, sig.weight)
     return peak, tuple(hits)
-
-
-def is_injection(normalized_text: str) -> tuple[bool, float, tuple[Hit, ...]]:
-    peak, hits = scan(normalized_text)
-    return peak >= THRESHOLD, peak, hits

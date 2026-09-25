@@ -27,7 +27,7 @@ from datetime import datetime
 from sentinel.domain.entities import Account, Customer, Device, Dispute, Merchant, Transaction
 from sentinel.domain.enums import RiskLevel
 from sentinel.domain.risk import EntityRiskProfile, RiskFactor
-from sentinel.risk.graph import EntityGraph, Node
+from sentinel.risk.graph import EntityGraph
 
 ENTITY_MODEL_VERSION = "entity-1.1"
 
@@ -341,18 +341,3 @@ class EntityRiskEngine:
             if p.score > worst:
                 worst, who = p.score, (f"account:{other}",)
         return worst, who
-
-    def suspicious_neighbours(
-        self, account_id: str, as_of: str | None = None, threshold: int = 50
-    ) -> tuple[str, ...]:
-        """Linked accounts (shared device / instrument) whose own profile is at or
-        above ``threshold`` as of the time."""
-        at = self._at(as_of)
-        return tuple(
-            a
-            for a in sorted(self.graph.linked_accounts(account_id, at))
-            if self.account_risk(a, as_of=at).score >= threshold
-        )
-
-    def node(self, kind: str, id: str) -> Node:
-        return Node(kind, id)

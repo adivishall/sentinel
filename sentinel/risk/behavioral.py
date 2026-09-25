@@ -127,9 +127,6 @@ class BehavioralBaseline:
     def is_usual_hour(self, hour: int) -> bool:
         return not self.usual_hours or hour in self.usual_hours
 
-    def knows_device(self, device_id: str) -> bool:
-        return device_id in self.common_devices
-
     def knows_country(self, country: str) -> bool:
         return not self.common_countries or country in self.common_countries
 
@@ -137,9 +134,6 @@ class BehavioralBaseline:
         """Novelty is 'never used before', not 'below a share threshold' (v2.0.1
         flagged any merchant under a 10% share as new, on 41% of transactions)."""
         return merchant_id in self.seen_merchants or merchant_id in self.common_merchants
-
-    def knows_instrument(self, instrument_id: str) -> bool:
-        return instrument_id in self.common_instruments
 
     def to_dict(self) -> dict[str, object]:
         return {

@@ -108,9 +108,6 @@ class TrustedFacts:
     KIND: ClassVar[EvidenceKind] = EvidenceKind.LEDGER_FACT
     TRUST: ClassVar[TrustClass] = TrustClass.TRUSTED_INTERNAL
 
-    def as_adjudicator_input(self, claim: ClaimType) -> dict[str, object]:
-        raise NotImplementedError  # pragma: no cover
-
     def to_evidence(self, prefix: str = "EV") -> tuple[Evidence, ...]:
         """Render every verified field as ``Evidence`` (TRUSTED, VERIFIED)."""
         out = []
@@ -200,23 +197,6 @@ class DisputeFacts(TrustedFacts):
             "customer_tenure_days": self.customer_tenure_days,
         }
 
-    def as_adjudicator_input(self, claim: ClaimType) -> dict[str, object]:
-        """The exact JSON object handed to the adjudicator. No prose -- only
-        verified fields plus the coarse claim label and the trusted-only verdict."""
-        return {
-            "amount": self.amount,
-            "merchant": self.merchant,
-            "delivery_status": self.delivery_status,
-            "prior_disputes_90d": self.prior_disputes_90d,
-            "policy_auto_limit": self.policy_auto_limit,
-            "refund_state": self.refund_state,
-            "transaction_status": self.transaction_status,
-            "merchant_response": self.merchant_response,
-            "auth_strength": self.auth_strength,
-            "claimed_reason": claim.value,
-            "evidence_supports_claim": self.supports(claim),
-        }
-
 
 @dataclass(frozen=True)
 class KYBFacts(TrustedFacts):
@@ -242,17 +222,3 @@ class KYBFacts(TrustedFacts):
             prior_flags=as_int(g("prior_flags", 0)),
             mcc_risk=str(g("mcc_risk", "unknown")),
         )
-
-    def as_adjudicator_input(self, claim: ClaimType = ClaimType.UNSPECIFIED) -> dict[str, object]:
-        return {
-            "registration_status": self.registration_status,
-            "domain_age_days": self.domain_age_days,
-            "business_age_days": self.business_age_days,
-            "prior_flags": self.prior_flags,
-            "mcc_risk": self.mcc_risk,
-        }
-
-
-# Fields on a ledger/records mapping that are NOT verified facts and must never
-# be copied into a TrustedFacts.
-UNTRUSTED_LEDGER_KEYS = frozenset({"source", "narrative", "document", "note"})

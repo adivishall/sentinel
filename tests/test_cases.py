@@ -108,11 +108,9 @@ def test_lifecycle_and_human_decision():
     assert svc.list()[0].case_id == c.case_id and svc.list(status=CaseStatus.OPEN) == []
 
 
-def test_attach_decision_and_manual_case():
+def test_manual_case():
     svc = CaseService()
     c = svc.open_manual(Workflow.INVESTIGATION, "manual look", ("account:A",))
-    d = _decision("never arrived", {"amount": 18000, "delivery_status": "delivered"})
-    c = svc.attach_decision(c.case_id, d)
-    assert d.decision_id in c.decision_ids and set(d.evidence_ids) <= set(c.evidence_ids)
+    assert c.status is CaseStatus.OPEN and c.decision_ids == ()
     with pytest.raises(KeyError):
         svc.get_or_fail = svc.transition("nope", CaseStatus.TRIAGE, actor="a")

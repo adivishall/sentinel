@@ -83,9 +83,6 @@ class EntityGraph:
         self.add_edge(self.add_node(sk, sid), self.add_node(dk, did), rel, ts)
 
     # ---- queries ----------------------------------------------------------------
-    def has(self, kind: str, id: str) -> bool:
-        return Node(kind, id) in self._adj
-
     def attrs(self, node: Node) -> dict[str, object]:
         return self._attrs.get(node, {})
 
@@ -131,18 +128,8 @@ class EntityGraph:
         transaction). ``None`` if the pair has no edge at all."""
         return self.first_ts(Node("account", account_id), Node("device", device_id), "USES")
 
-    def device_known(self, account_id: str, device_id: str) -> bool:
-        return Node("device", device_id) in {
-            e.dst for e in self._adj.get(Node("account", account_id), ()) if e.rel == "USES"
-        }
-
     def merchants_for_owner(self, owner_id: str) -> list[str]:
         return [n.id for n in self.neighbors(Node("owner", owner_id), "~OWNED_BY", "merchant")]
-
-    def transactions_for_account(self, account_id: str, as_of: str | None = None) -> list[str]:
-        return [
-            n.id for n in self.neighbors(Node("account", account_id), "MADE", "transaction", as_of)
-        ]
 
     def accounts_for_customer(self, customer_id: str) -> list[str]:
         return [n.id for n in self.neighbors(Node("customer", customer_id), "OWNS", "account")]
@@ -154,14 +141,6 @@ class EntityGraph:
             n.id
             for n in self.neighbors(Node("instrument", instrument_id), "~HAS", "account", as_of)
         ]
-
-    def instruments_for_account(self, account_id: str, as_of: str | None = None) -> list[str]:
-        return [
-            n.id for n in self.neighbors(Node("account", account_id), "HAS", "instrument", as_of)
-        ]
-
-    def entities_for_device(self, device_id: str) -> list[Node]:
-        return self.neighbors(Node("device", device_id))
 
     def linked_accounts(self, account_id: str, as_of: str | None = None) -> set[str]:
         """Accounts reachable through a shared device or shared instrument, as of a time."""

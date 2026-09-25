@@ -18,6 +18,13 @@ from sentinel.domain.risk import RiskAssessment, RiskFactor
 Features = Mapping[str, object]
 
 
+def num(features: Features, key: str) -> float:
+    """A numeric feature as ``float``; ``0.0`` when it is missing or not a number.
+    Every rule table reads features through this so the engines agree on coercion."""
+    v = features.get(key, 0)
+    return float(v) if isinstance(v, (int, float)) else 0.0
+
+
 @dataclass(frozen=True)
 class RiskModel:
     version: str

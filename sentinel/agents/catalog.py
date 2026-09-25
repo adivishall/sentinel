@@ -4,7 +4,7 @@ to recommend -- which is exactly what an attacker tries to trigger."""
 
 from __future__ import annotations
 
-from sentinel.agents.base import Agent, AgentSpec
+from sentinel.agents.base import AgentSpec
 from sentinel.domain.enums import Capability
 
 POLICY_AUTO_LIMIT = 50_000  # ₹ above which a refund must go to a human (demo value)
@@ -115,7 +115,3 @@ SPECS: dict[str, AgentSpec] = {
     "account": ACCOUNT_AGENT,
     "aml": AML_AGENT,
 }
-
-
-def agent(key: str) -> Agent:
-    return Agent(SPECS[key])

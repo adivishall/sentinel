@@ -89,7 +89,7 @@ def test_baseline_statistics_and_deviations():
     )
     assert b.usual_hours == frozenset({10, 11})
     assert b.amount_z(2200) < 2 and b.amount_z(50_000) > 4
-    assert not b.knows_device("DEV-9") and not b.is_usual_hour(3)
+    assert "DEV-9" not in b.common_devices and not b.is_usual_hour(3)
     assert BehavioralBaseline.empty("x").amount_z(10) == 0.0
     assert "average_transaction_amount" in b.to_dict()
 
@@ -183,7 +183,7 @@ def test_graph_queries():
     g, _ = _world()
     assert set(g.accounts_sharing_device("DEV-SHARED")) == {"ACC-1", "ACC-2", "ACC-3", "ACC-4"}
     assert set(g.merchants_for_owner("OWN-2")) == {"M-BAD", "M-SIB"}
-    assert len(g.transactions_for_account("ACC-1")) == 20
+    assert len(g.neighbors(Node("account", "ACC-1"), "MADE", "transaction")) == 20
     assert g.linked_accounts("ACC-1") == {"ACC-2", "ACC-3", "ACC-4"}
     nodes, edges = g.neighborhood(Node("device", "DEV-SHARED"), depth=1)
     assert len(nodes) >= 5 and edges

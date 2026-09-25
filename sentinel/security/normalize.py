@@ -95,8 +95,3 @@ def normalize(text: str) -> str:
     """Canonicalise untrusted text so evasion by unicode tricks fails.
     Idempotent: normalize(normalize(x)) == normalize(x)."""
     return normalize_report(text).text
-
-
-def prepare(text: object) -> str:
-    """validate + normalize in one call."""
-    return normalize(validate(text))

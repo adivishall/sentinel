@@ -8,7 +8,6 @@ as support."""
 
 from __future__ import annotations
 
-from sentinel.domain.decisions import AIRecommendation
 from sentinel.domain.enums import ClaimType, EvidenceKind, EvidenceVerdict, TrustClass
 from sentinel.domain.evidence import Claim, Evidence, EvidenceSet, Reconciliation
 from sentinel.evidence.contradiction import find_contradictions
@@ -41,19 +40,6 @@ def claim_evidence(claim: Claim, evidence_id: str = "EV-CLAIM") -> Evidence | No
         kind=kind,
         trust=claim.trust,
         note=f"claim_type={claim.claim_type.value}",
-    )
-
-
-def model_evidence(ai: AIRecommendation, evidence_id: str = "EV-MODEL") -> Evidence:
-    """The model's wish, recorded as an untrusted assertion for explainability."""
-    return Evidence.claim(
-        evidence_id,
-        ai.agent,
-        "recommended_action",
-        ai.recommended_action,
-        kind=EvidenceKind.MODEL_ASSERTION,
-        trust=TrustClass.MODEL_GENERATED,
-        note=f"{ai.provider}/{ai.model}",
     )
 
 

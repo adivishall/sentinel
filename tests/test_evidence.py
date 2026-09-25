@@ -1,11 +1,9 @@
 """Evidence reconciliation and the contradiction engine."""
 
-from sentinel.domain.decisions import AIRecommendation
-from sentinel.domain.enums import Capability, ClaimType, EvidenceVerdict, TrustClass
+from sentinel.domain.enums import ClaimType, EvidenceVerdict, TrustClass
 from sentinel.domain.evidence import Claim, Evidence, EvidenceSet
 from sentinel.evidence.contradiction import find_contradictions, is_consistent
 from sentinel.evidence.reconcile import (
-    model_evidence,
     reconcile_dispute,
     reconcile_kyb,
     reconcile_records_only,
@@ -80,14 +78,12 @@ def test_document_claim_kept_as_untrusted_evidence():
     assert r.verdict is not EvidenceVerdict.SUPPORTED
 
 
-def test_model_output_is_untrusted_evidence():
-    ai = AIRecommendation(
-        "agent", "approve_refund", Capability.APPROVE_REFUND, 1, "", "offline", "sim"
+def test_model_generated_claim_is_never_read_as_a_fact():
+    e = Evidence.claim(
+        "EV-M", "agent", "recommended_action", "approve_refund", trust=TrustClass.MODEL_GENERATED
     )
-    e = model_evidence(ai)
     assert e.trust is TrustClass.MODEL_GENERATED and not e.is_verified
-    es = EvidenceSet.of([e])
-    assert es.verified_value("recommended_action") is None
+    assert EvidenceSet.of([e]).verified_value("recommended_action") is None
 
 
 def test_kyb_reconciliation():
