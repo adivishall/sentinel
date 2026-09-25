@@ -54,6 +54,7 @@ from sentinel.domain.enums import RiskLevel, Severity, ThreatClass, TrustClass
 from sentinel.domain.risk import RiskAssessment, RiskFactor
 from sentinel.domain.security import SecurityEvent
 from sentinel.evaluation.common import write_json
+from sentinel.evaluation.methodology import methodology
 from sentinel.risk import monitoring
 from sentinel.risk import transaction as txn_risk
 from sentinel.risk.behavioral import parse_ts
@@ -543,31 +544,13 @@ def run(
         "perturbation_by_kind": by_kind,
         "perturbation_examples": b_examples[:10],
         "expected": "all counts 0: a decision at T1 reads only records at or before T1",
-        "methodology": {
-            "kind": "structural (synthetic data)",
-            "sample": n_total,
-            "seeds": list(seeds),
-            "method": (
-                "each sampled transaction (half fraud-labelled, half legitimate, spread over the "
-                "timeline) is re-scored with the dataset truncated to its timestamp, then with "
-                "one kind of future record appended at T1+1/7/30/90 days; the feature snapshot, "
-                "score and factors of the transaction and of the account monitor at T1 must be "
-                "identical. Rates are exact counts over decisions tested, not rounded; the upper "
-                "bound is the one-sided 95% Clopper-Pearson bound for zero observed leaks"
-            ),
-            "limitations": (
-                "a deterministic check over two generator worlds, not a proof over every record; "
-                "comparisons within one sample are correlated, so the per-sample bound "
-                "(sample_leakage_upper_95) is the conservative one; current-state fields without "
-                "a timestamp in the source data (legacy account status) cannot be point-in-time"
-            ),
-        },
         "seconds": round(time.time() - t0, 1),
     }
 
 
 def main(out_dir: str = "results", sample: int = 96) -> dict[str, Any]:
     r = run(sample=sample)
+    r["methodology"] = methodology("temporal", r)
     write_json(out_dir, "temporal.json", r)
     d = r["dataset"]
     print(

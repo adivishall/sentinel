@@ -162,15 +162,33 @@
   },
   "perturbation_examples": [],
   "expected": "all counts 0: a decision at T1 reads only records at or before T1",
+  "seconds": 82.8,
   "methodology": {
     "kind": "structural (synthetic data)",
-    "sample": 192,
-    "seeds": [
-      42,
-      7
-    ],
-    "method": "each sampled transaction (half fraud-labelled, half legitimate, spread over the timeline) is re-scored with the dataset truncated to its timestamp, then with one kind of future record appended at T1+1/7/30/90 days; the feature snapshot, score and factors of the transaction and of the account monitor at T1 must be identical. Rates are exact counts over decisions tested, not rounded; the upper bound is the one-sided 95% Clopper-Pearson bound for zero observed leaks",
-    "limitations": "a deterministic check over two generator worlds, not a proof over every record; comparisons within one sample are correlated, so the per-sample bound (sample_leakage_upper_95) is the conservative one; current-state fields without a timestamp in the source data (legacy account status) cannot be point-in-time"
-  },
-  "seconds": 79.7
+    "dataset": "two seeded synthetic worlds (seeds 42 and 7), a stratified transaction sample (half fraud-labelled)",
+    "method": "truncation equivalence, then nine kinds of future record at +1/7/30/90 days, one kind at a time; the transaction assessment and the account monitor at T1 must be byte-identical; exact counts with a one-sided 95% Clopper-Pearson bound when zero",
+    "limitations": "a deterministic check over two generator worlds, not a proof over every record; comparisons from one sample are correlated (read the per-sample bound); a current-state field with no recorded start (legacy account status) cannot be point-in-time",
+    "sample": {
+      "comparisons": 1728,
+      "decisions_tested": 3648,
+      "dataset_seeds": [
+        42,
+        7
+      ],
+      "dataset_transactions": 5191,
+      "dataset_sample": 192,
+      "dataset_worlds": [
+        {
+          "seed": 42,
+          "transactions": 2594,
+          "sample": 96
+        },
+        {
+          "seed": 7,
+          "transactions": 2597,
+          "sample": 96
+        }
+      ]
+    }
+  }
 }

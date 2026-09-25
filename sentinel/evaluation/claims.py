@@ -30,6 +30,7 @@ from typing import Any
 
 from sentinel.domain.enums import ClaimType
 from sentinel.evaluation.common import pct, write_json
+from sentinel.evaluation.methodology import methodology
 from sentinel.security.claims import classify
 
 NR, IT, DUP, CAN, UN = (
@@ -411,18 +412,13 @@ def run() -> dict[str, Any]:
             ),
             "development": "written after the held-out run and used to extend the patterns: a fit, not an estimate",
         },
-        "methodology": {
-            "kind": "synthetic",
-            "sample": n,
-            "method": "each phrasing is classified once; a claim is correct when its type matches the label, an abstain or non-claim when the label expects it",
-            "limitations": "hand-authored phrasings; regression floor, not a generalisation claim; no ledger is involved and the composer's guarantee does not depend on the classifier",
-        },
         "seconds": round(time.time() - t0, 2),
     }
 
 
 def main(out_dir: str = "results") -> dict[str, Any]:
     r = run()
+    r["methodology"] = methodology("claims", r)
     write_json(out_dir, "claims.json", r)
     write_json(out_dir, "claims_rows.json", r.pop("failures_full", []) or r["failures"])
     print(

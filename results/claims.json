@@ -161,11 +161,14 @@
     "uncommon_legitimate": "held-out: written and labelled in the 2.2.0 review before the classifier was run on it. First run, with the classifier as of commit 9693433: 7/21 recognised, 14 abstained, 0 misread. The patterns were then extended against the separate development set, by an author who had seen those 14 misses, so the current number is optimistic; the remaining misses were deliberately not fitted",
     "development": "written after the held-out run and used to extend the patterns: a fit, not an estimate"
   },
+  "seconds": 0.01,
   "methodology": {
-    "kind": "synthetic",
-    "sample": 117,
-    "method": "each phrasing is classified once; a claim is correct when its type matches the label, an abstain or non-claim when the label expects it",
-    "limitations": "hand-authored phrasings; regression floor, not a generalisation claim; no ledger is involved and the composer's guarantee does not depend on the classifier"
-  },
-  "seconds": 0.01
+    "kind": "synthetic (hand-authored phrasings)",
+    "dataset": "seven categories of dispute phrasings, incl. a held-out set of uncommon legitimate wording and the development set used to extend the patterns",
+    "method": "each phrasing classified once against its label; false negatives over legitimate categories, false positives over ambiguous / unsupported / contradictory",
+    "limitations": "the benchmark and the classifier share an author; a regression floor, not a generalisation claim; the held-out number after the pattern change is optimistic (the author had seen the first-run misses)",
+    "sample": {
+      "n": 117
+    }
+  }
 }

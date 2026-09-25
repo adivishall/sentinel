@@ -58,9 +58,9 @@ _STATIC: dict[str, dict[str, str]] = {
     },
     "temporal": {
         "kind": "structural (synthetic data)",
-        "dataset": "seeded synthetic world, stratified transaction sample",
-        "method": "truncation equivalence and six kinds of future perturbation at four offsets, one kind at a time",
-        "limitations": "a deterministic spot check over the generator's world, not a proof over every record",
+        "dataset": "two seeded synthetic worlds (seeds 42 and 7), a stratified transaction sample (half fraud-labelled)",
+        "method": "truncation equivalence, then nine kinds of future record at +1/7/30/90 days, one kind at a time; the transaction assessment and the account monitor at T1 must be byte-identical; exact counts with a one-sided 95% Clopper-Pearson bound when zero",
+        "limitations": "a deterministic check over two generator worlds, not a proof over every record; comparisons from one sample are correlated (read the per-sample bound); a current-state field with no recorded start (legacy account status) cannot be point-in-time",
     },
     "performance": {
         "kind": "empirical, machine-dependent",
@@ -70,9 +70,9 @@ _STATIC: dict[str, dict[str, str]] = {
     },
     "claims": {
         "kind": "synthetic (hand-authored phrasings)",
-        "dataset": "five categories of dispute phrasings",
-        "method": "each phrasing classified once against its label",
-        "limitations": "the benchmark and the classifier share an author; a regression floor, not a generalisation claim",
+        "dataset": "seven categories of dispute phrasings, incl. a held-out set of uncommon legitimate wording and the development set used to extend the patterns",
+        "method": "each phrasing classified once against its label; false negatives over legitimate categories, false positives over ambiguous / unsupported / contradictory",
+        "limitations": "the benchmark and the classifier share an author; a regression floor, not a generalisation claim; the held-out number after the pattern change is optimistic (the author had seen the first-run misses)",
     },
 }
 
@@ -91,6 +91,7 @@ def methodology(suite: str, result: dict[str, Any]) -> dict[str, Any]:
         "model_influence_n",
         "legit_plus_injection_n",
         "comparisons",
+        "decisions_tested",
         "n",
     ):
         if key in result and isinstance(result[key], (int, float)):
