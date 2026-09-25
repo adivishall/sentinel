@@ -98,7 +98,9 @@ def test_baseline_statistics_and_deviations():
 def test_normal_transaction_is_low_risk_and_explainable():
     a = transaction.assess_transaction(_txn(99, 2100), _ctx())
     assert a.level is RiskLevel.LOW and a.score < 25, a.explain()
-    assert a.model_version == "txn-1.0" and a.recommended_action == "ALLOW"
+    assert (
+        a.model_version == scoring.TRANSACTION_DEFAULT.version and a.recommended_action == "ALLOW"
+    )
 
 
 def test_account_takeover_pattern_is_critical():

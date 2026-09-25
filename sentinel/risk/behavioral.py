@@ -36,6 +36,9 @@ class BehavioralBaseline:
     first_seen: str | None = None
     last_seen: str | None = None
     countries: dict[str, int] = field(default_factory=dict)
+    seen_merchants: frozenset[str] = frozenset()  # every merchant ever used (novelty)
+    seen_devices: frozenset[str] = frozenset()
+    median_gap_hours: float = 0.0  # median time between consecutive transactions
 
     @classmethod
     def empty(cls, entity_id: str) -> BehavioralBaseline:
@@ -84,6 +87,11 @@ class BehavioralBaseline:
         hours = Counter(parse_ts(t.timestamp).hour for t in txns)
         usual = frozenset(h for h, c in hours.items() if c / n >= 0.05)
         disp = sum(1 for d in disputes)
+        gaps = sorted(
+            (parse_ts(b.timestamp) - parse_ts(a.timestamp)).total_seconds() / 3600
+            for a, b in zip(txns, txns[1:], strict=False)
+        )
+        median_gap = float(gaps[len(gaps) // 2]) if gaps else 0.0
         return cls(
             entity_id=entity_id,
             n=n,
@@ -100,6 +108,9 @@ class BehavioralBaseline:
             first_seen=txns[0].timestamp,
             last_seen=txns[-1].timestamp,
             countries=dict(Counter(t.country for t in txns)),
+            seen_merchants=frozenset(t.merchant_id for t in txns),
+            seen_devices=frozenset(t.device_id for t in txns),
+            median_gap_hours=round(median_gap, 3),
         )
 
     # ---- deviations ---------------------------------------------------------------
@@ -123,7 +134,9 @@ class BehavioralBaseline:
         return not self.common_countries or country in self.common_countries
 
     def knows_merchant(self, merchant_id: str) -> bool:
-        return merchant_id in self.common_merchants
+        """Novelty is 'never used before', not 'below a share threshold' (v2.0.1
+        flagged any merchant under a 10% share as new, on 41% of transactions)."""
+        return merchant_id in self.seen_merchants or merchant_id in self.common_merchants
 
     def knows_instrument(self, instrument_id: str) -> bool:
         return instrument_id in self.common_instruments
@@ -141,6 +154,8 @@ class BehavioralBaseline:
             "common_merchants": sorted(self.common_merchants),
             "usual_transaction_hours": sorted(self.usual_hours),
             "chargeback_rate": self.chargeback_rate,
+            "merchants_seen": len(self.seen_merchants),
+            "median_gap_hours": self.median_gap_hours,
             "first_seen": self.first_seen,
             "last_seen": self.last_seen,
         }

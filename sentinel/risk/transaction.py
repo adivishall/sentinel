@@ -6,7 +6,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from sentinel.domain.entities import Account, Merchant, PaymentInstrument, Transaction
+from sentinel.domain.entities import (
+    Account,
+    LoginSession,
+    Merchant,
+    PaymentInstrument,
+    Transaction,
+)
 from sentinel.domain.risk import RiskAssessment
 from sentinel.risk import scoring
 from sentinel.risk.behavioral import BehavioralBaseline, parse_ts
@@ -30,22 +36,42 @@ class TransactionContext:
     last_country_ts: str | None = None
     device_shared_accounts: int = 0
     device_first_used: str | None = None  # when this device was first seen on the account
+    recent_sessions: tuple[LoginSession, ...] = ()  # trusted sessions in the 24h before
+    payout_shared_accounts: int = 0  # accounts sharing this account's payout instrument
 
 
-def extract_features(txn: Transaction, ctx: TransactionContext) -> dict[str, object]:
+def extract_features(
+    txn: Transaction, ctx: TransactionContext, model: RiskModel = scoring.TRANSACTION_DEFAULT
+) -> dict[str, object]:
     ts = parse_ts(txn.timestamp)
     b = ctx.baseline
     one_hour = ts - timedelta(hours=1)
-    recent_1h = [t for t in ctx.recent if one_hour <= parse_ts(t.timestamp) < ts]
+    prior = sorted((t for t in ctx.recent if parse_ts(t.timestamp) < ts), key=lambda t: t.timestamp)
+    recent_1h = [t for t in prior if parse_ts(t.timestamp) >= one_hour]
     same_merchant_1h = [t for t in recent_1h if t.merchant_id == txn.merchant_id]
+    short = ts - timedelta(minutes=model.t("rapid_window_minutes", 10))
+    recent_short = [t for t in prior if parse_ts(t.timestamp) >= short]
+    gap_minutes: float | None = (
+        round((ts - parse_ts(prior[-1].timestamp)).total_seconds() / 60, 2) if prior else None
+    )
+    two_hours = ts - timedelta(hours=2)
+    # Impossible travel: ANY transaction from a different country within the last two
+    # hours, not just the immediately previous one (which may already be abroad).
+    country_change_2h = any(
+        t.country != txn.country and parse_ts(t.timestamp) >= two_hours for t in prior
+    )
+    ev_window = ts - timedelta(hours=model.t("security_event_hours", 24))
+    sessions = [s for s in ctx.recent_sessions if ev_window <= parse_ts(s.started_at) <= ts]
+    recent_events = sorted({e for s in sessions for e in s.events})
+    recent_failed_mfa = any(not s.mfa_passed for s in sessions)
     account_age = (ts - datetime.fromisoformat(ctx.account.opened_at)).days if ctx.account else 0
     instrument_age = (
         (ts - datetime.fromisoformat(ctx.instrument.added_at)).days if ctx.instrument else 0
     )
-    impossible = False
+    impossible = country_change_2h
     if ctx.last_country and ctx.last_country_ts and ctx.last_country != txn.country:
         hours = (ts - parse_ts(ctx.last_country_ts)).total_seconds() / 3600
-        impossible = 0 <= hours < 2
+        impossible = impossible or 0 <= hours < 2
     device_age_hours: float | None = None
     if ctx.device_first_used and ctx.device_first_used <= txn.timestamp:
         device_age_hours = round((ts - parse_ts(ctx.device_first_used)).total_seconds() / 3600, 2)
@@ -58,8 +84,17 @@ def extract_features(txn: Transaction, ctx: TransactionContext) -> dict[str, obj
         "baseline_daily_count": b.daily_count,
         "velocity_1h": len(recent_1h),
         "same_merchant_1h": len(same_merchant_1h),
+        "velocity_short": len(recent_short),
+        "gap_minutes": gap_minutes,
+        "baseline_median_gap_hours": b.median_gap_hours,
+        "recent_security_events": recent_events,
+        "recent_failed_mfa": recent_failed_mfa,
+        "payout_shared_accounts": ctx.payout_shared_accounts,
+        # New = not registered/seasoned on the account (known_devices is built with a
+        # 24 h rule) and no earlier use at least 24 h old. A device that appeared nine
+        # minutes ago is new however many times it was used in those nine minutes.
         "is_new_device": txn.device_id not in ctx.known_devices
-        and not b.knows_device(txn.device_id),
+        and (device_age_hours is None or device_age_hours < 24),
         "device_age_hours": device_age_hours,
         "device_shared_accounts": ctx.device_shared_accounts,
         "is_new_country": not b.knows_country(txn.country),
@@ -139,6 +174,35 @@ def _velocity_burst(f: Features, m: RiskModel) -> str | None:
     return f"{int(v)} transactions in the last hour" if v >= 8 else None
 
 
+def _rapid_fire(f: Features, m: RiskModel) -> str | None:
+    v = _num(f, "velocity_short")
+    if v >= m.t("rapid_fire_count", 3):
+        return (
+            f"{int(v)} transactions in the previous {int(m.t('rapid_window_minutes', 10))} minutes"
+        )
+    return None
+
+
+def _rapid_succession(f: Features, m: RiskModel) -> str | None:
+    gap = f.get("gap_minutes")
+    base = _num(f, "baseline_median_gap_hours")
+    if isinstance(gap, (int, float)) and gap < m.t("rapid_gap_minutes", 15):
+        if base >= m.t("baseline_gap_hours", 6):
+            return f"{gap:.0f} min after the previous transaction; this account's median gap is {base:.0f}h"
+    return None
+
+
+def _recent_changes(f: Features, m: RiskModel) -> str | None:
+    ev = f.get("recent_security_events")
+    hits = [e for e in (ev if isinstance(ev, list) else []) if e in _SENSITIVE_EVENTS]
+    if hits:
+        return f"{', '.join(hits)} on a session in the last {int(m.t('security_event_hours', 24))}h"
+    return None
+
+
+_SENSITIVE_EVENTS = ("payout_change", "credential_change", "mfa_change")
+
+
 def _young_shared(f: Features, m: RiskModel) -> str | None:
     if _num(f, "account_age_days") < 30 and _num(f, "device_shared_accounts") >= 3:
         return f"account {int(_num(f, 'account_age_days'))} days old on a device shared by {int(_num(f, 'device_shared_accounts'))} accounts"
@@ -157,6 +221,25 @@ RULES: tuple[Rule, ...] = (
     ("velocity_burst", "Transaction burst", _velocity_burst),
     ("velocity_spike", "Transaction velocity spike", _velocity_spike),
     ("velocity_elevated", "Elevated transaction velocity", _velocity_elevated),
+    ("rapid_fire", "Rapid-fire transactions", _rapid_fire),
+    ("rapid_succession", "Unusually short gap since previous transaction", _rapid_succession),
+    ("recent_account_changes", "Security-sensitive account change shortly before", _recent_changes),
+    (
+        "recent_failed_mfa",
+        "Failed second factor shortly before",
+        lambda f, m: (
+            "a session in the last 24h did not pass MFA" if f.get("recent_failed_mfa") else None
+        ),
+    ),
+    (
+        "shared_payout_instrument",
+        "Payout instrument shared across accounts",
+        lambda f, m: (
+            f"{int(_num(f, 'payout_shared_accounts'))} accounts pay out to the same instrument"
+            if _num(f, "payout_shared_accounts") >= 2
+            else None
+        ),
+    ),
     (
         "new_device",
         "New device",
@@ -281,8 +364,8 @@ RULES: tuple[Rule, ...] = (
     ),
     (
         "new_merchant",
-        "Merchant new for this account",
-        lambda f, m: "not among usual merchants" if f.get("is_new_merchant") else None,
+        "First transaction at this merchant",
+        lambda f, m: "never used by this account before" if f.get("is_new_merchant") else None,
     ),
     (
         "repeat_merchant_burst",
@@ -300,9 +383,9 @@ RULES: tuple[Rule, ...] = (
 
 
 def assess_transaction(
-    txn: Transaction, ctx: TransactionContext, model: RiskModel = scoring.TRANSACTION_V1
+    txn: Transaction, ctx: TransactionContext, model: RiskModel = scoring.TRANSACTION_DEFAULT
 ) -> RiskAssessment:
-    features = extract_features(txn, ctx)
+    features = extract_features(txn, ctx, model)
     return scoring.build_assessment(
         entity_type="transaction",
         entity_id=txn.transaction_id,

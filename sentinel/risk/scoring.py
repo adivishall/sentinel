@@ -89,6 +89,75 @@ TRANSACTION_V1_1 = RiskModel(
     description="Geography weighted up, device weighted down, moderate-amount threshold 2.5σ.",
 )
 
+# Version 2.0: adds velocity in a short window and inter-arrival timing (bursts are
+# visible from the 4th transaction instead of the 9th), trusted account-security
+# events in the 24 h before the transaction (a payout change or a failed second
+# factor shortly before a purchase is the takeover pattern), and payout-instrument
+# sharing across accounts (the ring pattern). Weights are Sentinel heuristics,
+# documented in docs/RISK_ENGINE.md; nothing here is an industry standard.
+TRANSACTION_V2 = RiskModel(
+    version="txn-2.0",
+    weights={
+        **TRANSACTION_V1.weights,
+        "rapid_fire": 20,
+        "rapid_succession": 15,
+        "recent_account_changes": 20,
+        "recent_failed_mfa": 8,
+        "shared_payout_instrument": 20,
+    },
+    thresholds={
+        **TRANSACTION_V1.thresholds,
+        "rapid_window_minutes": 10,
+        "rapid_fire_count": 3,
+        "rapid_gap_minutes": 15,
+        "baseline_gap_hours": 6,
+        "security_event_hours": 24,
+    },
+    description=(
+        "v1 plus short-window velocity, inter-arrival timing, recent trusted "
+        "account-security events and shared payout instruments."
+    ),
+)
+
+TRANSACTION_DEFAULT = TRANSACTION_V2
+
+# Which component of the score a factor belongs to (for the auditable breakdown).
+FACTOR_GROUPS: dict[str, str] = {
+    "amount_anomaly_extreme": "anomaly",
+    "amount_anomaly_high": "anomaly",
+    "amount_anomaly_moderate": "anomaly",
+    "amount_ratio_small_baseline": "anomaly",
+    "unusual_hour": "anomaly",
+    "new_merchant": "anomaly",
+    "repeat_merchant_burst": "anomaly",
+    "velocity_spike": "velocity",
+    "velocity_elevated": "velocity",
+    "velocity_burst": "velocity",
+    "rapid_fire": "velocity",
+    "rapid_succession": "velocity",
+    "new_device": "device_geo",
+    "shared_device": "device_geo",
+    "young_account_shared_device": "device_geo",
+    "impossible_travel": "device_geo",
+    "new_country": "device_geo",
+    "new_instrument": "device_geo",
+    "merchant_risk_critical": "entity",
+    "merchant_risk_high": "entity",
+    "merchant_risk_medium": "entity",
+    "linked_entity_critical": "entity",
+    "linked_entity_high": "entity",
+    "linked_entity_medium": "entity",
+    "shared_payout_instrument": "entity",
+    "chargeback_high": "entity",
+    "chargeback_some": "entity",
+    "account_age_new": "entity",
+    "account_age_young": "entity",
+    "auth_none": "security",
+    "auth_weak": "security",
+    "recent_account_changes": "security",
+    "recent_failed_mfa": "security",
+}
+
 ACCOUNT_SECURITY_V1 = RiskModel(
     version="acct-1.0",
     weights={
@@ -144,7 +213,14 @@ DISPUTE_V1 = RiskModel(
 
 MODELS: dict[str, RiskModel] = {
     m.version: m
-    for m in (TRANSACTION_V1, TRANSACTION_V1_1, ACCOUNT_SECURITY_V1, MONITORING_V1, DISPUTE_V1)
+    for m in (
+        TRANSACTION_V1,
+        TRANSACTION_V1_1,
+        TRANSACTION_V2,
+        ACCOUNT_SECURITY_V1,
+        MONITORING_V1,
+        DISPUTE_V1,
+    )
 }
 
 
@@ -190,6 +266,10 @@ def build_assessment(
     score, factors = score_features(features, model, rules)
     level = RiskLevel.from_score(score)
     plain = {k: v for k, v in features.items() if k != "evidence_ids"}
+    components: dict[str, int] = {}
+    for f in factors:
+        g = FACTOR_GROUPS.get(f.code, "other")
+        components[g] = components.get(g, 0) + f.points
     return RiskAssessment(
         assessment_id=new_id("RISK"),
         entity_type=entity_type,
@@ -201,4 +281,5 @@ def build_assessment(
         model_version=model.version,
         features=dict(plain),
         computed_at=now_iso(),
+        components=components,
     )

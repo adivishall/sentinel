@@ -29,14 +29,23 @@ class RiskAssessment:
     model_version: str
     features: dict[str, object] = field(default_factory=dict)  # raw signals (for replay)
     computed_at: str = ""
+    # Uncapped points per component (anomaly / velocity / device_geo / entity / security);
+    # the score is their sum capped to 0-100, so the breakdown is auditable.
+    components: dict[str, int] = field(default_factory=dict)
 
     def explain(self) -> str:
-        lines = [f"Risk Score: {self.score} ({self.level})"]
+        lines = [f"Risk Score: {self.score} ({self.level})  model {self.model_version}"]
         for f in sorted(self.factors, key=lambda x: -x.points):
             sign = "+" if f.points >= 0 else ""
             lines.append(f"{sign}{f.points:>3} {f.label}" + (f" -- {f.detail}" if f.detail else ""))
         lines.append("-" * 32)
-        lines.append(f"{self.score} / 100")
+        if self.components:
+            lines.append(
+                "components: "
+                + ", ".join(f"{k} {v:+d}" for k, v in sorted(self.components.items()))
+            )
+        raw = sum(f.points for f in self.factors)
+        lines.append(f"{self.score} / 100" + (f"  (uncapped {raw})" if raw != self.score else ""))
         return "\n".join(lines)
 
 

@@ -46,7 +46,7 @@ from sentinel.observability import METRICS, get_logger, log_decision
 from sentinel.policy.loader import DEFAULT_REGISTRY
 from sentinel.presets import ATTACKS, SCENARIOS
 from sentinel.replay.engine import ReplayEngine, ReplayOverrides, ReplayResult
-from sentinel.risk import account_security, monitoring
+from sentinel.risk import account_security, monitoring, scoring
 from sentinel.risk import transaction as txn_risk
 from sentinel.risk.behavioral import BehavioralBaseline, parse_ts
 from sentinel.risk.entity import EntityRiskEngine
@@ -170,6 +170,18 @@ class SentinelApp:
         mprof = w.engine.merchant_risk(t.merchant_id, as_of=at)
         linked, who = w.engine.linked_entity_risk(t.account_id, t.device_id, as_of=at)
         last = prior[-1] if prior else None
+        # Trusted sessions in the 24 hours before the transaction (authentication service).
+        sessions = tuple(
+            s
+            for s in self.store.sessions(account_id=t.account_id, limit=500)
+            if s.started_at <= at and parse_ts(s.started_at) >= ts - timedelta(hours=24)
+        )
+        acc = self.store.account(t.account_id)
+        payout_shared = 0
+        if acc and acc.payout_instrument_id:
+            payout = self.store.instrument(acc.payout_instrument_id)
+            if payout and payout.added_at <= at:
+                payout_shared = len(w.graph.accounts_sharing_instrument(payout.identity, as_of=at))
         return txn_risk.TransactionContext(
             baseline=baseline,
             account=self.store.account(t.account_id),
@@ -184,6 +196,8 @@ class SentinelApp:
             last_country_ts=last.timestamp if last else None,
             device_shared_accounts=len(w.graph.accounts_sharing_device(t.device_id, as_of=at)),
             device_first_used=w.graph.device_first_used(t.account_id, t.device_id),
+            recent_sessions=sessions,
+            payout_shared_accounts=payout_shared,
         )
 
     def account_security_context(self, s: LoginSession) -> account_security.AccountSecurityContext:
@@ -809,7 +823,8 @@ class SentinelApp:
             "provider": p.name,
             "model": p.model,
             "policies": [pp.key for pp in self.runtime.policies.all()],
-            "risk_models": ["txn-1.0", "txn-1.1", "acct-1.0", "mon-1.0", "disp-1.0"],
+            "risk_models": sorted(scoring.MODELS),
+            "default_transaction_model": scoring.TRANSACTION_DEFAULT.version,
             "audit": to_dict(self.verify_audit()),
             "metrics": METRICS.snapshot(),
             "store": self.store.path,
