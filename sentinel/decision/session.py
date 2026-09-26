@@ -19,7 +19,7 @@ from sentinel.decision.workflows import (
     Runtime,
     run_dispute,
 )
-from sentinel.domain.enums import Severity, TrustClass
+from sentinel.domain.enums import FactsSource, Severity, TrustClass
 from sentinel.domain.ids import new_id
 from sentinel.security.gateway import Conversation
 from sentinel.security.provenance import UntrustedContent
@@ -35,6 +35,7 @@ class DisputeSession:
     cumulative_severity: Severity = Severity.NONE
     last: DecisionBundle | None = None
     options: RunOptions = RunOptions()
+    facts_source: FactsSource = FactsSource.CALLER_SUPPLIED
 
     def add(
         self,
@@ -50,6 +51,7 @@ class DisputeSession:
             ledger=self.ledger,
             dispute_id=self.dispute_id,
             conversation=self.conversation,
+            facts_source=self.facts_source,
         )
         opts = RunOptions(**{**self.options.__dict__, "session_id": self.session_id})
         b = run_dispute(self.runtime, req, opts)

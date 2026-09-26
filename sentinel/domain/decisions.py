@@ -120,6 +120,8 @@ class Decision:
     # True only for a decision recorded by a persisting runtime after the authority check
     # (sentinel.decision.authority); a what-if or unpersisted evaluation is False.
     authoritative: bool = False
+    # Where the trusted facts came from (FactsSource): system_of_record, or demo input.
+    facts_source: str = "caller_supplied"
 
     @property
     def executed(self) -> bool:

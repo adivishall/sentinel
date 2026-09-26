@@ -31,6 +31,7 @@ from sentinel.domain.entities import LoginSession, Transaction
 from sentinel.domain.enums import (
     Capability,
     EvidenceKind,
+    FactsSource,
     Severity,
     TrustClass,
     Workflow,
@@ -222,6 +223,7 @@ def _finish(
                 "controls": list(decision.controls),
                 "security_event_id": decision.security_event_id,
                 "risk_model": risk.model_version if risk is not None else None,
+                "facts_source": str(inputs.facts_source),
                 # replay verifies the stored input snapshot against this
                 "snapshot_hash": snapshot_hash(snapshot(inputs)),
                 "engine_version": __version__,
@@ -266,6 +268,7 @@ def _fail_safe(
     policy_id: str,
     error: str,
     opts: RunOptions,
+    facts_source: FactsSource = FactsSource.CALLER_SUPPLIED,
 ) -> DecisionBundle:
     """Unusable untrusted input never silently approves -- it goes to a human."""
     from sentinel.domain.enums import EvidenceVerdict
@@ -295,6 +298,7 @@ def _fail_safe(
         provider=provider,
         model=model,
         claim_type="invalid",
+        facts_source=facts_source,
     )
     return _finish(
         rt, inputs, entities=(), reconciliation=rec, risk=None, ai=None, agent_name="n/a"
@@ -313,6 +317,7 @@ class DisputeRequest:
     conversation: Conversation | None = None
     account_id: str | None = None
     account_risk_score: int = 0
+    facts_source: FactsSource = FactsSource.CALLER_SUPPLIED
 
 
 def run_dispute(
@@ -338,6 +343,7 @@ def run_dispute(
             "dispute-refund",
             str(e),
             opts,
+            facts_source=req.facts_source,
         )
 
     contents = (req.narrative,) + req.documents
@@ -388,6 +394,7 @@ def run_dispute(
         provider=provider,
         model=model,
         claim_type=claim.claim_type.value,
+        facts_source=req.facts_source,
     )
     entities = (f"account:{req.account_id}",) if req.account_id else ()
     return _finish(
@@ -411,6 +418,7 @@ class TransactionRequest:
     account_status: str = "active"
     merchant_risk_level: str = "LOW"
     untrusted: tuple[UntrustedContent, ...] = ()  # merchant descriptor, customer note, ...
+    facts_source: FactsSource = FactsSource.CALLER_SUPPLIED
 
 
 def run_transaction(
@@ -494,6 +502,7 @@ def run_transaction(
         session_id=opts.session_id,
         provider=provider,
         model=model_name,
+        facts_source=req.facts_source,
     )
     entities = (f"account:{t.account_id}", f"merchant:{t.merchant_id}", f"device:{t.device_id}")
     return _finish(
@@ -516,6 +525,7 @@ class KYBRequest:
     records: Mapping[str, object]
     merchant_id: str = ""
     documents: tuple[UntrustedContent, ...] = ()
+    facts_source: FactsSource = FactsSource.CALLER_SUPPLIED
 
 
 def run_kyb(rt: Runtime, req: KYBRequest, opts: RunOptions = DEFAULT_OPTIONS) -> DecisionBundle:
@@ -544,6 +554,7 @@ def run_kyb(rt: Runtime, req: KYBRequest, opts: RunOptions = DEFAULT_OPTIONS) ->
             "merchant-onboarding",
             str(e),
             opts,
+            facts_source=req.facts_source,
         )
     contents = (req.application,) + req.documents
     security = _inspect_all(rt, contents, None)
@@ -580,6 +591,7 @@ def run_kyb(rt: Runtime, req: KYBRequest, opts: RunOptions = DEFAULT_OPTIONS) ->
         session_id=opts.session_id,
         provider=provider,
         model=model,
+        facts_source=req.facts_source,
     )
     return _finish(
         rt, inputs, entities=(), reconciliation=rec, risk=None, ai=ai, agent_name=SPECS["kyb"].name
@@ -595,6 +607,7 @@ class AccountSecurityRequest:
     context: account_security.AccountSecurityContext
     message: UntrustedContent | None = None  # what the customer / agent said
     requested_capability: Capability | None = None  # e.g. CHANGE_PAYOUT, UNFREEZE_ACCOUNT
+    facts_source: FactsSource = FactsSource.CALLER_SUPPLIED
 
 
 def run_account_security(
@@ -671,6 +684,7 @@ def run_account_security(
         session_id=opts.session_id,
         provider=provider,
         model=model,
+        facts_source=req.facts_source,
     )
     return _finish(
         rt,
@@ -690,6 +704,7 @@ def run_account_security(
 class InvestigationRequest:
     context: monitoring.MonitoringContext
     case_notes: tuple[UntrustedContent, ...] = ()
+    facts_source: FactsSource = FactsSource.CALLER_SUPPLIED
 
 
 def run_investigation(
@@ -753,6 +768,7 @@ def run_investigation(
         session_id=opts.session_id,
         provider=provider,
         model=model,
+        facts_source=req.facts_source,
     )
     return _finish(
         rt,

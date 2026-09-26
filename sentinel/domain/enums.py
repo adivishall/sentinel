@@ -28,6 +28,36 @@ class TrustClass(StrEnum):
         return self in (TrustClass.TRUSTED_INTERNAL, TrustClass.VERIFIED_EXTERNAL)
 
 
+class FactsSource(StrEnum):
+    """Where a decision's trusted facts came from. Only SYSTEM_OF_RECORD facts were read
+    by reference from the record store -- here the synthetic SQLite store standing in for
+    a bank's systems of record; Sentinel has no real ledger integration. The other two
+    are demo / simulation input, trusted by contract, and every decision says so."""
+
+    SYSTEM_OF_RECORD = "system_of_record"  # read by id from the record store
+    CALLER_SUPPLIED = "caller_supplied"  # demo / simulation input in the request body
+    DEMO_FIXTURE = "demo_fixture"  # a shipped attack or scenario preset
+
+    @property
+    def describe(self) -> str:
+        return _FACTS_SOURCE_TEXT[self]
+
+
+_FACTS_SOURCE_TEXT = {
+    FactsSource.SYSTEM_OF_RECORD: (
+        "read by reference from the record store -- here Sentinel's synthetic SQLite store "
+        "standing in for the institution's systems of record (no real ledger integration)"
+    ),
+    FactsSource.CALLER_SUPPLIED: (
+        "demo / simulation input: facts supplied in the request body and trusted by "
+        "contract; Sentinel did not read them from any system of record"
+    ),
+    FactsSource.DEMO_FIXTURE: (
+        "demo / simulation input: a shipped attack or scenario preset (synthetic facts)"
+    ),
+}
+
+
 class Workflow(StrEnum):
     DISPUTE = "dispute"
     TRANSACTION = "transaction"

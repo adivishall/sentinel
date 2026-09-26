@@ -33,6 +33,7 @@ from sentinel.domain.enums import (
     AuthorizationStatus,
     Capability,
     EvidenceVerdict,
+    FactsSource,
     FinalAction,
     PolicyOutcome,
     RiskLevel,
@@ -78,6 +79,7 @@ class DecisionInputs:
     provider: str = "offline"
     model: str = "offline-simulator"
     claim_type: str | None = None
+    facts_source: FactsSource = FactsSource.CALLER_SUPPLIED
 
 
 @dataclass(frozen=True)
@@ -422,6 +424,7 @@ def compose(inputs: DecisionInputs) -> Decision:
         created_at=now_iso(),
         session_id=inputs.session_id,
         controls=tuple(sorted(inputs.controls)),
+        facts_source=inputs.facts_source,
         ai_agreed=ai_agreed,
         executed_capability=executed,
     )

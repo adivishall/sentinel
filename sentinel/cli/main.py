@@ -69,6 +69,8 @@ def _decision_text(d: Any, extra: dict[str, Any] | None = None) -> str:
         f"  risk              {d.risk_score}/100 {d.risk_level.value}",
         f"  AI recommendation {d.ai_recommendation.recommended_action if d.ai_recommendation else 'n/a'} (MODEL_GENERATED)",
         f"  evidence          {d.evidence_verdict.value} ({d.contradiction_count} contradictions)",
+        f"  facts from        {d.facts_source}"
+        + ("" if d.facts_source == "system_of_record" else "  (demo / simulation input)"),
         f"  security          {d.security_severity.value}",
         f"  policy            {d.policy.policy_id}@v{d.policy.version} -> {d.policy.outcome.value} {list(d.policy.matched_rules)}",
         f"  authorization     {d.authorization.status.value}: {d.authorization.reason}",

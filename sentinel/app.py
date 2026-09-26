@@ -38,7 +38,7 @@ from sentinel.decision.workflows import (
 )
 from sentinel.domain.cases import Case
 from sentinel.domain.entities import LoginSession, Transaction
-from sentinel.domain.enums import CaseStatus, TrustClass
+from sentinel.domain.enums import CaseStatus, FactsSource, TrustClass
 from sentinel.domain.ids import content_hash
 from sentinel.domain.risk import EntityRiskProfile
 from sentinel.domain.serialization import to_dict
@@ -316,6 +316,13 @@ class SentinelApp:
         t = self.store.transaction(transaction) if isinstance(transaction, str) else transaction
         if t is None:
             raise KeyError(f"unknown transaction {transaction}")
+        # A transaction read by id (or identical to the stored record) is system-of-record
+        # input; one built by the caller is demo / simulation input.
+        src = (
+            FactsSource.SYSTEM_OF_RECORD
+            if isinstance(transaction, str) or self.store.transaction(t.transaction_id) == t
+            else FactsSource.CALLER_SUPPLIED
+        )
         ctx = self.transaction_context(t)
         acc = self.store.account(t.account_id)
         mprof = self.world.engine.merchant_risk(t.merchant_id, as_of=t.timestamp)
@@ -327,6 +334,7 @@ class SentinelApp:
                 acc.status_at(t.timestamp) if acc else "unknown",
                 mprof.level.value,
                 untrusted,
+                src,
             ),
             options,
         )
@@ -342,11 +350,16 @@ class SentinelApp:
         documents: tuple[str, ...] = (),
         source: str = "cardholder",
         options: RunOptions = DEFAULT_OPTIONS,
+        facts_source: FactsSource = FactsSource.CALLER_SUPPLIED,
     ) -> DecisionBundle:
+        """With ``dispute_id`` and no ``ledger`` the facts are read from the record store
+        (system of record); a ``ledger`` passed in is demo / simulation input and every
+        decision made on it says so (``facts_source``)."""
         t0 = time.perf_counter()
         account_id = None
         account_risk = 0
         if dispute_id and ledger is None:
+            facts_source = FactsSource.SYSTEM_OF_RECORD
             found = self.store.dispute(dispute_id)
             if found is None:
                 raise KeyError(f"unknown dispute {dispute_id}")
@@ -395,6 +408,7 @@ class SentinelApp:
                 None,
                 account_id,
                 account_risk,
+                facts_source,
             ),
             options,
         )
@@ -407,8 +421,9 @@ class SentinelApp:
         ledger: dict[str, object],
         *,
         options: RunOptions = DEFAULT_OPTIONS,
+        facts_source: FactsSource = FactsSource.CALLER_SUPPLIED,
     ) -> DecisionBundle:
-        s = DisputeSession(self._rt(options), ledger, options=options)
+        s = DisputeSession(self._rt(options), ledger, options=options, facts_source=facts_source)
         b = None
         for t in turns:
             b = s.add(t)
@@ -425,7 +440,9 @@ class SentinelApp:
         documents: tuple[str, ...] = (),
         options: RunOptions = DEFAULT_OPTIONS,
     ) -> DecisionBundle:
+        facts_source = FactsSource.CALLER_SUPPLIED
         if application_id and records is None:
+            facts_source = FactsSource.SYSTEM_OF_RECORD
             found = self.store.kyb_application(application_id)
             if found is None:
                 raise KeyError(f"unknown application {application_id}")
@@ -452,6 +469,7 @@ class SentinelApp:
                 records or {},
                 merchant_id,
                 docs,
+                facts_source,
             ),
             options,
         )
@@ -468,6 +486,11 @@ class SentinelApp:
         s = self.store.session(session) if isinstance(session, str) else session
         if s is None:
             raise KeyError(f"unknown session {session}")
+        src = (
+            FactsSource.SYSTEM_OF_RECORD
+            if isinstance(session, str) or self.store.session(s.session_id) == s
+            else FactsSource.CALLER_SUPPLIED
+        )
         ctx = self.account_security_context(s)
         msg = (
             UntrustedContent(message, TrustClass.USER_CONTROLLED, "customer_message")
@@ -475,7 +498,9 @@ class SentinelApp:
             else None
         )
         b = run_account_security(
-            self._rt(options), AccountSecurityRequest(s, ctx, msg, requested_capability), options
+            self._rt(options),
+            AccountSecurityRequest(s, ctx, msg, requested_capability, src),
+            options,
         )
         return self._persist(b)
 
@@ -489,7 +514,11 @@ class SentinelApp:
     ) -> DecisionBundle:
         ctx = self.monitoring_context(account_id, as_of)
         notes = tuple(UntrustedContent(n, TrustClass.UNKNOWN, "case_notes") for n in case_notes)
-        b = run_investigation(self._rt(options), InvestigationRequest(ctx, notes), options)
+        backtest = as_of is not None and as_of != self.world.dataset.as_of
+        rt = self.what_if_runtime if backtest else self._rt(options)
+        b = run_investigation(
+            rt, InvestigationRequest(ctx, notes, FactsSource.SYSTEM_OF_RECORD), options
+        )
         return self._persist(b)
 
     def evaluate_ai_security(
@@ -524,7 +553,9 @@ class SentinelApp:
 
         def _run(opts: RunOptions) -> tuple[DecisionBundle, str]:
             if p.turns and narrative is None:
-                b = self.evaluate_dispute_conversation(p.turns, p.ledger, options=opts)
+                b = self.evaluate_dispute_conversation(
+                    p.turns, p.ledger, options=opts, facts_source=FactsSource.DEMO_FIXTURE
+                )
                 return b, "\n".join(f"Turn {i + 1}: {t}" for i, t in enumerate(p.turns))
             docs = (document,) if document else ((p.document,) if p.document else ())
             b = self.evaluate_dispute(
@@ -532,6 +563,7 @@ class SentinelApp:
                 dict(p.ledger),
                 documents=docs,
                 options=opts,
+                facts_source=FactsSource.DEMO_FIXTURE,
             )
             return b, narrative if narrative is not None else p.narrative
 
@@ -1039,6 +1071,12 @@ class SentinelApp:
                 "model_version": (risk or {}).get("model_version"),
             },
             "trusted_evidence": [e for e in evidence if e["status"] == "VERIFIED"],
+            "facts_source": {
+                "source": (latest or {}).get("facts_source", FactsSource.CALLER_SUPPLIED.value),
+                "meaning": FactsSource(
+                    (latest or {}).get("facts_source", FactsSource.CALLER_SUPPLIED.value)
+                ).describe,
+            },
             "untrusted_claims": [e for e in evidence if e["status"] != "VERIFIED"],
             "contradictions": latest["contradiction_count"] if latest else 0,
             "ai_recommendation": (
@@ -1126,6 +1164,7 @@ class SentinelApp:
             "policies": [pp.key for pp in self.runtime.policies.all()],
             "risk_models": sorted(scoring.MODELS),
             "default_transaction_model": scoring.TRANSACTION_DEFAULT.version,
+            "facts_sources": {f.value: f.describe for f in FactsSource},
             "audit": to_dict(self.verify_audit()),
             "metrics": METRICS.snapshot(),
             "store": self.store.path,
