@@ -101,6 +101,55 @@ PENDING_HUMAN → REQUIRE_HUMAN_REVIEW; policy STEP_UP with authorization
 GRANTED → STEP_UP; authorization GRANTED → ALLOW (the candidate capability
 executes); anything else → DENY. Only ALLOW executes a capability.
 
+## Detection, claim classification and trusted adjudication
+
+Three different things, often conflated:
+
+- **Detection** (the AI Security Gateway) looks for *attacks* in text and in
+  model output: injected instructions, spoofed authority, an off-surface tool
+  call. It is heuristic and can only **tighten** an outcome. It misses
+  attacks with nothing to detect (a plain lie), and the architecture assumes
+  it will.
+- **Claim classification** (`sentinel/security/claims.py`) reads *what the
+  customer claims* ("it never arrived") so the right trusted field is checked.
+  It is deterministic and lexical, abstains when it cannot read a claim (a
+  human review), and is defence in depth: whatever it reads, nothing executes
+  unless the records support it.
+- **Trusted adjudication** (the reconciliation engine + policy + the registry)
+  decides *whether the records support the request*. It is the security
+  foundation: it reads only trusted facts, and it is what holds the guarded
+  attack-success rate at 0 when detection misses.
+
+## Consequential-capability trace
+
+Checked against the workflow source by this renderer (it fails if a
+workflow's candidate capability comes from anywhere else). Every path runs:
+input → provenance (typed trust class) → model recommendation (recorded,
+never read by the decision) → risk (derived from trusted records) → evidence
+(claim vs trusted facts) → policy (active version) → authorization (the
+registry, for the SYSTEM actor) → human review when required → final action →
+audit.
+
+| Capability | How a decision path can consider it | Model's request | Evidence | Policy | Authorization (registry) | Human review (who may approve a held case) | Audit |
+|---|---|---|---|---|---|---|---|
+| `APPROVE_REFUND` | dispute workflow -- fixed candidate | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | SYSTEM may execute up to ₹50,000 | HUMAN_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
+| `APPROVE_TRANSACTION` | transaction workflow -- fixed candidate | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | SYSTEM may execute up to ₹150,000 | HUMAN_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
+| `APPROVE_MERCHANT` | merchant-onboarding workflow -- fixed candidate | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | SYSTEM may execute | HUMAN_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
+| `FREEZE_ACCOUNT` | account-security workflow -- the caller's structured `requested_capability` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | SYSTEM may execute | HUMAN_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
+| `UNFREEZE_ACCOUNT` | account-security workflow -- the caller's structured `requested_capability` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | HUMAN_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
+| `CHANGE_PAYOUT` | account-security workflow -- the caller's structured `requested_capability`, or a `payout_change` event in the trusted session record | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | HUMAN_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
+| `RELEASE_FUNDS` | account-security workflow -- the caller's structured `requested_capability` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | SENIOR_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
+| `CLOSE_CASE` | account-security `requested_capability` only; the investigation workflow never has a candidate. Closing a *case* is `record_human_decision`, never a capability execution | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | HUMAN_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
+| `ALTER_RISK` | account-security workflow -- the caller's structured `requested_capability` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | SENIOR_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
+| `SKIP_REVIEW` | account-security workflow -- the caller's structured `requested_capability` (no actor may be granted it) | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | nobody | NOBODY | decision event (action, capability, facts source, snapshot hash) |
+
+A capability executes only when the final action is ALLOW (or STEP_UP once
+satisfied): evidence SUPPORTED, policy not BLOCK / HOLD / REVIEW, and the
+registry GRANTED for SYSTEM -- and only in an authoritative evaluation (every
+control, the active policy and risk model). `tests/test_capability_trace.py`
+drives a model requesting each capability in every workflow and a caller
+requesting each one directly.
+
 ## Evaluation authority (`sentinel/decision/authority.py`)
 
 A caller may request an evaluation; it may not weaken one. An evaluation is

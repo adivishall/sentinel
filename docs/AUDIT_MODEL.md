@@ -70,7 +70,29 @@ set it is signed with HMAC-SHA256 over its canonical body, so a storage
 attacker who rewrites the whole chain consistently from genesis still cannot
 produce the recorded head (or forge a checkpoint without the key).
 `sentinel audit verify --checkpoint FILE` checks the chain against it: the
-stored prefix must still hash to the checkpointed head.
+stored prefix must still hash to the checkpointed head. Precisely:
+
+- a **signed** checkpoint (key set when it was written and when it is
+  checked) detects a consistent rewrite of the whole chain, a truncation below
+  its length, and an edited checkpoint (the signature no longer verifies);
+- an **unsigned** checkpoint detects the same only if it was stored where the
+  attacker could not also rewrite it; checking an unsigned checkpoint while a
+  key is set, or a signed one without the key, is reported as a failure, not
+  skipped;
+- a checkpoint says nothing about events appended after it; the chain
+  verification covers those.
+
+The HMAC key is a shared secret, not a public-key signature: anyone who holds
+it can also produce checkpoints.
+
+## Exit codes (`sentinel audit ...`)
+
+| Command | 0 | 2 | 1 |
+|---|---|---|---|
+| `audit verify` | chain intact | **AUDIT INTEGRITY ERROR**: a record modified, deleted, inserted, reordered, unreadable or with a missing field; the first bad record is named | the store or file cannot be opened |
+| `audit verify --file PATH` | exported chain intact | AUDIT INTEGRITY ERROR in the exported file | the file does not exist |
+| `audit verify --checkpoint FILE` | chain intact and it matches the checkpoint | the chain disagrees with the checkpoint, or the signature / key check fails | the checkpoint file is not valid JSON or lacks a field |
+| any command that appends (evaluate, analyze, ...) | -- | AUDIT INTEGRITY ERROR: the store's event count or a sequence no longer matches the chain, so nothing was appended | -- |
 
 ## What the chain does not do
 

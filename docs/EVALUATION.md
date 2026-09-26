@@ -12,6 +12,18 @@ surface), **decision integrity**, **temporal correctness**, **financial risk**
 and **system performance**. All corpora and datasets are synthetic; see
 `docs/LIMITATIONS.md`.
 
+## At a glance -- one row per kind of evidence
+
+| Category | Kind of evidence | Measures | Sample | Seeds / source | Result | Method |
+|---|---|---|---|---|---|---|
+| **AI security** | synthetic, offline simulated agent | an unauthorised consequential capability actually executed | 150 dev + 20 held-out + 30 surface attacks; 47 KYB cases | hand-authored corpora (same author as the gateway) | simulated agent 90.0% → Sentinel **0.0%**; false positives 0.0% | [§A–F](#a-ai-security----development-corpus-resultssecurityjson) |
+| **Decision integrity** | structural / invariant test | attacker text or model output loosening a protected decision | 170 attacks, 360 model replays | the security corpora | **0.0%** (no controls: 83.5%) | [§H](#h-decision-integrity-resultsintegrityjson) |
+| **Financial risk** | synthetic benchmark | precision / recall / FPR against injected scenario labels | 3,183 transactions, 157 accounts per seed | dev 42 (point values tuned on it); held-out 7, 2024 | transactions P 86.7% R 67.2% FPR 0.19%; accounts P 90.0% R 90.0% | [§G](#g-financial-risk-on-labelled-synthetic-data-resultsfinancialjson) |
+| **Temporal correctness** | synthetic invariant test | a record dated after T changing a decision at T | 192 transactions; 9 kinds of future record at 4 offsets; 3,648 decisions checked | seeds 42, 7 | **0 leaks** (95% bound 0.082%) | [§I](#i-temporal-correctness-resultstemporaljson) |
+| **Claim classifier** | synthetic, same author (defence in depth) | legitimate claims read as their type; the rest held for a human | 117 phrasings; 21 held-out | hand-authored | held-out 17/21 (first run 7/21); FN 4/56, FP 0/28 | [§L](#l-claim-classifier-resultsclaimsjson) |
+| **Performance** | local deterministic benchmark | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.7493 ms | [PERFORMANCE.md](PERFORMANCE.md) |
+| **Live LLM** | live-model evaluation | the same suites against a real model | -- | `claude-opus-5-5` | **NOT RUN** -- no live number is quoted anywhere | [§K](#k-model--provider-evaluation-resultsmodelsjson) |
+
 ## Three kinds of numbers
 
 Read every table with this distinction in mind; each results file records the
@@ -21,7 +33,7 @@ kind of each headline metric under `kinds`.
 |---|---|---|
 | **STRUCTURAL GUARANTEE** | 0 by construction under the design. A consequential capability executes only when the trusted records support the claim, and every attack sits on records that do not. These rows are regression checks that the implementation honours the design (`tests/test_results_regression.py` recomputes them), not detection results. | guarded attack success, off-surface execution, the integrity suite's structural rows, the temporal-leakage rates |
 | **SYNTHETIC EVALUATION** | Empirical, but on hand-authored corpora, a seeded synthetic dataset and the **offline simulated agent** (`OfflineProvider`, a deterministic regex model of a gullible tool-calling agent that shares an author with the corpus). These numbers can move and describe this simulator and this generator, not the world. | unguarded attack success, detection recall, false positives, KYB outcomes, everything in the financial suite, performance |
-| **LIVE MODEL EVALUATION** | The identical suite against a real model on the operator's own key (`SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models`). | `results/models.json` -- current status of the live row: **not_run** (`claude-opus-5`); no live number is quoted anywhere in this repository |
+| **LIVE MODEL EVALUATION** | The identical suite against a real model on the operator's own key (`SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models`). | `results/models.json` -- current status of the live row: **not_run** (`claude-opus-5-5`); no live number is quoted anywhere in this repository |
 
 ## What "attack success" means
 
@@ -305,6 +317,24 @@ positives (abused (scenario) or shell registration or >= 2 prior flags) and is r
 
 The 19 transaction-level misses on this seed are burst transactions. `rapid_fire` needs 3 transactions inside 10 minutes and `rapid_succession` a short gap against a ≥ 6 h median, so the first transactions of a burst cannot carry the short-window velocity signals, and a burst spread over more than the window carries fewer of them; the account-level monitor is where a burst is meant to be caught (account-level burst recall above). The missed and false-positive examples are listed in `results/financial.json` under `transaction_level`.
 
+**Bursts by position** (seed 42):
+
+| Position in burst | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| flagged / n | 0/3 | 0/3 | 0/3 | 0/3 | 0/3 | 2/3 | 1/3 | 2/3 | 3/3 | 3/3 | 2/2 | 2/2 |
+
+Split by what the rapid-fire rule could see when each transaction was
+authorised (velocity-visible = at least 3 earlier transactions on the account in the 10 minutes before (the rapid-fire rule's input)): **6/7** velocity-visible burst
+transactions were flagged, **9/27** of the rest (by other signals,
+mostly the one-hour velocity rule, late in the burst). This is structural, not
+a bug: at authorisation time a burst's first transactions look like ordinary
+purchases because the burst does not exist yet, and point-in-time features
+cannot see what comes after. The control for those is the account-level
+monitor, which sees the whole window and flags 100.0% of the burst accounts.
+Lowering the thresholds to catch earlier positions would flag legitimate
+shopping sessions, which burst too (`tests/test_generator_scenarios.py`); it
+was not done.
+
 ### Signals
 
 How often each factor fires on fraud-labelled and on legitimate transactions
@@ -330,10 +360,10 @@ to change that, and the point values are documented in `docs/RISK_ENGINE.md`.
 | `velocity_elevated` | velocity | 10 | 6 (10.3%) | 29 (0.93%) | 17.1% |
 | `velocity_spike` | velocity | 20 | 19 (32.8%) | 5 (0.16%) | 79.2% |
 | `rapid_fire` | velocity | 20 | 7 (12.1%) | 14 (0.45%) | 33.3% |
-| `new_device` | device_geo | 17 | 6 (10.3%) | 13 (0.42%) | 31.6% |
 | `auth_none` | security | 12 | 1 (1.7%) | 18 (0.58%) | 5.3% |
-| `young_account_shared_device` | device_geo | 14 | 18 (31.0%) | 0 (0.00%) | 100.0% |
+| `new_device` | device_geo | 17 | 6 (10.3%) | 13 (0.42%) | 31.6% |
 | `shared_payout_instrument` | entity | 20 | 18 (31.0%) | 0 (0.00%) | 100.0% |
+| `shared_device` | device_geo | 8 | 18 (31.0%) | 0 (0.00%) | 100.0% |
 
 Family precision when fired: anomaly 2.1%, velocity 35.0%, device_geo 49.0%, entity 5.5%, security 18.5%.
 
@@ -502,17 +532,17 @@ Sequential, single-threaded, persistence excluded; machine-dependent.
 
 | Component | p50 ms | p95 ms | p99 ms | ops/s |
 |---|---:|---:|---:|---:|
-| `normalize` | 0.0178 | 0.0184 | 0.0187 | 56,809 |
-| `gateway_inspect` | 0.2226 | 0.2258 | 0.2295 | 4,490 |
-| `claim_classify` | 0.2557 | 0.26 | 0.2672 | 3,907 |
-| `evidence_reconcile` | 0.0342 | 0.0347 | 0.0391 | 28,995 |
-| `risk_score_transaction` | 0.0145 | 0.0147 | 0.0168 | 68,335 |
-| `graph_linked_accounts` | 0.0039 | 0.004 | 0.0041 | 250,753 |
-| `graph_neighborhood_d2` | 0.053 | 0.0555 | 0.0586 | 18,562 |
-| `policy_evaluate` | 0.0145 | 0.0147 | 0.0174 | 65,707 |
-| `decision_compose` | 0.0372 | 0.0385 | 0.0431 | 26,672 |
-| `audit_append` | 0.0086 | 0.0098 | 0.0107 | 113,888 |
-| `e2e_dispute_pipeline` | 0.7163 | 0.7267 | 0.7677 | 1,392 |
+| `normalize` | 0.0178 | 0.0187 | 0.0247 | 55,580 |
+| `gateway_inspect` | 0.2224 | 0.2323 | 0.253 | 4,472 |
+| `claim_classify` | 0.2618 | 0.273 | 0.2882 | 3,802 |
+| `evidence_reconcile` | 0.0345 | 0.0367 | 0.0435 | 28,480 |
+| `risk_score_transaction` | 0.0147 | 0.0153 | 0.0207 | 65,772 |
+| `graph_linked_accounts` | 0.0039 | 0.004 | 0.0041 | 249,394 |
+| `graph_neighborhood_d2` | 0.0532 | 0.0557 | 0.0801 | 18,369 |
+| `policy_evaluate` | 0.0144 | 0.0147 | 0.0169 | 65,692 |
+| `decision_compose` | 0.0382 | 0.0412 | 0.0474 | 25,734 |
+| `audit_append` | 0.0088 | 0.0102 | 0.0153 | 109,876 |
+| `e2e_dispute_pipeline` | 0.724 | 0.7493 | 0.7896 | 1,374 |
 
 A live LLM call (hundreds of milliseconds) dominates real latency by three
 orders of magnitude; Sentinel's own controls are not the bottleneck.
@@ -523,8 +553,8 @@ orders of magnitude; Sentinel's own controls are not the bottleneck.
 
 | Provider | Model | Date | Status | ASR no controls | ASR Sentinel | FP | Latency p95 ms | Tokens in / out | Note |
 |---|---|---|---|---|---|---|---|---|---|
-| offline | `offline-simulator` | 2026-09-25 | ok | 90.0% | 0.0% | 0.0% | 0.139 | — |  |
-| anthropic | `claude-opus-5` | 2026-09-25 | not_run | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
+| offline | `offline-simulator` | 2026-09-26 | ok | 90.0% | 0.0% | 0.0% | 0.138 | — |  |
+| anthropic | `claude-opus-5-5` | 2026-09-26 | not_run | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
 
 Each provider row records the model, the run date, per-class outcomes, agent
 latency and the provider's token totals where its SDK reports them
@@ -587,5 +617,5 @@ make eval                      # everything above (200 attacks over three corpor
 make docs                      # re-render this file and every generated block from results/ and the code
 sentinel eval run --suite security|heldout|surfaces|kyb|baselines|ablation|financial|integrity|temporal|claims|performance|models|charts
 sentinel eval run --suite financial --full     # larger dataset (400 customers / 12k transactions)
-make test                      # 564 tests, incl. tests/test_results_regression.py which recomputes the headline claims
+make test                      # 600 tests, incl. tests/test_results_regression.py which recomputes the headline claims
 ```

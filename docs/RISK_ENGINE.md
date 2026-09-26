@@ -61,8 +61,25 @@ profiles are cached per `(entity, as_of)` and read only records at or before
 monitoring cycle finder accepts only hops inside its window; an account's
 status counts from when it took effect (`Account.status_at`) and payout
 sharing reads the bank accounts held at T, not the current payout field (both
-were current-state reads until the 2.2.0 temporal extension found them). Data
-available after T never influences a decision made at T. `results/temporal.json`
+were current-state reads until the 2.2.0 temporal extension found them).
+
+**What this is and is not.** It is a *tested temporal invariant*: every field
+the engines read is either timestamped and read as of the decision, or a
+static attribute, or deliberately current state -- and the benchmark checks
+that nine kinds of later record never move an earlier decision. It is **not**
+a fully event-sourced historical model: several fields have no history in the
+data model, so a later change to them would not be visible as a change.
+
+| Record field read by the engines | Time semantics | Consequence |
+|---|---|---|
+| transactions, disputes (`submitted_at`), login sessions | timestamped; read as of the decision | a later record is invisible to an earlier decision (benchmarked) |
+| device `first_seen`, instrument `added_at`, graph edges | timestamped; read as of the decision | a later device, instrument or relationship is invisible (benchmarked) |
+| account `opened_at`, merchant `registered_at` | timestamped; ages measured to the decision | -- |
+| account `status` | as of the decision via `status_since` (2.2.0); a status with no recorded start is read as current | a later freeze is invisible (benchmarked); legacy data without a start date is current state |
+| account payout destination | the bank accounts held at the decision time | a later payout change is invisible (benchmarked) |
+| merchant `registration_status`, `prior_flags`, `mcc_risk` | static attributes set at registration; no history | a later re-classification would move earlier merchant scores -- not modelled; would need dated merchant events |
+| dispute `refund_state`, `merchant_response`, transaction `status` | current state at the time the dispute is decided | correct for a live decision; replay uses the snapshot taken then, not today's values |
+| stored risk assessments, AI-security events | never read by scoring | cannot leak (benchmarked) | `results/temporal.json`
 measures it; `tests/test_temporal_leakage.py` and
 `tests/test_entity_pointintime.py` pin it.
 
