@@ -95,11 +95,15 @@ is rendered from `results/` by `make docs`; none is typed by hand.
     original from its snapshot, a deliberate engine change reports drift on
     every earlier decision until they are re-baselined -- which is the point,
     but it is noisy.
-16. **The API's trust contract is by convention.** `ledger`, `records`,
-    `transaction` and `session` in a request body are treated as the
-    institution's records because the caller is meant to be the system of
-    record. Nothing in the protocol proves that; auth is optional and the
-    server warns when it starts open on a non-loopback address. What-if
+16. **Sentinel does not verify the facts it adjudicates against.** The
+    "system of record" is a synthetic SQLite store, and `ledger`, `records`,
+    `transaction` and `session` objects in a request body are demo /
+    simulation input trusted by contract -- every decision says which it was
+    (`facts_source`) and the audit event records it, but nothing in the
+    protocol proves the caller is a system of record. A caller-supplied
+    transaction also chooses its own timestamp, i.e. the moment its risk is
+    computed as of. Auth is optional and the server warns when it starts open
+    on a non-loopback address. What-if
     switches (controls, policy version, risk model, `as_of`) are refused on
     the evaluate routes, and the engine never records a run that used one.
 17. **The audit chain's external anchor is the operator's job.** It is a

@@ -92,6 +92,23 @@ rule inside the engine, whatever the surface.
 }
 ```
 
+## Input classes: system of record vs demo / simulation
+
+Sentinel adjudicates claims against trusted facts; it does **not** verify
+those facts, and it has no real ledger integration. Every decision therefore
+carries `facts_source`, which the decision's audit event also records:
+
+| `facts_source` | Request form | Meaning |
+|---|---|---|
+| `system_of_record` | `{dispute_id}`, `{application_id}`, `{transaction_id}`, `{session_id}`, investigations | the facts were read by reference from the record store -- here Sentinel's synthetic SQLite store, standing in for a bank's systems of record |
+| `caller_supplied` | `{ledger}`, `{records}`, `{transaction}`, `{session}` objects in the body | **demo / simulation input**: the caller supplied the facts; they are trusted by contract and Sentinel did not read them from anywhere |
+| `demo_fixture` | `/v1/attacks/simulate` presets | **demo / simulation input**: a shipped synthetic preset |
+
+The id forms are the production-shaped ones. The object forms exist so the
+console and the demos can try a scenario without a dataset; they are not a
+way to verify a ledger. `GET /v1/system` returns the three descriptions and
+the console shows the source on every decision.
+
 ## Trust contract
 
 Everything in `narrative`, `documents`, `messages`, `untrusted`, `message`,

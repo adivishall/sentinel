@@ -59,6 +59,15 @@ because the data or the evaluation became more honest.
   from the bank accounts held at T1.
 - `authorize()` denies an unregistered capability or unknown actor instead of
   raising; the API drains an oversized body before answering 413.
+- **Facts provenance.** Sentinel adjudicates against its facts; it does not
+  verify them, and the ad-hoc API forms let the caller supply them. Every
+  decision now carries `facts_source` (`system_of_record` -- read by id from the
+  synthetic record store -- or demo / simulation input: `caller_supplied`,
+  `demo_fixture`), recorded in its audit event and shown by the API, CLI and
+  console. A past `as_of` investigation through the Python API is a backtest on
+  the what-if runtime, never recorded.
+- A malformed-input battery (~450 requests) found no route returning 500;
+  pinned as a regression.
 
 ### Added
 - **Claim classifier** (`sentinel/security/claims.py`): weighted pattern
@@ -89,7 +98,25 @@ because the data or the evaluation became more honest.
   operator runs it.
 - **Console**: data-source lines, the claim reading beside the evidence,
   methodology under every evaluation section, replay versions and record
-  check.
+  check; a six-class trust legend (untrusted, model-generated, trusted,
+  derived, policy, human); the facts' source on every decision; replay labels
+  ORIGINAL vs RECOMPUTED and offers a one-click example in which
+  dispute-refund v1 would have paid a second refund.
+- **`make attack-compare`** answers five questions in order: what the
+  attacker submitted, what the AI recommended, what the trusted records say,
+  what policy said, what was finally allowed.
+- **Burst analysis** in the financial suite: recall by position in the burst
+  and by whether the velocity rule's input existed at authorisation time --
+  the early-burst misses are structural and documented, not tuned away.
+- **Consequential-capability trace**, rendered into `docs/SECURITY_MODEL.md`
+  and checked against the workflow source; the detection / claim
+  classification / trusted adjudication distinction; per-field time semantics
+  (tested temporal invariant vs a fully event-sourced history); audit CLI exit
+  codes; an evaluation-categories table (kind of evidence, sample, seeds).
+- **Live provider verified offline** against a stub SDK (request shape,
+  parsing, tokens, the evaluation pipeline); the default model id is now a real
+  identifier (`claude-opus-5-5`). No key is present, so the live row stays
+  `not_run`.
 
 ### Changed
 - **Synthetic generator realism**: varied fraud timestamps and gaps;
@@ -110,6 +137,9 @@ because the data or the evaluation became more honest.
   server), offline adjudicator roles, never-produced evidence kinds and a dozen
   unused helpers; one numeric coercion instead of three; the static snapshot
   built from the same builders as the API; `requirements.txt` retired.
+- README rewritten for a first-time reader; résumé reduced to three bullets;
+  the interview guide answers twelve questions as implemented / simulated /
+  not implemented; `submission/` and `social/` are marked historical drafts.
 - Version 2.2.0.
 
 ## [2.1.0] — 2026-09-25

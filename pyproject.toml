@@ -13,6 +13,12 @@ authors = [{ name = "adivishall" }]
 keywords = ["ai-security", "prompt-injection", "fraud-risk", "policy-as-code", "fintech", "decision-integrity", "audit"]
 dependencies = []  # the core is standard library only (sqlite3, http.server, dataclasses)
 
+[project.urls]
+Homepage = "https://github.com/adivishall/sentinel"
+Console = "https://adivishall.github.io/sentinel/"
+Documentation = "https://github.com/adivishall/sentinel/tree/main/docs"
+Changelog = "https://github.com/adivishall/sentinel/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
 live = ["anthropic==0.40.0"]
 charts = ["matplotlib==3.9.2"]
