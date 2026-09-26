@@ -151,7 +151,7 @@ the dev corpus, 50.0% held-out), on which the security case does not depend.
 
 ```bash
 git clone https://github.com/adivishall/sentinel.git && cd sentinel
-make install          # dev tooling only -- the core has zero runtime dependencies
+make install          # dev tooling + the `sentinel` command; the core has zero runtime dependencies
 make test             # 564 tests, offline
 make attack           # the flagship demo, no key needed
 make api              # API + console at http://localhost:8000 (in-memory demo dataset)
