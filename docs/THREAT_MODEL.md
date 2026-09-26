@@ -113,11 +113,13 @@ closes them.
 - Detection is lexical and evadable (held-out recall is reported honestly);
   the architecture, not the detector, carries the guarantee.
 - The claim classifier is lexical too: an unrecognised legitimate phrasing
-  degrades to a fail-safe human review, which is a false positive. The
+  degrades to a fail-safe human review -- a classifier false negative that
+  costs review time, never money. The
   held-out set exists to find these; it found one in v2 ("called off the
   booking") and the *general* pattern was fixed, not the string.
-- The offline agent is a faithful simulation of the documented failure mode,
-  not proof that a specific production LLM fails identically. `make live-check`
+- The offline agent is a deterministic simulation of the documented failure
+  mode (a gullible tool-calling agent), not a measurement of any real model
+  and not proof that a specific production LLM fails identically. `make live-check`
   and `sentinel eval run --suite models` exist to probe a real model. Its
   attack-success rate is a property of the simulator, which shares an author
   with the corpus.
@@ -134,10 +136,11 @@ closes them.
   `SENTINEL_AUDIT_KEY`) that the operator must store outside the audit store;
   the chain is a tamper-evident application audit chain, not a blockchain and
   not an immutable ledger.
-- A clean merchant whose upload carries an injection is held for a human
-  rather than approved: a CRITICAL security finding blocks automatic approval
-  by design. The KYB suite reports this as the any-input false-positive rate
-  (`docs/LIMITATIONS.md`).
+- A clean merchant whose upload carries a HIGH or CRITICAL injection is held
+  or blocked rather than approved (5 of the 12 such applications in the KYB
+  suite); lower-severity text does not stop an approval the records support
+  (the other 7). The KYB suite reports the cost as the any-input
+  false-positive rate (`docs/LIMITATIONS.md`).
 - The temporal-leakage suite is a deterministic check over two generator
   worlds (192 sampled transactions, nine record kinds, four offsets); the
   per-feature tests cover the mechanisms, but it is not a proof over every

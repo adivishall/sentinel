@@ -18,8 +18,10 @@
   prose, documents or model output into VERIFIED evidence or into a policy
   context field. Extend the field catalog only with trusted fields.
 - **Policies are data.** Add a new version file (`policy-id.vN.json`) rather
-  than editing a shipped version in place; decisions record the version they
-  used.
+  than editing a shipped version in place, then run `sentinel policy pin` to
+  record its digest in `sentinel/policy/policies/MANIFEST.json` (an unpinned
+  or edited version refuses to load); decisions record the version and content
+  hash they used.
 - **Never tune the detector to the held-out set.** If the held-out set finds
   a false positive, fix the general behaviour and add a dev-corpus case.
 - **No fabricated numbers.** Every metric in the docs must come from

@@ -42,7 +42,7 @@ string where a number is expected raises, it is not "false".
   reports `policy_drift` when the served version no longer has the content the
   decision was made under. A version number is a label a file edit can reuse;
   the hash is what is trusted.
-- **Pinned versions.** `policies/MANIFEST.json` pins the full SHA-256 of every
+- **Pinned versions.** `sentinel/policy/policies/MANIFEST.json` pins the full SHA-256 of every
   shipped version. A version edited in place, added without pinning or deleted
   raises `PolicyIntegrityError` before anything is registered, and a store that
   recorded decisions under a version with other content refuses to open.

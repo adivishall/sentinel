@@ -13,8 +13,13 @@ named** -- and the trust root is a checkpoint stored outside the store.
 
 ## The record
 
-One `AuditEvent` per decision, case action, human decision or system event.
-The hash covers every field except the two hashes: `event_id`, `sequence`, `timestamp`, `decision_id`, `actor`, `workflow`, `subject_id`, `risk_score`, `risk_level`, `policy_id`, `policy_version`, `capability`, `action`, `evidence_ids`, `security_severity`, `input_hash`, `case_id`, `kind`, `detail`.
+One `AuditEvent` per recorded event, of three kinds: `decision` (every
+authoritative decision; the case it opened is linked to it), `case` (every
+human case action: a case opened by hand `CASE_OPENED`, a status change
+`CASE_<STATUS>`, a human decision `HUMAN_APPROVE` / `HUMAN_DENY` /
+`HUMAN_ESCALATE`, with the declared role and hashes of any note or title) and
+`replay`. What-if runs are never chained. The hash covers every field except
+the two hashes: `event_id`, `sequence`, `timestamp`, `decision_id`, `actor`, `workflow`, `subject_id`, `risk_score`, `risk_level`, `policy_id`, `policy_version`, `capability`, `action`, `evidence_ids`, `security_severity`, `input_hash`, `case_id`, `kind`, `detail`.
 `event_hash = SHA-256(canonical_json(body) ‖ previous_hash)`; the first
 event's `previous_hash` is the genesis constant; `sequence` is contiguous
 from 0. `detail` is redacted before hashing: any of `document`, `narrative`, `prompt`, `rationale`, `span`, `submission`, `text` is replaced by its

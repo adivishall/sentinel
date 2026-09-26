@@ -1,7 +1,9 @@
 # Limitations (read before judging, and before presenting)
 
-We would rather state these than have them found. Every number in this file
-is rendered from `results/` by `make docs`; none is typed by hand.
+We would rather state these than have them found. The numbers inside the
+generated blocks are rendered from `results/` by `make docs`; the few numbers
+in the prose are configuration values (policy limits) or restate a generated
+block.
 
 ## What is simulated
 
@@ -42,18 +44,22 @@ is rendered from `results/` by `make docs`; none is typed by hand.
    trusted-evidence adjudication + policy is what carries the 0% result.
 7. **The claim classifier is deterministic patterns, not language
    understanding.** An unrecognised legitimate phrasing abstains and is held
-   for a human -- a false positive that costs review time, never money. Two
+   for a human -- a classifier false negative that costs review time, never
+   money. It is defence in depth, not the security foundation. Two
    incompatible claims in one message also abstain.
    <!-- gen:claims -->
-   The claim classifier is deterministic and explainable (weighted pattern
-   families, a negation guard, a hedge detector) and reports a confidence. On a
+   The claim classifier is defence in depth, not the security foundation: it
+   only selects which trusted field is checked. It is deterministic and
+   explainable (weighted pattern families, a negation guard, a hedge detector)
+   and reports a confidence. On a
    117-phrasing benchmark that shares its author it reads 100.0% of ordinary legitimate
    paraphrases and never reads attack prose as a claim it does not assert
    (0.0%); ambiguous and contradictory messages abstain. On a **held-out**
-   set of 21 uncommon legitimate phrasings it recognised 7 on the first run and
-   17 after the patterns were extended against a separate development set
-   (optimistic: the author had seen the misses); every miss abstains, i.e. goes
-   to a human -- a cost, not a breach. False negatives 4 / 56, false
+   set of 21 uncommon legitimate phrasings it recognised 7 on the first, blind run
+   and 17 after the patterns were extended against a separate development set --
+   partially informed (the author had seen the misses), so 17/21 is not a clean
+   independent benchmark; every miss abstains, i.e. goes to a human -- a cost,
+   not a breach. False negatives 4 / 56, false
    positives 0 / 28 (`docs/EVALUATION.md` §L).
    <!-- /gen:claims -->
 8. **Risk is a rule model, not ML.** Point values are Sentinel heuristics,
@@ -64,8 +70,8 @@ is rendered from `results/` by `make docs`; none is typed by hand.
 9. **The corpora are hand-authored and templated.**
    <!-- gen:corpus-counts -->
    Development corpus: 150 attacks + 21 controls across 15
-   classes. Held-out: 20 attacks + 6 controls, authored independently and
-   kept disjoint by test. Other surfaces: 30 attacks. KYB: 47 balanced
+   classes. Held-out: 20 attacks + 6 controls, written after the
+   development corpus by the same author and kept disjoint by test. Other surfaces: 30 attacks. KYB: 47 balanced
    applications (24 with a hostile document, 23 without). The taxonomy and the
    invariants are the claim, not the counts.
    <!-- /gen:corpus-counts -->
@@ -125,12 +131,16 @@ is rendered from `results/` by `make docs`; none is typed by hand.
     the protected path, not a claim about any real model; the live-model row in
     `results/models.json` is `not_run`.
     <!-- /gen:unguarded-baseline -->
-19. **The guarded 0% is structural.** Every attack ledger is unsupporting and
-    every hostile KYB application either sits on bad records or is held by
-    the security finding, so under the design no attack *can* execute; those
-    rows are regression checks. The empirical content of the security suite
-    is the false-positive rate on deserved claims, the detection recall, the
-    held-out claim-classifier coverage and the KYB any-input cost.
+19. **The guarded 0% is structural.** Every attack ledger in the dispute and
+    surface corpora is unsupporting, so under the design no attack *can*
+    execute; those rows are regression checks. In KYB, a hostile upload on
+    clean records is approved when its finding is below HIGH -- correctly,
+    since the records support the merchant and the text changes nothing (7 of
+    12 in the suite) -- and held or blocked otherwise (5 of 12); a hostile
+    upload on bad records is never approved. The empirical content of the
+    security suite is the false-positive rates, the detection recall, the KYB
+    any-input cost and the claim classifier's held-out coverage (partially
+    informed: 7/21 on the first, blind run, 17/21 after changes).
 20. **The financial figures are development figures with an honest range.**
     <!-- gen:financial-caveats -->
     The point values were tuned on seed 42; the suite also runs seeds
@@ -151,14 +161,18 @@ is rendered from `results/` by `make docs`; none is typed by hand.
     <!-- /gen:financial-caveats -->
 21. **KYB has a real false-positive cost on hostile-but-clean applications.**
     <!-- gen:kyb-caveat -->
-    The KYB any-input false-positive rate is 26.3%: 5 of the 12
-    clean merchants whose upload carried an injection were held for a human
-    rather than approved, because a CRITICAL security finding blocks automatic
-    approval. On benign input the rate is 0.0% and no merchant the records
-    say to reject went live (0.0% FN). This is the cost of the design and is
-    reported, not tuned away.
+    The KYB any-input false-positive rate is 26.3%: of the 19 applications
+    whose acquirer records alone say *approve*, 5 were not approved because their upload
+    carried an injection (3 blocked by the CRITICAL security finding, 2 held for
+    review). The other 7 of the 12 clean-record applications with a hostile upload were
+    approved -- correctly: the records supported them and the text changed nothing.
+    On benign input the rate is 0.0%, and no merchant the records say to reject
+    went live (0.0% FN). This is the cost of the design and is reported, not
+    tuned away.
     <!-- /gen:kyb-caveat -->
-22. **The temporal-leakage suite is a deterministic check, not a proof.** It
+22. **The temporal-leakage suite is a deterministic check, not a proof.** Its
+    result is "0 observed temporal leaks across the tested synthetic
+    benchmark": a tested invariant, not a fully event-sourced history. It
     samples 192 transactions over two generator worlds and nine kinds of
     future record at four offsets; the per-feature tests
     (`test_temporal_leakage.py`, `test_entity_pointintime.py`,
@@ -189,11 +203,14 @@ is rendered from `results/` by `make docs`; none is typed by hand.
     transactions than on fraud (`docs/EVALUATION.md` §G lists every one);
     they were left as they are rather than re-weighted to look better.
 27. **The human path has structure but no identity.** Only a human decision
-    resolves a case, reserved system / model names are refused, and approving
-    needs the level the case's capability requires -- but the reviewer's name
-    and level are declared by the caller. Without per-user authentication and
-    four-eyes enforcement, "a senior reviewer approved it" means "someone who
-    called the API said so".
+    resolves a case, reserved system / model names are refused, approving needs
+    the level the case's capability requires and the registry's answer for a
+    human actor, an escalated case needs a senior, and every human action is
+    chained into the audit log -- but the reviewer's name and level are
+    declared by the caller (status changes and manual cases accept any declared
+    actor name). Without per-user authentication and four-eyes enforcement, "a
+    senior reviewer approved it" means "someone who called the API said so",
+    recorded tamper-evidently.
 28. **The claim classifier's held-out score is optimistic after the change.**
     The held-out set scored 7/21 on the first run; the patterns were then
     extended against a separate development set by an author who had seen the
@@ -210,16 +227,19 @@ is rendered from `results/` by `make docs`; none is typed by hand.
 - The trust boundary and the composer: the authoritative decision is computed
   from a view that has no field for prose or for the model's recommendation.
   The integrity suite measures the property as it is enforced: across 170
-  attacks, **0.0%** exceeded the ledger-supported ceiling and **0.0%**
+  attacks (main and held-out corpora), **0.0%** exceeded the ledger-supported ceiling and **0.0%**
   executed without ledger support, against **83.5%** permissive influence with
   no controls; 360 model-recommendation replays changed nothing.
-- **0.0%** unauthorised capability executions across the development corpus,
-  the held-out set, the other surfaces and KYB (structural, by construction),
+- **0.0%** unauthorised capability executions across the main corpus (150),
+  the held-out corpus (20), the other surfaces (30) and KYB (24 hostile)
+  (structural, by construction),
   with **0.0%** false positives on deserved refunds -- including the
   urgent-but-legitimate phrasings -- which is the empirical part.
-- **0 of 3,648** decisions changed by future records on the
-  temporal benchmark (nine record kinds, four offsets, two seeds): a decision at T1
-  reads only records at or before T1, per feature and per entity profile.
+- **0 observed leaks in 3,648 checks** on the temporal benchmark
+  (9 kinds of later record, 4 offsets, two synthetic worlds): evidence
+  for a tested invariant -- for the record kinds tested, a decision at T1 read
+  only records at or before T1 -- not a proof, and not a fully event-sourced
+  history (see the time-semantics limitation).
 - Model output is typed untrusted and cannot become evidence; an agent
   pushed off its tool surface produces a CRITICAL event, a BLOCK and a P1
   case, never an execution.

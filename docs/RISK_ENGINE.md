@@ -79,8 +79,10 @@ data model, so a later change to them would not be visible as a change.
 | account payout destination | the bank accounts held at the decision time | a later payout change is invisible (benchmarked) |
 | merchant `registration_status`, `prior_flags`, `mcc_risk` | static attributes set at registration; no history | a later re-classification would move earlier merchant scores -- not modelled; would need dated merchant events |
 | dispute `refund_state`, `merchant_response`, transaction `status` | current state at the time the dispute is decided | correct for a live decision; replay uses the snapshot taken then, not today's values |
-| stored risk assessments, AI-security events | never read by scoring | cannot leak (benchmarked) | `results/temporal.json`
-measures it; `tests/test_temporal_leakage.py` and
+| stored risk assessments, AI-security events | never read by scoring | cannot leak (benchmarked) |
+
+`results/temporal.json` measures it ("0 observed temporal leaks across the
+tested synthetic benchmark" -- evidence for the invariant, not a proof); `tests/test_temporal_leakage.py` and
 `tests/test_entity_pointintime.py` pin it.
 
 ## Transaction model (33 factors)

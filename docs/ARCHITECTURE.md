@@ -8,7 +8,7 @@ decision anywhere in the repository (tested by `tests/test_invariants.py::test_i
 ## The principle
 
 ```text
-AI may recommend. Trusted evidence, deterministic risk controls and explicit policy authorize.
+AI may recommend. Trusted evidence, deterministic policy and authorization decide.
 
 AUTHORITATIVE_DECISION = f(TRUSTED_FACTS, VERIFIED_EVIDENCE, RISK_STATE, POLICY, AUTHORIZATION)
 AUTHORITATIVE_DECISION ≠ f(ATTACKER_CONTROLLED_TEXT)
@@ -74,7 +74,7 @@ AUTHORITATIVE_DECISION ≠ f(MODEL_OUTPUT)
 
 ## Primitives
 
-Everything composes ten typed, immutable primitives (`sentinel/domain`):
+Everything composes nine typed, immutable primitives (`sentinel/domain` and the modules named):
 
 | Primitive | Module | Notes |
 |---|---|---|
@@ -208,9 +208,11 @@ temporal suite (`results/temporal.json`).
 `run_investigation`, `run_ai_security`. Each: validates and inspects untrusted
 input, computes risk from trusted records, lets the (deliberately naive) agent
 recommend, reconciles evidence, evaluates the versioned policy, authorizes,
-opens a case when a deterministic rule fires, appends an audit event, emits
-domain events, and returns a `DecisionBundle`. Invalid input never approves --
-it goes to a human.
+opens a case when a deterministic rule fires, appends an audit event and
+returns a `DecisionBundle`. Invalid input never approves -- it goes to a human.
+A recording runtime refuses what-if options (`_admit`) and records only an
+authoritative run (`_finish` → `authority.require_authoritative`); a
+multi-turn dispute is one decision (`DisputeSession.decide`).
 
 ## Storage (`data/store.py`)
 
@@ -231,10 +233,19 @@ call it. The evaluation suites call the workflows directly with `persist=False`.
 ## Dependency direction
 
 ```text
-domain ← security ← risk ← evidence ← policy ← decision ← cases/audit ← data ← replay ← app ← api/cli/evaluation
+domain  ←  policy, audit, agents, security
+security  ←  risk, evidence, cases
+decision  ←  (agents, audit, cases, evidence, policy, risk, security)
+data  ←  (audit, risk)          replay  ←  (decision, policy, risk)
+app  ←  (audit, cases, data, decision, policy, replay, risk, security)
+api, cli, evaluation  ←  app and the layers below
 ```
 
-Nothing imports upward. `mypy` runs over the whole package in CI.
+Read "A ← B" as "B imports A". Two imports are deferred to call time to avoid a
+cycle and are the only exceptions: `security.capabilities.matrix()` reads the
+policy registry (for the policy-gate column), and `cases.service` type-checks
+against `audit.chain` (the case service writes to the audit chain it is
+given). `mypy` runs over the whole package in CI.
 
 ## Reference documents (rendered from the code by `make docs`)
 

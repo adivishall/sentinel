@@ -56,9 +56,10 @@ Switch the mode to *compare* (or run `make attack-compare`): the same input
 left side as the offline simulator; it is a demonstration of what the
 architecture prevents, not a measured failure rate of any real model.
 
-Then pick *Adjudication gaming*: no injection at all, the gateway finds
-nothing (severity NONE), the model still recommends approve -- and the ledger
-still says delivered. DENY. This is why detection is not the backstop.
+Then pick *Adjudication gaming*: no injection at all -- the gateway sees at
+most a LOW social-engineering signal, below anything that holds a request --
+the model still recommends approve, and the ledger still says delivered. DENY.
+This is why detection is not the backstop.
 
 ## 2. Legitimate high-value transaction (Sentinel is not a blocker)
 
@@ -69,7 +70,7 @@ which lists them; the exact amounts depend on the generated world).
 ```text
 Risk        LOW/MEDIUM — home device, home country, favourite merchant, biometric
 Evidence    SUPPORTED — payment-switch record is trusted
-AI          allow
+AI          review
 Policy      REQUIRE_HUMAN_REVIEW · review-over-auto-limit (amount > ₹1,50,000)
 Final       REQUIRE_HUMAN_REVIEW · case P1
 ```
@@ -88,10 +89,11 @@ sentinel scenario run graph_linked_fraud
 
 Show the relationship graph: three accounts on one device and one payout
 instrument, bursts at the same merchants, transfers in a circle. The
-investigation workflow scores CRITICAL (circular transfers + shared device +
-linked-entity risk) and opens a case.
+investigation workflow scores CRITICAL (circular transfers, a device shared
+with the other ring accounts, a burst of activity, high-risk merchant
+exposure) and opens a case.
 
-## 4. Two closing moves
+## 4. Three closing moves
 
 - **Replay**: Console → **Replay** → *Replay it under v1*. A dispute that
   `dispute-refund@v3` denied because the ledger already shows a refund is
@@ -104,9 +106,13 @@ linked-entity risk) and opens a case.
 - **Review packet**: Console → **Investigations** → open the case. The packet
   separates trusted evidence from untrusted claims, lists the contradictions,
   and shows the model's recommendation marked MODEL_GENERATED -- recorded for
-  context, not a decision and not evidence. A reviewer records the human
-  decision there; nothing else can resolve the case.
-- **Audit**: `sentinel audit verify`. Edit one byte of the store and run it
-  again. Then `make audit-checkpoint` and
-  `sentinel audit verify --checkpoint audit-checkpoint.json`: a consistent
-  rewrite from genesis is caught against the exported head.
+  context, not a decision and not evidence. It says which review level may
+  approve -- for the blocked attack, nobody: a policy BLOCK on contradicted
+  records is final for every actor. A reviewer records the human decision
+  there (chained into the audit log); nothing else can resolve the case.
+- **Audit** (needs a persistent store: `make data && make analyze` first):
+  `sentinel --db data/sentinel.db audit verify`. Edit one byte of an event in
+  the store and run it again: AUDIT INTEGRITY ERROR, exit 2, naming the first
+  bad record. Then `make audit-checkpoint` and
+  `sentinel --db data/sentinel.db audit verify --checkpoint audit-checkpoint.json`:
+  a consistent rewrite from genesis is caught against the exported head.

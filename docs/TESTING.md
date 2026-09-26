@@ -49,6 +49,10 @@ make lint        # ruff + black --check + mypy over the whole package
 | `test_policy_adversarial.py` | the policy engine and registry, adversarially: missing and mistyped fields fail closed, facts cannot overwrite computed fields, malformed documents refused (unknown keys, no default, impossible values), threshold edges, conflicting rules, every consequential capability closed to AI / external actors, unknown capability / actor denied, tampered / unpinned / deleted policy files and store hash mismatch, malformed ledger and KYB numbers |
 | `test_audit_corruption.py` | audit corruption: malformed JSON, truncated line, missing field, wrong hash, wrong predecessor, deleted / inserted / reordered lines, cut last line -- each an AUDIT INTEGRITY ERROR (exit 2) through the library and the CLI; SQLite row edits; export -> verify |
 | `test_capability_trace.py` | the consequential-capability trace: a model asking for each of the ten capabilities in every workflow never executes it; a caller's request gets the registry's answer; execution only with SUPPORTED evidence, a non-blocking policy and a GRANTED SYSTEM authorization |
+| `test_release_trace.py` | the final consequential-capability trace: a workflow executes only its own capabilities (a login cannot approve a refund; API 400); one multi-turn conversation is one decision and one audit event; every human case action is chained; a human approval gets the registry's answer (a BLOCK on contradicted records cannot be approved) and an escalated case needs a senior; model prose and replay overrides stay bounded; a source label cannot carry text; ledger flags must be booleans and transaction amounts positive; a recording runtime refuses what-if options |
+| `test_api_malformed.py` | every POST route answers a battery of malformed bodies and odd GET parameters with a controlled 4xx, never a 500 |
+| `test_facts_provenance.py` | every decision says where its facts came from (system of record / caller-supplied / demo fixture) in the decision, the audit event, the API, the review packet and the console; a past `as_of` investigation is never recorded |
+| `test_live_provider.py` | the live Anthropic provider verified offline against a stub SDK: request shape, parsing, token accounting, the live-evaluation pipeline; without a key the live row is `not_run` |
 | `test_generator_chronology.py` | the synthetic world on five seed / profile worlds: nothing before what it needs or after the clock, dormant accounts silent, scenario gaps and sizes vary, fraud timestamps not recognisable from the clock, legitimate behaviour varies, determinism |
 
 ## The regression tests that matter most
@@ -63,6 +67,6 @@ make lint        # ruff + black --check + mypy over the whole package
 
 `.github/workflows/ci.yml`: ruff → black → mypy → pytest with coverage gate →
 invariants → evaluation smoke (security, held-out, surfaces, KYB, ablation,
-integrity, temporal) → CLI + audit-chain smoke (generate, analyse, the
+integrity, temporal, claims) → CLI + audit-chain smoke (generate, analyse, the
 flagship attack, verify, checkpoint export and verification) → Docker build.
 Live model calls are never made in CI.

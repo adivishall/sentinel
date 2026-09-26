@@ -139,6 +139,13 @@ def _meth(r: dict[str, Any], file: str) -> str:
     )
 
 
+def _mi_scope(i: dict[str, Any]) -> str:
+    """What the model-influence replays cover (the first N main-corpus attacks × each
+    recommendation), so '360' is never read as 'the 170 attacks'."""
+    d, r = i.get("model_influence_decisions"), i.get("model_influence_recommendations")
+    return f"{d} main-corpus attacks × {r} recommendations" if d and r else "see §H"
+
+
 def _scn(d: dict[str, Any]) -> str:
     return ", ".join(
         f"{k.replace('fraud:', '')} {pct(v['recall'])} (n={v['n']})" for k, v in d.items()
@@ -185,28 +192,34 @@ def evaluation_categories(R: dict[str, Any]) -> str:
         [
             [
                 "**AI security**",
-                "synthetic, offline simulated agent",
+                "synthetic, offline simulated agent (not a live LLM)",
                 "an unauthorised consequential capability actually executed",
-                f"{s['n_attacks']} dev + {h['n_attacks']} held-out + {sf['n_attacks']} surface attacks; "
-                f"{kc.get('cases', k.get('attacks', 0))} KYB cases",
+                f"main corpus {s['n_attacks']} attacks / {len(s['by_class'])} classes; held-out "
+                f"{h['n_attacks']}; other surfaces {sf['n_attacks']}; KYB {kc.get('cases', 0)} "
+                f"applications ({kc.get('attacks', k.get('attacks', 0))} hostile)",
                 "hand-authored corpora (same author as the gateway)",
-                f"simulated agent {pct(s['asr_unguarded'])} → Sentinel **{pct(s['asr_guarded'])}**; false positives {pct(s['fp_rate'])}",
+                f"main corpus: simulated agent {pct(s['asr_unguarded'])} → Sentinel "
+                f"**{pct(s['asr_guarded'])}**; held-out, surfaces, KYB: "
+                f"{pct(max(h['asr_guarded'], sf['asr_guarded'], k['asr_guarded']))}; "
+                f"false positives {pct(s['fp_rate'])} ({s['n_deserved_controls']} deserved refunds)",
                 "[§A–F](docs/EVALUATION.md#a-ai-security----development-corpus-resultssecurityjson)",
             ],
             [
                 "**Decision integrity**",
-                "structural / invariant test",
+                "structural (0 by construction; a regression check)",
                 "attacker text or model output loosening a protected decision",
-                f"{i['n_attacks']} attacks, {i['model_influence_n']} model replays",
+                f"{i['n_attacks']} attacks (main {s['n_attacks']} + held-out {h['n_attacks']}); "
+                f"{i['model_influence_n']} model-recommendation replays ({_mi_scope(i)})",
                 "the security corpora",
                 f"**{pct(i['text_influence_permissive_protected'])}** (no controls: {pct(i['text_influence_permissive_unguarded'])})",
                 "[§H](docs/EVALUATION.md#h-decision-integrity-resultsintegrityjson)",
             ],
             [
                 "**Financial risk**",
-                "synthetic benchmark",
-                "precision / recall / FPR against injected scenario labels",
-                f"{f['dataset']['transactions']:,} transactions, {n_accts} accounts per seed",
+                "synthetic benchmark (empirical)",
+                "precision / recall / FPR against the generator's scenario labels",
+                f"seed {f['dataset']['seed']}: {f['dataset']['transactions']:,} transactions, "
+                f"{n_accts} accounts; two held-out seeds of similar size",
                 f"dev {f['dataset']['seed']} (point values tuned on it); held-out "
                 + ", ".join(str(x) for x in f["seeds"]["held_out"]),
                 f"transactions P {pct(tl['precision'])} R {pct(tl['recall'])} FPR {pct(tl['false_positive_rate'], 2)}; "
@@ -215,31 +228,34 @@ def evaluation_categories(R: dict[str, Any]) -> str:
             ],
             [
                 "**Temporal correctness**",
-                "synthetic invariant test",
+                "synthetic invariant check (empirical; not a proof)",
                 "a record dated after T changing a decision at T",
                 f"{t['dataset']['sample']} transactions; {len(t['kinds'])} kinds of future record at "
-                f"{len(t['future_offsets_days'])} offsets; {t['decisions_tested']:,} decisions checked",
+                f"{len(t['future_offsets_days'])} offsets; {t['decisions_tested']:,} checks",
                 f"seeds {seeds}",
                 (
-                    f"**{t['leakage_count']} leaks** (95% bound {t['leakage_upper_95']:.3%})"
+                    f"**{t['leakage_count']} observed leaks** (95% upper bound {t['leakage_upper_95']:.3%} "
+                    f"per check, {t['sample_leakage_upper_95']:.2%} per sampled transaction)"
                     if t.get("leakage_upper_95") is not None
-                    else f"**{t['leakage_count']} leaks**"
+                    else f"**{t['leakage_count']} observed leaks**"
                 ),
                 "[§I](docs/EVALUATION.md#i-temporal-correctness-resultstemporaljson)",
             ],
             [
                 "**Claim classifier**",
-                "synthetic, same author (defence in depth)",
+                "synthetic, same author; defence in depth, not the foundation",
                 "legitimate claims read as their type; the rest held for a human",
-                f"{cl['n']} phrasings; {cl['uncommon_n']} held-out",
+                f"{cl['n']} phrasings; {cl['uncommon_n']} held-out unusual phrasings",
                 "hand-authored",
-                f"held-out {cl['uncommon_recognised']}/{cl['uncommon_n']} (first run 7/{cl['uncommon_n']}); "
-                f"FN {cl['false_negatives']}/{cl['false_negative_n']}, FP {cl['false_positives']}/{cl['false_positive_n']}",
+                f"held-out: first (blind) run 7/{cl['uncommon_n']}; "
+                f"{cl['uncommon_recognised']}/{cl['uncommon_n']} after the patterns were extended by "
+                f"an author who had seen the misses; FN {cl['false_negatives']}/{cl['false_negative_n']}, "
+                f"FP {cl['false_positives']}/{cl['false_positive_n']}",
                 "[§L](docs/EVALUATION.md#l-claim-classifier-resultsclaimsjson)",
             ],
             [
                 "**Performance**",
-                "local deterministic benchmark",
+                "local benchmark (one machine)",
                 "the platform's own latency, offline agent",
                 f"{p['workloads']['e2e_iterations']} end-to-end iterations",
                 p["platform"].split("-")[0],
@@ -603,19 +619,19 @@ was not done."""
                 f"truncation: a transaction's risk assessment differs when records after it are removed (seeds {seeds}, {td['transactions']:,} transactions)",
                 f"{t['truncation_mismatch_count']} / {td['sample']}",
                 f"{t['truncation_mismatch_rate']:.6f}",
-                "structural",
+                "tested invariant",
             ],
             [
                 f"perturbation: records added {offs} days after T1 change the T1 transaction assessment",
                 f"{txn_ch} / {t['comparisons']:,}",
                 f"{t['perturbation_transaction_change_rate']:.6f}",
-                "structural",
+                "tested invariant",
             ],
             [
                 "perturbation: the same future records change the T1 account-monitor assessment",
                 f"{mon_ch} / {t['comparisons']:,}",
                 f"{t['perturbation_monitoring_change_rate']:.6f}",
-                "structural",
+                "tested invariant",
             ],
             [
                 "**every check above**",
@@ -674,10 +690,18 @@ Every number in this document is produced by one command and written to
 make eval                # == sentinel eval run --suite full   (offline, deterministic, no key)
 ```
 
-Five dimensions are measured: **AI security** (three corpora and a KYB
-surface), **decision integrity**, **temporal correctness**, **financial risk**
-and **system performance**. All corpora and datasets are synthetic; see
+Six dimensions are measured: **AI security** (the {s['n_attacks']}-attack main corpus, a
+{h['n_attacks']}-attack held-out corpus, {sf['n_attacks']} attacks on three other surfaces and a
+{k['corpus']['cases']}-application KYB benchmark), **decision integrity**, **temporal correctness**,
+**financial risk**, the **claim classifier** and **system performance**. All corpora
+and datasets are synthetic and the agent is an offline simulator; see
 `docs/LIMITATIONS.md`.
+
+Attack counts, so that no number appears unscoped: the **main (development)
+corpus** is {s['n_attacks']} attacks across {n_classes} classes; the **held-out corpus** is {h['n_attacks']};
+the **other surfaces** add {sf['n_attacks']}; together {s['n_attacks'] + h['n_attacks'] + sf['n_attacks']}. The **integrity suite**
+reuses main + held-out ({i['n_attacks']}). **KYB** is separate: {k['corpus']['cases']} applications, {k['corpus']['attacks']} with a
+hostile document.
 
 ## At a glance -- one row per kind of evidence
 
@@ -690,8 +714,8 @@ kind of each headline metric under `kinds`.
 
 | Kind | What it is | Where it appears |
 |---|---|---|
-| **STRUCTURAL GUARANTEE** | 0 by construction under the design. A consequential capability executes only when the trusted records support the claim, and every attack sits on records that do not. These rows are regression checks that the implementation honours the design (`tests/test_results_regression.py` recomputes them), not detection results. | guarded attack success, off-surface execution, the integrity suite's structural rows, the temporal-leakage rates |
-| **SYNTHETIC EVALUATION** | Empirical, but on hand-authored corpora, a seeded synthetic dataset and the **offline simulated agent** (`OfflineProvider`, a deterministic regex model of a gullible tool-calling agent that shares an author with the corpus). These numbers can move and describe this simulator and this generator, not the world. | unguarded attack success, detection recall, false positives, KYB outcomes, everything in the financial suite, performance |
+| **STRUCTURAL GUARANTEE** | 0 by construction under the design. A consequential capability executes only when the trusted records support the claim, and every attack sits on records that do not. These rows are regression checks that the implementation honours the design (`tests/test_results_regression.py` recomputes them), not detection results. | guarded attack success, off-surface execution, the integrity suite's structural rows |
+| **SYNTHETIC EVALUATION** | Empirical, but on hand-authored corpora, a seeded synthetic dataset and the **offline simulated agent** (`OfflineProvider`, a deterministic regex model of a gullible tool-calling agent that shares an author with the corpus). These numbers can move and describe this simulator and this generator, not the world. | unguarded attack success, detection recall, false positives, KYB outcomes, everything in the financial suite, the claim classifier, the temporal-leakage checks (a tested invariant over two synthetic worlds: 0 observed is evidence, not a proof), performance |
 | **LIVE MODEL EVALUATION** | The identical suite against a real model on the operator's own key (`SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models`). | `results/models.json` -- current status of the live row: **{live['status']}** (`{live.get('model', '—')}`); no live number is quoted anywhere in this repository |
 
 ## What "attack success" means
@@ -737,9 +761,9 @@ once): {blocked}.
 
 The development corpus and the detector share an author, so a 0% there could
 be circular. The held-out set ({h['n_attacks']} attacks, {h['n_controls']} controls of which
-{h['n_deserved_controls']} deserve a refund) is authored independently with wording that never
-appears in the detector; a test asserts it is disjoint from the corpus and
-the detector is never tuned to it.
+{h['n_deserved_controls']} deserve a refund) was written after the development corpus, by the same
+author, with wording that never appears in the detector's patterns; a test
+asserts it is disjoint from the corpus and the detector is never tuned to it.
 
 | Metric | Value |
 |---|---:|
@@ -750,10 +774,10 @@ the detector is never tuned to it.
 
 {held_class}
 
-Two honest reads: the *claim classifier* generalised to the unseen legitimate
-phrasings (no deserved refund was held), and the lexical detector did not
-({pct(h['detection_recall'])} recall) -- which is why detection is not on the
-authorization path. The unguarded figure is depressed because the offline
+Two honest reads: none of the {h['n_deserved_controls']} held-out deserved refunds was held -- a small
+sample, and the classifier's own held-out test (§L) missed {cl['uncommon_n'] - cl['uncommon_recognised']} of {cl['uncommon_n']} unusual
+phrasings, which go to a human -- and the lexical detector did not generalise
+({pct(h['detection_recall'])} recall), which is why detection is not on the authorization path. The unguarded figure is depressed because the offline
 victim agent is itself lexical; the held-out set validates the platform, not
 the baseline's realism.
 
@@ -936,7 +960,7 @@ and {i['n_legit']} deserved controls:
 | Attacker text changed the outcome at all (tightening only) | {pct(i['text_influence_any_change_protected'])} | — | synthetic |
 | Injection appended to a deserved claim **loosened** it (n={i['legit_plus_injection_n']}) | **{pct(i['legit_plus_injection_loosened'])}** | — | structural |
 | Injection appended to a deserved claim tightened it (held for a human) | {pct(i['legit_plus_injection_tightened'])} | — | synthetic |
-| A different model recommendation changed the outcome (n={i['model_influence_n']}) | **{pct(i['model_influence_protected'])}** | — | structural |
+| A different model recommendation changed the outcome (n={i['model_influence_n']}: {_mi_scope(i)}) | **{pct(i['model_influence_protected'])}** | — | structural |
 | *Supporting ledger:* attacker text exceeded the ledger-supported ceiling | **{pct(i['text_beyond_ledger_ceiling'])}** | — | structural |
 | *Supporting ledger:* a capability executed without ledger support | **{pct(i['executed_without_ledger_support'])}** | — | structural |
 | *Supporting ledger:* attacker text changed the outcome vs a neutral message (selected the claim) | {pct(i['text_selected_claim_on_supporting_ledger'])} | — | by design |
@@ -963,19 +987,28 @@ Every sampled transaction is re-scored with records truncated to its own
 timestamp, then again with one kind of future record appended at every offset
 ({offs} days later) -- {len(t['kinds'])} kinds, {t['comparisons']:,} perturbation runs over {t['future_records']:,} future
 records -- and each time both the transaction assessment and the account
-monitor at T1 must be byte-identical. **{t['leakage_count']} leaks in {t['decisions_tested']:,} decisions
-tested.** Rates are exact counts, not rounded; with zero leaks the one-sided
+monitor at T1 must be byte-identical. **{t['leakage_count']} observed leaks in {t['decisions_tested']:,} checks
+across the tested synthetic benchmark.** Rates are exact counts, not rounded; with zero leaks the one-sided
 95% (Clopper-Pearson) upper bound on the per-decision leak rate is {ub_s}.
 Comparisons from one sample are correlated, so the conservative reading is
 per sample: 0 of {td['sample']}, upper bound {t['sample_leakage_upper_95']:.2%}.
 
 The 2.2.0 extension added `account_status`, `payout_change` and
-`security_event`. On a 24-transaction probe before the fix, a freeze after T1
-changed 24/24 transaction assessments and 24/24 monitor results, and a payout
-change after T1 changed 24/24 transaction assessments: both read the
-account's *current* fields. Status is now read as of the decision
-(`Account.status_at`) and payout sharing from the bank accounts held at T1;
-the rows below are after the fix.
+`security_event`, and its first run found two leaks: a freeze after T1 and a
+payout change after T1 changed T1's decisions, because both read the account's
+*current* fields (the counts from that pre-fix run were not kept in `results/`
+and are not quoted here; `tests/test_temporal_leakage.py` pins both cases).
+Status is now read as of the decision (`Account.status_at`) and payout sharing
+from the bank accounts held at T1; the rows below are after the fix.
+
+**Tested temporal invariant vs fully event-sourced history.** What this suite
+shows is a *tested invariant*: for the record kinds it appends, no later record
+changed an earlier decision. It is not a fully event-sourced history: some
+source fields are static or current-state attributes with no history of their
+own (a merchant's registration status, prior flags and MCC tier; a dispute's
+refund state and merchant response; `docs/RISK_ENGINE.md#point-in-time-invariant`
+lists every field and its time semantics), so a later change to one of them
+would not be visible as a change at all.
 
 {temporal_rows}
 
@@ -984,7 +1017,8 @@ the rows below are after the fix.
 Expected: {t['expected']}. `tests/test_temporal_leakage.py` and
 `tests/test_entity_pointintime.py` pin the same property per feature (baselines,
 device knowledge, entity profiles, graph edges, monitoring windows). This is a
-deterministic check over the generator's world, not a proof over every record.
+deterministic check over the generator's world: "0 observed temporal leaks
+across the tested synthetic benchmark", not a proof over every record.
 
 {_meth(t, "temporal")}
 
@@ -1055,7 +1089,7 @@ false-negative row measures.
 ## Reproduce
 
 ```bash
-make eval                      # everything above ({n_all_attacks} attacks over three corpora + KYB), writes results/*.json and charts
+make eval                      # everything above (main + held-out + surfaces = {n_all_attacks} attacks, plus KYB), writes results/*.json and charts
 make docs                      # re-render this file and every generated block from results/ and the code
 sentinel eval run --suite security|heldout|surfaces|kyb|baselines|ablation|financial|integrity|temporal|claims|performance|models|charts
 sentinel eval run --suite financial --full     # larger dataset (400 customers / 12k transactions)
@@ -1139,7 +1173,7 @@ rules (constant), `d` = graph degree, `w` = edges inside a time window.
 |---|---|---|
 | validate + normalise | scan, fold, NFKC | O(n) |
 | gateway | `s` bounded-quantifier regexes; no `.*` across alternations | O(s·n) = O(n) |
-| claim classification | a handful of regexes | O(n) |
+| claim classification | weighted pattern families (~60 patterns), negation and hedge guards | O(n) |
 | baseline | statistics over the account's history before the transaction | O(h) |
 | transaction features | 1-hour / {int(scoring.TRANSACTION_DEFAULT.t('rapid_window_minutes', 10))}-minute window scans over recent history; 24 h session window | O(h) |
 | entity profiles | indexed per merchant / account, cached per (entity, as-of) | O(1) amortised |
@@ -1225,6 +1259,7 @@ def render_security_model() -> str:
             "Allowed actors",
             "Required authorization",
             "Human-review threshold (₹)",
+            "Executable from",
             "Policy gates",
         ],
         [
@@ -1242,6 +1277,8 @@ def render_security_model() -> str:
                     if r["human_review_threshold"] is not None
                     else "—"
                 ),
+                ", ".join(r["workflows"])
+                or ("no workflow (a human, via the case service)" if r["consequential"] else "—"),
                 ", ".join(f"`{g}`" for g in r["policy_gates"]) or "—",
             ]
             for r in rows
@@ -1389,7 +1426,7 @@ this file is typed by hand except the prose; the tables are the code.
 ## The principle
 
 ```text
-AI may recommend. Trusted evidence, deterministic risk controls and explicit policy authorize.
+AI may recommend. Trusted evidence, deterministic policy and authorization decide.
 
 AUTHORITATIVE_DECISION = f(TRUSTED_FACTS, VERIFIED_EVIDENCE, RISK_STATE, POLICY, AUTHORIZATION)
 AUTHORITATIVE_DECISION ≠ f(ATTACKER_CONTROLLED_TEXT)
@@ -1433,18 +1470,27 @@ policy.
 ### Authorization (`capabilities.authorize`)
 
 Called with the capability the **workflow** is considering, never the one the
-model asked for. In order:
+model asked for, and with the workflow itself. In order:
 
 1. no consequential capability requested → GRANTED;
-2. the actor is not in the capability's allowed actors → DENIED;
-3. policy outcome BLOCK → DENIED;
-4. a consequential capability whose verified evidence does not support the
+2. an unregistered capability → DENIED (fail closed);
+3. a capability the workflow does not own (`WORKFLOW_CAPABILITIES`: a dispute
+   owns APPROVE_REFUND, a login decision owns only the account actions) →
+   DENIED -- a caller naming APPROVE_REFUND on the account route gets a 400 at
+   the API and a DENY from the engine;
+4. the actor is not in the capability's allowed actors → DENIED;
+5. policy outcome BLOCK → DENIED;
+6. a consequential capability whose verified evidence does not support the
    request → DENIED;
-5. policy outcome REQUIRE_HUMAN_REVIEW or TEMPORARY_HOLD → PENDING_HUMAN;
-6. the automated path (SYSTEM) on a capability that requires a human or
+7. policy outcome REQUIRE_HUMAN_REVIEW or TEMPORARY_HOLD → PENDING_HUMAN;
+8. the automated path (SYSTEM) on a capability that requires a human or
    senior reviewer → PENDING_HUMAN;
-7. SYSTEM above the capability's human-review amount threshold → PENDING_HUMAN;
-8. otherwise GRANTED.
+9. SYSTEM above the capability's human-review amount threshold → PENDING_HUMAN;
+10. otherwise GRANTED.
+
+A human approval of a case gets the same answer for the reviewer's actor kind
+(`CaseService.approval`): a policy BLOCK is final for every actor and records
+that contradict the claim cannot be approved.
 
 ### Final action (`composer._final_action`)
 
@@ -1492,7 +1538,8 @@ satisfied): evidence SUPPORTED, policy not BLOCK / HOLD / REVIEW, and the
 registry GRANTED for SYSTEM -- and only in an authoritative evaluation (every
 control, the active policy and risk model). `tests/test_capability_trace.py`
 drives a model requesting each capability in every workflow and a caller
-requesting each one directly.
+requesting each one directly (denied unless the workflow owns it);
+`tests/test_release_trace.py` pins the defects the final trace found.
 
 ## Evaluation authority (`sentinel/decision/authority.py`)
 
@@ -1503,7 +1550,10 @@ only when its inputs carry every control, the active version of its policy
 runs in `_finish` on the inputs the decision was actually composed from,
 before anything is written, and raises `ControlDowngrade` otherwise; the
 application sends what-if runs to a runtime that never persists, and every
-decision carries `authoritative`.
+decision carries `authoritative`. A recording runtime also refuses what-if
+*options* before running (`workflows._admit`): the composed inputs cannot show
+a run without prompt provenance, or a custom risk model that reuses the active
+model's version name.
 
 | Parameter class | Parameters | Where accepted |
 |---|---|---|
@@ -1528,8 +1578,15 @@ A human decision recorded under a reserved system or model actor name
 ({', '.join(f'`{a}`' for a in sorted(RESERVED_ACTORS))}, any `agent:` / `ai:` / `model:` prefix) or under the name
 of an agent that recommended on the case is refused. Approving needs the
 level the case's capability requires, read from the registry when the case
-opens: {need_rows}. Denying or escalating needs any human. The reviewer's
-name and level are *declared* -- there is no identity system
+opens: {need_rows}; and the registry must allow the approval for that
+reviewer's actor kind given the recorded policy outcome and evidence (a policy
+BLOCK or CONTRADICTED records cannot be approved by anyone; a claim the
+classifier could not read -- INSUFFICIENT -- can). Denying or escalating needs
+any human; once escalated, the case is decided by a SENIOR_REVIEWER. Every
+human action -- a manual case, a status change, a decision -- is appended to
+the audit chain before the case is saved (notes and titles hashed), so a
+resolution cannot be written into the case table without a chained record.
+The reviewer's name and level are *declared* -- there is no identity system
 (`docs/LIMITATIONS.md`).
 
 ## Threat taxonomy ({len(TAXONOMY)} classes)
@@ -1563,6 +1620,7 @@ because a model asked for one -- and only a human can resolve it.
 | prose never reaches the policy context or the audit log | `tests/test_trust_boundary.py`, `tests/test_invariants.py` |
 | the model's requested capability is never the one executed | `tests/test_invariants.py`, `tests/test_model_output_separation.py` |
 | AI_AGENT is allowed on no consequential capability | `tests/test_capabilities.py` (asserted again by this renderer) |
+| a workflow executes only its own capabilities; one conversation is one decision; every human case action is audited; approvals get the registry's answer | `tests/test_release_trace.py` |
 | the console holds no decision logic and calls only real routes | `tests/test_ui_api_contract.py` |
 | no persisted decision ran with fewer controls, a historical policy or a historical risk model; every evaluate route refuses every what-if switch | `tests/test_evaluation_authority.py` |
 | every consequential capability, requested by a model in every workflow or by a caller, executes only through the full path | `tests/test_capability_trace.py`, `tests/test_policy_adversarial.py` |
@@ -2045,8 +2103,10 @@ that nine kinds of later record never move an earlier decision. It is **not**
 a fully event-sourced historical model: several fields have no history in the
 data model, so a later change to them would not be visible as a change.
 
-{time_rows} `results/temporal.json`
-measures it; `tests/test_temporal_leakage.py` and
+{time_rows}
+
+`results/temporal.json` measures it ("0 observed temporal leaks across the
+tested synthetic benchmark" -- evidence for the invariant, not a proof); `tests/test_temporal_leakage.py` and
 `tests/test_entity_pointintime.py` pin it.
 
 ## Transaction model ({len(transaction.RULES)} factors)
@@ -2242,7 +2302,7 @@ string where a number is expected raises, it is not "false".
   reports `policy_drift` when the served version no longer has the content the
   decision was made under. A version number is a label a file edit can reuse;
   the hash is what is trusted.
-- **Pinned versions.** `policies/MANIFEST.json` pins the full SHA-256 of every
+- **Pinned versions.** `sentinel/policy/policies/MANIFEST.json` pins the full SHA-256 of every
   shipped version. A version edited in place, added without pinning or deleted
   raises `PolicyIntegrityError` before anything is registered, and a store that
   recorded decisions under a version with other content refuses to open.
@@ -2438,10 +2498,16 @@ threat class).
 ## Claims
 
 Untrusted text is opaque. The only value ever derived from prose is a coarse
-`ClaimType` (a small ordered set of regexes in `UntrustedText.classify`; a
-clear "never arrived" wins over a tracking mention). The claim type is a
-**selector** for which trusted field to check -- never evidence. `Claim`
-carries the type, the source, the trust class and a hash of the text; the
+`ClaimType`, read by the deterministic claim classifier
+(`sentinel/security/claims.py`, called from `UntrustedText.classify`): weighted
+pattern families, a negation guard, a hedge detector and a conflict rule, with
+an explicit confidence. When it cannot read a claim it **abstains**; a message
+it recognises as asserting nothing refundable is a **non-claim**. The claim
+type is a **selector** for which trusted field to check -- never evidence. The
+classifier is defence in depth, not the security foundation: a wrong reading
+can only select a different trusted field, and the records still decide.
+`Claim` carries the type, the source, the trust class, the confidence, the
+kind (claim / non-claim / abstain), the signals and a hash of the text; the
 text itself is not stored on the decision or in the audit chain.
 
 {claims}
@@ -2479,8 +2545,9 @@ console, the case packet and the decision.
 
 {verdicts}
 
-**Dispute** (`reconcile_dispute`): an UNSPECIFIED claim is UNSUPPORTED (nothing
-recognisable to verify); IN_TRANSIT is CONTRADICTED when the ledger says
+**Dispute** (`reconcile_dispute`): an abstain is INSUFFICIENT (the claim could
+not be read; held for a human); a recognised non-claim is UNSUPPORTED (nothing
+refundable asserted); IN_TRANSIT is CONTRADICTED when the ledger says
 delivered and INSUFFICIENT otherwise (a premature dispute, held for a human);
 any other claim is SUPPORTED when `supports()` holds, CONTRADICTED when the
 contradiction engine found a conflict on the claim's field, and UNSUPPORTED
@@ -2538,8 +2605,13 @@ named** -- and the trust root is a checkpoint stored outside the store.
 
 ## The record
 
-One `AuditEvent` per decision, case action, human decision or system event.
-The hash covers every field except the two hashes: {fields_md}.
+One `AuditEvent` per recorded event, of three kinds: `decision` (every
+authoritative decision; the case it opened is linked to it), `case` (every
+human case action: a case opened by hand `CASE_OPENED`, a status change
+`CASE_<STATUS>`, a human decision `HUMAN_APPROVE` / `HUMAN_DENY` /
+`HUMAN_ESCALATE`, with the declared role and hashes of any note or title) and
+`replay`. What-if runs are never chained. The hash covers every field except
+the two hashes: {fields_md}.
 `event_hash = SHA-256(canonical_json(body) ‖ previous_hash)`; the first
 event's `previous_hash` is the genesis constant; `sequence` is contiguous
 from 0. `detail` is redacted before hashing: any of {raw} is replaced by its
@@ -2655,49 +2727,75 @@ def blocks(R: dict[str, Any], tests: int) -> dict[str, str]:
     seed = f["dataset"]["seed"]
     kc = k["corpus"]
     live = _live_row(m)
-    n_all = s["n_attacks"] + h["n_attacks"] + sf["n_attacks"]
     mb = tl["miss_breakdown"]
     missed_scn = " / ".join(sc.replace("fraud:", "") for sc, v in mb.items() if v["missed"])
     total_missed = sum(v["missed"] for v in mb.values())
     cycle_days = int(scoring.MONITORING_V1.t("cycle_window_days", 30))
     undetected = ", ".join(c for c, v in s["by_class"].items() if v["detection_recall"] == 0)
+    # burst recall by position: the leading positions with nothing flagged vs the rest
+    pos = tl.get("burst_by_position", {}).get("by_position", {})
+    early_n = early_f = later_n = later_f = 0
+    last_early, first_later = 0, 0
+    for k2 in sorted(pos, key=int):
+        v = pos[k2]
+        if not first_later and v["flagged"] == 0:
+            early_n, early_f, last_early = early_n + v["n"], early_f + v["flagged"], int(k2)
+        else:
+            first_later = first_later or int(k2)
+            later_n, later_f = later_n + v["n"], later_f + v["flagged"]
+    acct_burst = al["recall_by_scenario"].get("fraud:burst", {"recall": 0, "n": 0})
+    vv = tl.get("burst_by_position", {}).get("velocity_visible", {"flagged": 0, "n": 0})
+    burst_text = (
+        f"A burst's first transactions are authorised before the burst exists: none of the "
+        f"{early_n} at positions 1-{last_early} was flagged, while from position {first_later} on "
+        f"{later_f} of {later_n} were; where the burst was already visible to the velocity rule "
+        f"(three earlier transactions in the ten minutes before), {vv['flagged']} of {vv['n']} were "
+        f"flagged. A decision cannot observe its own future, and correct point-in-time scoring "
+        f"should not. The account-level monitor, which looks back over the whole window, flags "
+        f"{pct(acct_burst['recall'])} of the burst accounts (n={acct_burst['n']})."
+        if pos
+        else ""
+    )
+    kyb_rows = json.loads((ROOT / "results" / "kyb_rows.json").read_text(encoding="utf-8"))
+    kyb_fp = [r for r in kyb_rows if r["truth"] == "approve" and r["fp"]]
+    kyb_fp_blocked = sum(1 for r in kyb_fp if r["guarded_action"] in ("BLOCK", "DENY"))
+    kyb_mcr = [r for r in kyb_rows if r["category"] == "malicious_document_clean_records"]
+    kyb_mcr_ok = sum(1 for r in kyb_mcr if r["guarded_executed"])
     out: dict[str, str] = {}
     out[
         "integrity"
-    ] = f"""| Decision-integrity measurement (`make eval`, {i['n_attacks']} attacks) | Sentinel | No controls |
+    ] = f"""| Decision-integrity measurement (`make eval`; {i['n_attacks']} attacks = main corpus {s['n_attacks']} + held-out {h['n_attacks']}) | Sentinel | No controls |
 |---|---:|---:|
 | attacker text made a protected decision **more permissive** (unsupporting ledgers; structural) | **{pct(i['text_influence_permissive_protected'])}** | {pct(i['text_influence_permissive_unguarded'])} |
 | attacker text exceeded the **ledger-supported ceiling** on a supporting ledger (structural) | **{pct(i['text_beyond_ledger_ceiling'])}** | — |
 | a capability executed **without ledger support** (structural) | **{pct(i['executed_without_ledger_support'])}** | — |
-| a different model recommendation changed the outcome ({i['model_influence_n']} replays; structural) | **{pct(i['model_influence_protected'])}** | — |
+| a different model recommendation changed the outcome ({i['model_influence_n']} replays: {_mi_scope(i)}; structural) | **{pct(i['model_influence_protected'])}** | — |
 | attacker text *selected the claim* on a supporting ledger (by design) | {pct(i['text_selected_claim_on_supporting_ledger'])} | — |"""
-    out[
-        "results"
-    ] = f"""<div align="center">
+    out["results"] = f"""<div align="center">
 
 | | No controls (simulated agent) | Hardened prompt | **Sentinel** |
 |---|:---:|:---:|:---:|
-| Attack success, {s['n_attacks']} attacks / {n_classes} classes | 🔴 **{pct(s['asr_unguarded'])}** | 🟠 {pct(b['hardened_prompt'])} | 🟢 **{pct(s['asr_guarded'])}** (structural) |
-| Off-surface capability executed | {pct(s['capability_escalation_rate_unguarded'])} | — | **{pct(s['capability_escalation_executed_guarded'])}** |
-| False positives on deserved refunds (synthetic) | — | — | 🟢 **{pct(s['fp_rate'])}** |
-| Held-out set (unseen wording, {h['n_attacks']} attacks) | {pct(h['asr_unguarded'])} | — | **{pct(h['asr_guarded'])}** / FP {pct(h['fp_rate'])} |
-| Transaction · account-security · investigation surfaces ({sf['n_attacks']} attacks) | {pct(sf['asr_unguarded'])} | — | **{pct(sf['asr_guarded'])}** / loosened {pct(sf['loosened_vs_baseline'])} |
-| KYB onboarding ({kc['attacks']} hostile + {kc['controls']} clean applications) | {pct(k['asr_unguarded'])} | — | **{pct(k['asr_guarded'])}** / FP {pct(k['fp_rate_benign_input'])} benign, {pct(k['fp_rate'])} any input |
+| Attack success -- main corpus ({s['n_attacks']} attacks, {n_classes} classes) | 🔴 **{pct(s['asr_unguarded'])}** | 🟠 {pct(b['hardened_prompt'])} | 🟢 **{pct(s['asr_guarded'])}** (structural) |
+| Off-surface capability executed (main corpus) | {pct(s['capability_escalation_rate_unguarded'])} | — | **{pct(s['capability_escalation_executed_guarded'])}** |
+| False positives on deserved refunds (main corpus, n={s['n_deserved_controls']}) | — | — | 🟢 **{pct(s['fp_rate'])}** |
+| Held-out corpus (unseen wording, {h['n_attacks']} attacks) | {pct(h['asr_unguarded'])} | — | **{pct(h['asr_guarded'])}** / FP {pct(h['fp_rate'])} (n={h['n_deserved_controls']}) |
+| Other surfaces: transaction · account security · investigation ({sf['n_attacks']} attacks) | {pct(sf['asr_unguarded'])} | — | **{pct(sf['asr_guarded'])}** / loosened {pct(sf['loosened_vs_baseline'])} |
+| KYB onboarding ({kc['cases']} applications: {kc['attacks']} with a hostile document, {kc['controls']} without) | {pct(k['asr_unguarded'])} | — | **{pct(k['asr_guarded'])}** / FP {pct(k['fp_rate_benign_input'])} benign, {pct(k['fp_rate'])} any input |
 
 </div>
 
 **Attack success** means an unauthorised consequential capability actually
-executed -- not "the detector flagged the sentence". Three kinds of number:
-the "no controls" column is a **synthetic evaluation** of the offline
-simulated agent executing its own tool call (a property of that regex
-simulator, which shares an author with the corpus, not a measurement of any
-real model); Sentinel's 0.0% rows are **structural guarantees** -- an attack
-on unsupporting records cannot execute under the design -- kept as regression
-checks; and the **live-model evaluation** row in `results/models.json` is
-`{live['status']}` until you run it on your own key. The empirical content is
-the false-positive rate, the held-out claim-classifier coverage, the KYB
-any-input cost, and the gateway's detection recall ({pct(s['detection_recall'])} on
-the dev corpus, {pct(h['detection_recall'])} held-out), on which the security case does not depend."""
+executed -- not "the detector flagged the sentence". Three kinds of number,
+never mixed: the "no controls" column is a **synthetic evaluation** of the
+offline simulated agent executing its own tool call (a property of that regex
+simulator, which shares an author with the corpus -- not a measurement of any
+real model); Sentinel's 0.0% rows are **structural decision integrity** -- an
+attack on unsupporting records cannot execute under the design -- kept as
+regression checks; the **live-model evaluation** in `results/models.json` is
+`{live['status']}`. The empirical content is the false-positive rates, the KYB
+any-input cost, the gateway's detection recall ({pct(s['detection_recall'])} main corpus,
+{pct(h['detection_recall'])} held-out) and the claim classifier's held-out coverage (optimistic: same
+author, §L) -- and the security case depends on none of them."""
     out[
         "ablation"
     ] = f"""| no controls | prompt hardening | detection only | risk only | policy only | adjudication only | adjudication + policy | **full** |
@@ -2729,8 +2827,9 @@ point-in-time behavioural baselines, a time-aware relationship graph and
 as-of entity profiles -- explainable to the factor and replayable under
 another model version. Transaction-level recall by scenario:
 {_scn(f['recall_by_scenario'])}; account-level: {_scn(al['recall_by_scenario'])}.
-The {total_missed} transaction-level misses on seed {seed} are {missed_scn} transactions{" whose short-window velocity signals had not yet formed" if "burst" in missed_scn else ""};
-the monitoring cycle finder is bounded to {cycle_days} days ([details](docs/EVALUATION.md#g-financial-risk-on-labelled-synthetic-data-resultsfinancialjson))."""
+The {total_missed} transaction-level misses on seed {seed} are {missed_scn} transactions. {burst_text}
+This is reported, not tuned away: no threshold was lowered to raise recall; the
+monitoring cycle finder is bounded to {cycle_days} days ([details](docs/EVALUATION.md#g-financial-risk-on-labelled-synthetic-data-resultsfinancialjson))."""
     out[
         "performance"
     ] = f"""### Performance (offline, own overhead)
@@ -2745,12 +2844,12 @@ sequential single-thread; policy evaluation {p['components']['policy_evaluate'][
 | assessment changes when records after the transaction are removed (truncation) | **{t['truncation_mismatch_count']} / {td['sample']}** |
 | transaction assessment changes when future records are added (perturbation) | **{txn_ch} / {t['comparisons']:,}** |
 | account-monitor assessment changes under the same perturbation | **{mon_ch} / {t['comparisons']:,}** |
-| all checks (exact; 95% upper bound {ub_s}) | **{t['leakage_count']} / {t['decisions_tested']:,}** |"""
+| all checks: observed leaks (exact count; 95% upper bound {ub_s} per check, {t['sample_leakage_upper_95']:.2%} per sampled transaction) | **{t['leakage_count']} / {t['decisions_tested']:,}** |"""
     out[
         "corpus-counts"
     ] = f"""Development corpus: {s['n_attacks']} attacks + {s['n_controls']} controls across {n_classes}
-classes. Held-out: {h['n_attacks']} attacks + {h['n_controls']} controls, authored independently and
-kept disjoint by test. Other surfaces: {sf['n_attacks']} attacks. KYB: {kc['cases']} balanced
+classes. Held-out: {h['n_attacks']} attacks + {h['n_controls']} controls, written after the
+development corpus by the same author and kept disjoint by test. Other surfaces: {sf['n_attacks']} attacks. KYB: {kc['cases']} balanced
 applications ({kc['attacks']} with a hostile document, {kc['controls']} without). The taxonomy and the
 invariants are the claim, not the counts."""
     out[
@@ -2779,136 +2878,203 @@ rates, so every signal also fires on legitimate transactions; the per-signal
 table in `docs/EVALUATION.md` §G shows how often."""
     out[
         "kyb-caveat"
-    ] = f"""The KYB any-input false-positive rate is {pct(k['fp_rate'])}: {k['fp_attack_input_held']} of the {k['by_category']['malicious_document_clean_records']['n']}
-clean merchants whose upload carried an injection were held for a human
-rather than approved, because a CRITICAL security finding blocks automatic
-approval. On benign input the rate is {pct(k['fp_rate_benign_input'])} and no merchant the records
-say to reject went live ({pct(k['fn_rate'])} FN). This is the cost of the design and is
-reported, not tuned away."""
+    ] = f"""The KYB any-input false-positive rate is {pct(k['fp_rate'])}: of the {kc['records_approve']} applications
+whose acquirer records alone say *approve*, {len(kyb_fp)} were not approved because their upload
+carried an injection ({kyb_fp_blocked} blocked by the CRITICAL security finding, {len(kyb_fp) - kyb_fp_blocked} held for
+review). The other {kyb_mcr_ok} of the {len(kyb_mcr)} clean-record applications with a hostile upload were
+approved -- correctly: the records supported them and the text changed nothing.
+On benign input the rate is {pct(k['fp_rate_benign_input'])}, and no merchant the records say to reject
+went live ({pct(k['fn_rate'])} FN). This is the cost of the design and is reported, not
+tuned away."""
     nothing_to_detect = [c for c, v in s["by_class"].items() if v["detection_recall"] == 0.0]
     zero_det = "0%" if nothing_to_detect else "(n/a)"  # the classes with no detectable signal
-    out["interview-twelve"] = f"""## The twelve questions
+    out["interview-core"] = f"""## The core questions
 
-**1. Why not just use a fraud model?**
-*Implemented:* a transparent, versioned rule model (`sentinel/risk/`) whose score
-is one input to policy -- never the decision -- with every factor explained.
-A fraud model answers "does this payment look like fraud?". It does not answer
-"is this customer's claim true?", "may this agent's tool call execute?" or "who
-may release these funds?"; those are evidence, policy and authorization.
-*Simulated:* the labels are injected scenarios from a seeded generator; a
-model trained on them would learn the generator. *Not implemented:* a trained
-model. It would plug in as one more trusted signal feeding policy, never as
-the authority.
+Each answer separates what is **IMPLEMENTED** (code and a test), what is
+**SIMULATED** (it runs, on synthetic or offline stand-ins) and what is **NOT
+IMPLEMENTED** (say it before you are asked).
 
-**2. Why not just use an LLM?**
-*Implemented:* LLM agents recommend (`sentinel/agents/`; an Anthropic provider
-and an offline simulator); their output is typed `MODEL_GENERATED` and the
-decision is computed without it. An LLM reads the attacker's text, so its
-output is a function of attacker-controlled input; a lie with no injection
-persuades it, and it cannot be replayed or audited like a deterministic rule.
-*Simulated:* the "persuadable agent" in every number is the offline
-simulator. *Not implemented:* a live-model result -- the row is `not_run`.
+**1. Why isn't the LLM authoritative?**
+It reads the attacker's text, so its output is a function of attacker-controlled
+input; a customer who simply lies persuades it, and it cannot be replayed or
+audited like a rule. **IMPLEMENTED:** agents recommend (`sentinel/agents/`);
+their output is typed `MODEL_GENERATED`, never enters an `EvidenceSet`, and the
+composer's `_TrustedView` has no field for it; an off-surface tool call is a
+CRITICAL escalation; {i['model_influence_n']} replays with a different recommendation changed no
+outcome ({_mi_scope(i)}). **SIMULATED:** every "persuaded agent" number
+is the offline simulator. **NOT IMPLEMENTED:** a live-model result -- `{live['status']}`.
 
-**3. What exactly is protected?**
-*Implemented:* the execution of consequential capabilities (refunds,
-authorisations, merchant approval, freezes / unfreezes, payout changes, fund
-release, case closure, risk overrides, skipping review): untrusted text and
-model output cannot produce an outcome the trusted records do not support,
-and no evaluation with a weakened control, a historical policy or a
-historical risk model is ever recorded. *Not protected:* the truth of the
-records themselves -- Sentinel adjudicates against its facts; it does not
-verify them, and demo input is trusted by contract (every decision says which
-it was, `facts_source`) -- nor the identity of the humans who review.
+**2. Why isn't prompt hardening enough?**
+Hardening teaches a model to refuse *instructions*; a false claim contains
+none. **SIMULATED:** against the offline agent a hardened prompt still leaks
+{pct(b['hardened_prompt'])} of the main corpus, and fails 100% on the false-claim classes
+(ablation, `docs/EVALUATION.md` §E-F). **IMPLEMENTED:** the protection that works
+is not in the prompt -- the records are checked. **NOT IMPLEMENTED:** the same
+comparison on a live model.
 
-**4. What is the trust boundary?**
-*Implemented:* trust is a type (`TrustClass`); `UntrustedContent` refuses a
-trusted class; `DisputeFacts` / `KYBFacts` are built from records only; the
-composer's `_TrustedView` has no field for prose or model output; every
-decision names where its facts came from. *Simulated:* the "system of record"
-is a synthetic SQLite store; the ad-hoc API forms accept caller-supplied
-facts, labelled `caller_supplied`. *Not implemented:* integration with real
-systems of record, and caller authentication beyond one optional bearer token.
+**3. What is adjudication gaming?**
+A narrative engineered to exploit the decision maker's heuristics (loyalty,
+urgency, sympathy) while lying about a verifiable fact, with no injected
+instruction at all. **IMPLEMENTED:** a threat class with its own corpus rows; the
+gateway detects {pct(s['by_class'].get('adjudication_gaming', {}).get('detection_recall', 0))} of it and guarded attack success is still
+{pct(s['by_class'].get('adjudication_gaming', {}).get('asr_guarded', 0))}, because the narrative only yields a claim type and the ledger yields the
+fact (`make attack-compare` then `--scenario adjudication_gaming`).
+**SIMULATED:** the phrasings are hand-authored.
 
-**5. What happens if detection misses the attack?**
-*Implemented:* nothing changes for execution. Three threat classes
-(adjudication gaming, financial social engineering, false evidence) have
-nothing to detect -- the gateway scores {zero_det} on them -- and their guarded
-attack success is still {pct(s['asr_guarded'])}, because adjudication checks the records. The
-ablation shows detection alone leaks exactly those classes. *Simulated:* the
-corpus and the gateway share an author.
+**4. Why does point-in-time data matter?**
+A decision scored with data from its own future looks better than it was, in
+evaluation and in replay. **IMPLEMENTED:** every feature is as-of; graph edges are
+timestamped; account status counts from `status_since`; payout sharing reads the
+bank accounts held at T; a benchmark re-scores {t['decisions_tested']:,} checks against
+{len(t['kinds'])} kinds of later record: **{t['leakage_count']} observed leaks across the tested synthetic
+benchmark** -- and its 2.2.0 extension first found two current-state reads, now
+fixed. **NOT IMPLEMENTED:** a fully event-sourced history; merchant registration,
+flags and MCC tier are static attributes. Zero observed is evidence for a
+tested invariant, not a proof.
 
-**6. Why is adjudication different from injection detection?**
-Detection asks "does this text look like an attack?" -- phrasing-dependent,
-heuristic, and it can only tighten an outcome. Adjudication asks "do the
-institution's records support this request?" -- independent of phrasing. A
-customer who simply lies trips no detector; the ledger still says
-"delivered". *Implemented:* both; only adjudication, policy and authorization
-can let money move. Claim classification sits between them: it reads *which*
-claim to check, abstains to a human when it cannot, and is defence in depth.
+**5. Why is the claim classifier not the security foundation?**
+It only chooses *which* trusted field is checked. **IMPLEMENTED:** deterministic
+pattern families with a confidence; an abstain goes to a human
+(INSUFFICIENT), a recognised non-claim is UNSUPPORTED; whatever it reads,
+nothing executes unless the selected field supports the claim. A misreading
+is a cost (a human review), not a breach. **SIMULATED:** its benchmark shares its
+author; on {cl['uncommon_n']} held-out unusual phrasings it read 7 on the first, blind run and
+{cl['uncommon_recognised']} after the patterns were extended by someone who had seen the misses --
+partially informed, not a clean benchmark. It is defence in depth.
 
-**7. Why must model output be untrusted?**
-Because it is downstream of the attacker. *Implemented:*
-`AIRecommendation` is always `MODEL_GENERATED`, never enters an
-`EvidenceSet`, is never read by the composer; an off-surface tool call is a
-CRITICAL escalation; the integrity suite replays {i['model_influence_n']} decisions with a
-different recommendation and none changes. *Simulated:* the recommendations
-come from the offline simulator.
+**6. What does the audit chain protect?**
+**IMPLEMENTED:** tamper-evidence for every decision, every human case action
+(manual case, status change, decision) and every replay: modification,
+deletion, insertion, reordering and unreadable records are an AUDIT INTEGRITY
+ERROR naming the first bad record (exit 2); a consistent rewrite of the whole
+chain is caught only against a checkpoint stored elsewhere, HMAC-signed with a
+shared key. It stores hashes of untrusted text, never the text. **NOT
+IMPLEMENTED:** proof that an event is true (a compromised writer writes false
+events honestly), availability, immutability, key management. It is a
+tamper-evident application audit chain -- not a blockchain, not an immutable ledger.
 
-**8. Why does point-in-time correctness matter?**
-A decision scored with data from its own future looks better than it was.
-*Implemented:* every feature is as-of; graph edges are timestamped; account
-status counts from `status_since`; payout sharing reads the bank accounts held
-at T; a benchmark re-scores {t['decisions_tested']:,} decisions against {len(t['kinds'])} kinds of later record
-with {t['leakage_count']} leaks -- and its 2.2.0 extension found two current-state reads first.
-*Not implemented:* a fully event-sourced history. Merchant classification is
-a static attribute; a later re-classification would not be visible as a
-change. "0 leaks observed" is a tested invariant, not a proof.
+**7. Why is replay useful?**
+**IMPLEMENTED:** any recorded decision re-runs from its stored inputs under another
+policy version, rule threshold, risk model or recommendation, with a
+field-level diff, the versions on each side, policy drift and engine drift;
+the recorded side is checked against its audit event, so a rewritten record
+cannot replay as unchanged. It answers "what would v1 have done?" (the console
+example: a v3 denial of a second refund that v1 would have paid), "did the
+engine change?" and "does this record match what was audited?". **NOT
+IMPLEMENTED:** bulk backtesting over a history, scheduled drift monitoring.
 
-**9. Why is replay useful?**
-*Implemented:* any recorded decision re-runs from its stored inputs under
-another policy version, rule threshold, risk model or recommendation, with a
-field-level diff, the versions on each side, policy drift and engine drift --
-and the recorded side is checked against the audit chain, so a rewritten
-record cannot replay as unchanged. It answers "what would v1 have done?",
-"did the engine change?" and "does this record match what was audited?".
-*Not implemented:* bulk backtesting over a history, or scheduled drift
-monitoring.
+**8. What can Sentinel actually guarantee?**
+**IMPLEMENTED, structural and tested:** no consequential capability executes
+unless the trusted records support it, the active policy allows it and the
+registry authorizes the actor -- attacker text and model output cannot change
+that; a workflow executes only the capabilities it owns; no evaluation with a
+weakened control, a historical policy or a historical risk model is recorded;
+only a human decision resolves a case, checked against the registry; tampering
+with a recorded event is detected; a recorded decision replays
+deterministically. **NOT guaranteed:** that the records are true, who the
+reviewer is, that detection catches everything, that the risk model is
+accurate, temporal correctness beyond the tested record kinds.
 
-**10. What does the audit chain actually guarantee?**
-*Implemented:* tamper-evidence. Modification, deletion, insertion, reordering
-and unreadable records are reported as AUDIT INTEGRITY ERROR with the first
-bad record (exit 2); a consistent rewrite of the whole chain is detected only
-against a checkpoint stored elsewhere, HMAC-signed with a shared key. *Not
-guaranteed:* that an event is true (a compromised writer writes false events
-honestly), availability, or immutability. It is a tamper-evident application
-audit chain -- not a blockchain, not an immutable ledger.
+**9. What happens if detection misses the attack?**
+Nothing changes for execution. **IMPLEMENTED:** three classes
+({undetected}) have nothing to detect -- the gateway scores {zero_det} on them --
+and their guarded attack success is still {pct(s['asr_guarded'])}; the ablation shows detection alone
+leaks exactly those classes. **SIMULATED:** the corpus and the gateway share an author.
 
-**11. Why aren't synthetic benchmarks enough?**
+**10. What is the trust boundary?**
+**IMPLEMENTED:** trust is a type (`TrustClass`); `UntrustedContent` refuses a
+trusted class and its source is a sanitised label; `DisputeFacts` / `KYBFacts`
+are built from records only, and a malformed record goes to a human; every
+decision names where its facts came from (`facts_source`). **SIMULATED:** the
+"system of record" is a synthetic SQLite store; the ad-hoc API forms accept
+caller-supplied facts, labelled `caller_supplied` or `demo_fixture`. **NOT
+IMPLEMENTED:** real systems of record; caller authentication beyond one optional
+bearer token.
+
+**11. How would caller-supplied facts be replaced?**
+**IMPLEMENTED:** every workflow already has an id form (`dispute_id`,
+`transaction_id`, `application_id`, `session_id`, `account_id`) that reads the
+facts from the record store and labels the decision `system_of_record`; the
+context builders in `sentinel/app.py` are the single seam. **SIMULATED:** the
+store is synthetic. **NOT IMPLEMENTED:** production would take identifiers only on
+the authoritative API (the fact-carrying forms move to a sandbox), have the
+context builders read the ledger, payment switch and KYB provider through
+authenticated service calls with freshness checks, and record per fact the
+source system and record version.
+
+**12. How would reviewer authentication work?**
+**IMPLEMENTED:** the registry defines the level each capability needs; the case
+service refuses system and model names, checks the declared level and the
+registry's answer for a human actor, requires a senior once a case is
+escalated, and chains every human action with the declared role. **NOT
+IMPLEMENTED:** identity. Production would take the reviewer from an
+authenticated session (SSO / OIDC), roles from the identity provider rather
+than the request body, four-eyes approval (two distinct reviewers) above a
+threshold, and record the authenticated principal in the audit event.
+
+**13. Why not just use a fraud model?**
+A fraud model answers "does this payment look like fraud?", not "is this
+claim true?", "may this tool call execute?" or "who may release these funds?".
+**IMPLEMENTED:** a transparent, versioned rule model whose score is one input to
+policy, every factor explained. **SIMULATED:** labels come from a seeded generator;
+a model trained on them would learn the generator. **NOT IMPLEMENTED:** a trained
+model -- it would be one more trusted signal, never the authority.
+
+**14. Why aren't synthetic benchmarks enough?**
 The corpus and the gateway share an author; the victim agent is a simulator;
-the risk labels are the generator's; the risk point values were tuned on the
-development seed; the classifier's held-out score went from 7/{cl['uncommon_n']} to {cl['uncommon_recognised']}/{cl['uncommon_n']}
-after changes made by someone who had seen the misses. Structural rows (0 by
-construction) are regression checks; empirical rows describe this corpus and
-this generator. Enough would be labelled real disputes and transactions, a
-red-team corpus written by someone else, and a live-model run.
+the risk labels are the generator's and the point values were tuned on the
+development seed; the classifier's held-out score was partially informed.
+Structural rows (0 by construction) are regression checks; empirical rows
+describe this corpus and this generator. Enough would be labelled real
+disputes and transactions, a red-team corpus written by someone else, and a
+live-model run.
 
-**12. What would production require?**
-Integration with the systems of record and APIs that take identifiers, not
-facts; authentication, roles and four-eyes approval so the human path means
-something; signed policy releases and key management; an event-sourced
-history; a production edge (TLS, a real server, rate limits per identity);
-PII handling and retention; monitoring; a live-model evaluation; a trained
-risk model as an extra signal; and regulatory review. None of it is claimed."""
+**15. What would production require?**
+Integration with the systems of record behind an identifier-only API;
+authentication, roles and four-eyes approval; signed policy releases and key
+management; an event-sourced history; a production edge (TLS, a real server,
+per-identity rate limits); PII handling and retention; monitoring; a
+live-model evaluation; a trained risk model as an extra signal; and regulatory
+review. None of it is claimed."""
     out["evaluation-categories"] = evaluation_categories(R)
-    out["claims"] = f"""The claim classifier is deterministic and explainable (weighted pattern
-families, a negation guard, a hedge detector) and reports a confidence. On a
+    out["hero"] = "\n".join(
+        [
+            "| | |",
+            "|---|---|",
+            "| **What** | A standard-library Python engine, versioned HTTP API, CLI and web console "
+            "that sits between AI agents and the financial actions they might trigger: refunds, "
+            "payment authorisation, merchant onboarding, account security, investigations. |",
+            "| **Why** | Those decisions read attacker-controlled information through legitimate "
+            "channels -- a dispute narrative, an uploaded invoice, a merchant application -- and an "
+            "AI agent in the loop can be persuaded, by an injected instruction or by a customer who "
+            "simply lies about a fact. |",
+            "| **How** | The model may recommend. The institution's own records decide whether the "
+            "claim is supported, versioned fail-closed policy decides the outcome, a capability "
+            "registry decides who may execute it, and a tamper-evident audit chain records why. |",
+            "| **Why different** | The authoritative decision is computed from a view that has *no "
+            "field* for the attacker's prose or the model's output. Detection can miss; nothing "
+            "executes that the records do not support. |",
+            f"| **Result** | On synthetic corpora against an offline *simulated* naive agent: "
+            f"unauthorised execution {pct(s['asr_unguarded'])} → **{pct(s['asr_guarded'])}** on the "
+            f"{s['n_attacks']}-attack main corpus (structural), with {pct(s['fp_rate'])} false positives "
+            f"on deserved refunds; {t['leakage_count']} observed temporal leaks in "
+            f"{t['decisions_tested']:,} checks; synthetic transaction risk precision "
+            f"{pct(tl['precision'])} / recall {pct(tl['recall'])}. Live-model evaluation: "
+            f"**{str(live['status']).replace('_', ' ')}**. |",
+        ]
+    )
+    out["claims"] = f"""The claim classifier is defence in depth, not the security foundation: it
+only selects which trusted field is checked. It is deterministic and
+explainable (weighted pattern families, a negation guard, a hedge detector)
+and reports a confidence. On a
 {cl['n']}-phrasing benchmark that shares its author it reads {pct(cl['coverage'])} of ordinary legitimate
 paraphrases and never reads attack prose as a claim it does not assert
 ({pct(cl['adversarial_wrong_type_rate'])}); ambiguous and contradictory messages abstain. On a **held-out**
-set of {cl['uncommon_n']} uncommon legitimate phrasings it recognised 7 on the first run and
-{cl['uncommon_recognised']} after the patterns were extended against a separate development set
-(optimistic: the author had seen the misses); every miss abstains, i.e. goes
-to a human -- a cost, not a breach. False negatives {cl['false_negatives']} / {cl['false_negative_n']}, false
+set of {cl['uncommon_n']} uncommon legitimate phrasings it recognised 7 on the first, blind run
+and {cl['uncommon_recognised']} after the patterns were extended against a separate development set --
+partially informed (the author had seen the misses), so {cl['uncommon_recognised']}/{cl['uncommon_n']} is not a clean
+independent benchmark; every miss abstains, i.e. goes to a human -- a cost,
+not a breach. False negatives {cl['false_negatives']} / {cl['false_negative_n']}, false
 positives {cl['false_positives']} / {cl['false_positive_n']} (`docs/EVALUATION.md` §L)."""
     out["threat-taxonomy"] = (
         tbl(
@@ -2926,76 +3092,66 @@ positives {cl['false_positives']} / {cl['false_positive_n']} (`docs/EVALUATION.m
         + ", ".join(f"`{pid}` " + "/".join(f"v{v}" for v in vs) for pid, vs in by_id.items())
         + f" ({len(pols)} versions, all lint-clean; every rule is listed in `docs/POLICY_ENGINE.md`)."
     )
-    out["resume"] = f"""## One-line version
+    out[
+        "resume"
+    ] = f"""- **Financial decision-security architecture.** Designed and built Sentinel, a
+  standard-library Python system between LLM agents and consequential financial
+  actions (refunds, payment authorisation, merchant onboarding, account
+  security): agents may recommend, but only trusted records, versioned
+  fail-closed policy and a capability registry can authorize, and the
+  authoritative decision is computed from a view with no field for untrusted
+  text or model output. Across {i['n_attacks']} attacks (main and held-out corpora), attacker
+  text loosened {pct(i['text_influence_permissive_protected'])} of protected decisions, against {pct(i['text_influence_permissive_unguarded'])} with no controls.
+- **Point-in-time risk engineering.** Built an explainable, versioned risk
+  engine -- as-of behavioural baselines, a time-aware relationship graph,
+  entity profiles and account monitoring -- and a temporal-leakage benchmark
+  ({t['decisions_tested']:,} checks, {len(t['kinds'])} kinds of later record) that found two current-state
+  reads; {t['leakage_count']} observed leaks after the fix. On the synthetic development seed:
+  transaction precision {pct(tl['precision'])} / recall {pct(tl['recall'])} at {pct(tl['false_positive_rate'], 2)} FPR, account-level
+  {pct(al['precision'])} / {pct(al['recall'])}, with held-out seeds reported and early-burst misses
+  explained rather than tuned away.
+- **Adversarial evaluation, policy and authorization.** Built a {n_classes}-class
+  adversarial evaluation ({s['n_attacks']}-attack main corpus, {h['n_attacks']} held-out, {sf['n_attacks']} on three
+  other surfaces, a {kc['cases']}-application KYB benchmark) with ablations: against a
+  simulated naive agent, prompt hardening still leaked {pct(b['hardened_prompt'])} and detection
+  alone {pct(a['detection_only']['asr'])}, while trusted-evidence adjudication, digest-pinned
+  policy-as-code and workflow-scoped authorization held unauthorised execution
+  at {pct(a['full']['asr'])} with {pct(a['full']['fp'])} false positives; every decision replays against a
+  tamper-evident, hash-chained audit log."""
+    out["interview-pitch"] = f"""## The 60-second pitch
 
-> Built Sentinel, a financial decision-security platform in which AI agents
-> may recommend but only trusted evidence, deterministic risk controls and
-> versioned policy can authorize: {pct(s['asr_unguarded'])} → {pct(s['asr_guarded'])} attack success across {n_classes} threat
-> classes against a simulated naive agent with {pct(s['fp_rate'])} false positives, {pct(i['executed_without_ledger_support'])} of decisions
-> executed without ledger support under attack, replayable and hash-chained.
-
-## Three bullets
-
-- **Financial decision-security architecture.** Designed and built Sentinel,
-  a Python decision-security layer in which an LLM agent may recommend but only
-  trusted records, versioned policy and a capability registry can authorize a
-  refund, payout change, merchant approval or account action: the decision is
-  computed from a view with no field for prose or model output, and the engine
-  refuses to record any evaluation run with a weakened control, a historical
-  policy or a historical risk model. Across {i['n_attacks']} attacks, attacker text loosened
-  {pct(i['text_influence_permissive_protected'])} of protected decisions (vs {pct(i['text_influence_permissive_unguarded'])} with no controls) and {i['model_influence_n']}
-  model-recommendation replays changed none.
-- **Point-in-time risk engineering.** Built an explainable, versioned
-  rule-based risk engine -- point-in-time behavioural baselines, a time-aware
-  relationship graph, as-of entity profiles and transaction monitoring -- over
-  a seeded synthetic world, and a temporal-leakage benchmark that re-scored
-  {t['decisions_tested']:,} decisions against nine kinds of later record with {t['leakage_count']} leaks (after it
-  found two current-state reads, which were fixed); transaction precision
-  {pct(tl['precision'])} / recall {pct(tl['recall'])} at {pct(tl['false_positive_rate'], 2)} FPR on the development seed, with held-out seeds
-  reported and early-burst misses explained rather than tuned away.
-- **Adversarial evaluation, policy and authorization.** Authored a
-  {n_classes}-class, {n_all}-attack corpus across four surfaces plus a held-out set and a
-  balanced {kc['cases']}-case KYB benchmark; an ablation shows prompt hardening still
-  leaks {pct(b['hardened_prompt'])} and detection alone {pct(a['detection_only']['asr'])}, while trusted-evidence adjudication with
-  fail-closed, digest-pinned policy-as-code and actor-scoped authorization
-  holds unauthorised execution at {pct(a['full']['asr'])} with {pct(a['full']['fp'])} false positives against a
-  simulated naive agent; every decision replays against a tamper-evident
-  application audit chain.
-
-## Interview explanation (~60 seconds)
-
-"Financial institutions are putting AI agents into decision paths -- refunds,
-onboarding, account security, investigations -- and those agents read
-attacker-controlled text through legitimate channels. Everyone defends against
-*injected instructions*. The harder attack has no injection: the customer
-simply lies about a fact, and a persuadable model approves. Prompt hardening
-doesn't help with a lie; against our simulated agent it still leaked {pct(b['hardened_prompt'])}.
-Sentinel's answer is architectural: the model may recommend, but the
-authoritative decision is computed from a view that literally has no field
-for the prose or the model's opinion -- trusted evidence decides whether a
-claim is supported, versioned policy decides the outcome, a capability
-registry decides who may execute it, and a tamper-evident audit chain records
-why. We state the property precisely -- untrusted text cannot produce an
-outcome the records don't support -- and measure it directly: across {i['n_attacks']}
-attacks, none exceeded the ledger-supported ceiling, none executed without
-support, none of the deserved refunds were held, and every decision replays
-deterministically under a different policy version."
-"""
+"Banks and fintechs are putting AI agents into decision paths -- refunds,
+onboarding, account security -- and those agents read attacker-controlled text
+through legitimate channels: a dispute narrative, an uploaded invoice. Most
+defences look for injected instructions. The harder attack has none: the
+customer simply lies about a fact and a persuadable model approves; a hardened
+prompt doesn't help against a lie. Sentinel's answer is architectural: the
+model may recommend, but the authoritative decision is computed from a view
+that has no field for the prose or the model's opinion. The institution's own
+records decide whether the claim is supported, versioned fail-closed policy
+decides the outcome, a capability registry decides who may execute it, and a
+tamper-evident audit chain records why, so every decision replays. On
+synthetic corpora against a simulated naive agent, unauthorised execution
+goes from {pct(s['asr_unguarded'])} to {pct(s['asr_guarded'])} with {pct(s['fp_rate'])} false positives on deserved refunds -- and I can
+show you exactly what that does and doesn't prove.\""""
     out["limitations-solid"] = f"""## What is genuinely solid
 
 - The trust boundary and the composer: the authoritative decision is computed
   from a view that has no field for prose or for the model's recommendation.
   The integrity suite measures the property as it is enforced: across {i['n_attacks']}
-  attacks, **{pct(i['text_beyond_ledger_ceiling'])}** exceeded the ledger-supported ceiling and **{pct(i['executed_without_ledger_support'])}**
+  attacks (main and held-out corpora), **{pct(i['text_beyond_ledger_ceiling'])}** exceeded the ledger-supported ceiling and **{pct(i['executed_without_ledger_support'])}**
   executed without ledger support, against **{pct(i['text_influence_permissive_unguarded'])}** permissive influence with
   no controls; {i['model_influence_n']} model-recommendation replays changed nothing.
-- **{pct(s['asr_guarded'])}** unauthorised capability executions across the development corpus,
-  the held-out set, the other surfaces and KYB (structural, by construction),
+- **{pct(s['asr_guarded'])}** unauthorised capability executions across the main corpus ({s['n_attacks']}),
+  the held-out corpus ({h['n_attacks']}), the other surfaces ({sf['n_attacks']}) and KYB ({kc['attacks']} hostile)
+  (structural, by construction),
   with **{pct(s['fp_rate'])}** false positives on deserved refunds -- including the
   urgent-but-legitimate phrasings -- which is the empirical part.
-- **{t['leakage_count']} of {t['decisions_tested']:,}** decisions changed by future records on the
-  temporal benchmark (nine record kinds, four offsets, two seeds): a decision at T1
-  reads only records at or before T1, per feature and per entity profile.
+- **{t['leakage_count']} observed leaks in {t['decisions_tested']:,} checks** on the temporal benchmark
+  ({len(t['kinds'])} kinds of later record, {len(t['future_offsets_days'])} offsets, two synthetic worlds): evidence
+  for a tested invariant -- for the record kinds tested, a decision at T1 read
+  only records at or before T1 -- not a proof, and not a fully event-sourced
+  history (see the time-semantics limitation).
 - Model output is typed untrusted and cannot become evidence; an agent
   pushed off its tool surface produces a CRITICAL event, a BLOCK and a P1
   case, never an execution.
@@ -3008,17 +3164,20 @@ deterministically under a different policy version."
 """
     out["interview-claims"] = f"""**What claims can you actually prove?**
 Structural ones, by test: untrusted text and model output cannot produce an
-outcome the trusted records do not support (integrity suite over {i['n_attacks']}
-attacks: {pct(i['text_beyond_ledger_ceiling'])} exceeded the ledger-supported ceiling, {pct(i['executed_without_ledger_support'])} executed
-without support, {pct(i['model_influence_protected'])} of {i['model_influence_n']} recommendation replays changed anything, vs
-{pct(i['text_influence_permissive_unguarded'])} permissive influence with no controls); zero unauthorised capability
-executions across {n_all} attacks on four surfaces and {kc['attacks']} hostile KYB applications --
-which is 0 by construction and is kept as a regression check; {t['leakage_count']} temporal leaks in
-{t['decisions_tested']:,} decisions tested; audit tampering is detected. Empirical ones, on synthetic data:
-{pct(s['fp_rate'])} false positives on deserved refunds, {pct(h['fp_rate'])} on unseen legitimate wording,
-{pct(k['fp_rate'])} of clean-but-hostile KYB applications held for a human, and the financial
-figures with their held-out-seed range. Nothing about a live model: the live
-row is `{live['status']}`. See `docs/EVALUATION.md`, which separates the three kinds.
+outcome the trusted records do not support (integrity suite, {i['n_attacks']} attacks = main
+{s['n_attacks']} + held-out {h['n_attacks']}: {pct(i['text_beyond_ledger_ceiling'])} exceeded the ledger-supported ceiling, {pct(i['executed_without_ledger_support'])}
+executed without support, {pct(i['model_influence_protected'])} of {i['model_influence_n']} recommendation replays changed
+anything, vs {pct(i['text_influence_permissive_unguarded'])} permissive influence with no controls); zero unauthorised
+capability executions across the main ({s['n_attacks']}), held-out ({h['n_attacks']}) and other-surface ({sf['n_attacks']})
+corpora and {kc['attacks']} hostile KYB applications -- 0 by construction, kept as a regression
+check; a workflow executes only its own capabilities; audit tampering is
+detected. Empirical ones, on synthetic data: {pct(s['fp_rate'])} false positives on the {s['n_deserved_controls']}
+deserved refunds of the main corpus and {pct(h['fp_rate'])} on the {h['n_deserved_controls']} of the held-out corpus;
+{pct(k['fp_rate'])} of records-approve KYB applications not approved because of a hostile
+upload; the financial figures with their held-out-seed range; {t['leakage_count']} observed
+temporal leaks in {t['decisions_tested']:,} checks (a tested invariant, not a proof). Nothing about
+a live model: the live row is `{live['status']}`. `docs/EVALUATION.md` separates the
+three kinds.
 """
     out[
         "interview-numbers"
@@ -3047,8 +3206,8 @@ and switch phones too, so the signals are not free. Account-level recall is {pct
 {pct(al['false_positive_rate'])} FPR. A review found the per-transaction baseline counting
 disputes filed *after* the transaction; fixing that leak (and then every other
 aggregation) is why there is a temporal-leakage benchmark; extending it in 2.2.0 found two
-more current-state reads (account status, payout destination), now fixed: {t['leakage_count']} leaks
-in {t['decisions_tested']:,} decisions tested."""
+more current-state reads (account status, payout destination), now fixed: {t['leakage_count']} observed
+leaks in {t['decisions_tested']:,} checks -- evidence for the invariant, not a proof."""
     out[
         "demo-flagship"
     ] = f"""Flagship attack (`make attack`): the gateway flags the document CRITICAL, the

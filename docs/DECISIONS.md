@@ -325,7 +325,7 @@ all.
 
 **Decision.** Unknown keys, a missing `default_outcome` and a value a field
 can never take are load errors; every value a rule reads is type-checked at
-evaluation (a mistyped value fails safe to a human); `policies/MANIFEST.json`
+evaluation (a mistyped value fails safe to a human); `sentinel/policy/policies/MANIFEST.json`
 pins the SHA-256 of every shipped version, and a store that recorded a version
 with other content refuses to open.
 **Why.** An adversarial pass found each of these failing open: a string amount

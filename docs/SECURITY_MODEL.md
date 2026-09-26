@@ -8,7 +8,7 @@ this file is typed by hand except the prose; the tables are the code.
 ## The principle
 
 ```text
-AI may recommend. Trusted evidence, deterministic risk controls and explicit policy authorize.
+AI may recommend. Trusted evidence, deterministic policy and authorization decide.
 
 AUTHORITATIVE_DECISION = f(TRUSTED_FACTS, VERIFIED_EVIDENCE, RISK_STATE, POLICY, AUTHORIZATION)
 AUTHORITATIVE_DECISION ≠ f(ATTACKER_CONTROLLED_TEXT)
@@ -51,25 +51,25 @@ recommendations. `SKIP_REVIEW` has no allowed
 actor at all. These are Sentinel's own values, documented as such; they are
 not industry standards.
 
-| Capability | Risk | Irreversible | Money | Consequential | AI agent may execute | Allowed actors | Required authorization | Human-review threshold (₹) | Policy gates |
-|---|---|---|---|---|---|---|---|---|---|
-| `READ_TRANSACTION` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — |
-| `READ_ACCOUNT` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — |
-| `READ_MERCHANT` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — |
-| `CREATE_CASE` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — |
-| `CREATE_ALERT` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — |
-| `RECOMMEND_REFUND` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — |
-| `RECOMMEND_ACTION` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — |
-| `APPROVE_REFUND` | HIGH | yes | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | SYSTEM_POLICY | 50,000 | — |
-| `APPROVE_TRANSACTION` | HIGH | yes | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | SYSTEM_POLICY | 150,000 | — |
-| `APPROVE_MERCHANT` | HIGH | yes | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | SYSTEM_POLICY | — | — |
-| `FREEZE_ACCOUNT` | MEDIUM | no | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | SYSTEM_POLICY | — | — |
-| `UNFREEZE_ACCOUNT` | HIGH | no | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER | HUMAN_REVIEWER | — | `account-security@v1:review-sensitive-capability` |
-| `CHANGE_PAYOUT` | CRITICAL | yes | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER | HUMAN_REVIEWER | 0 | `account-security@v1:review-sensitive-capability` |
-| `RELEASE_FUNDS` | CRITICAL | yes | yes | yes | **no** | SENIOR_REVIEWER | SENIOR_REVIEWER | 0 | — |
-| `CLOSE_CASE` | MEDIUM | no | no | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER | HUMAN_REVIEWER | — | — |
-| `ALTER_RISK` | HIGH | no | no | yes | **no** | SENIOR_REVIEWER | SENIOR_REVIEWER | — | — |
-| `SKIP_REVIEW` | CRITICAL | yes | yes | yes | **no** | nobody | SENIOR_REVIEWER | — | — |
+| Capability | Risk | Irreversible | Money | Consequential | AI agent may execute | Allowed actors | Required authorization | Human-review threshold (₹) | Executable from | Policy gates |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `READ_TRANSACTION` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — |
+| `READ_ACCOUNT` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — |
+| `READ_MERCHANT` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — |
+| `CREATE_CASE` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — |
+| `CREATE_ALERT` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — |
+| `RECOMMEND_REFUND` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — |
+| `RECOMMEND_ACTION` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — |
+| `APPROVE_REFUND` | HIGH | yes | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | SYSTEM_POLICY | 50,000 | dispute | — |
+| `APPROVE_TRANSACTION` | HIGH | yes | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | SYSTEM_POLICY | 150,000 | transaction | — |
+| `APPROVE_MERCHANT` | HIGH | yes | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | SYSTEM_POLICY | — | merchant_onboarding | — |
+| `FREEZE_ACCOUNT` | MEDIUM | no | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | SYSTEM_POLICY | — | account_security | — |
+| `UNFREEZE_ACCOUNT` | HIGH | no | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER | HUMAN_REVIEWER | — | account_security | `account-security@v1:review-sensitive-capability` |
+| `CHANGE_PAYOUT` | CRITICAL | yes | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER | HUMAN_REVIEWER | 0 | account_security | `account-security@v1:review-sensitive-capability` |
+| `RELEASE_FUNDS` | CRITICAL | yes | yes | yes | **no** | SENIOR_REVIEWER | SENIOR_REVIEWER | 0 | account_security | — |
+| `CLOSE_CASE` | MEDIUM | no | no | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER | HUMAN_REVIEWER | — | no workflow (a human, via the case service) | — |
+| `ALTER_RISK` | HIGH | no | no | yes | **no** | SENIOR_REVIEWER | SENIOR_REVIEWER | — | no workflow (a human, via the case service) | — |
+| `SKIP_REVIEW` | CRITICAL | yes | yes | yes | **no** | nobody | SENIOR_REVIEWER | — | no workflow (a human, via the case service) | — |
 
 "Policy gates" lists the shipped policy rules whose conditions name the
 capability (`docs/POLICY_ENGINE.md`); the registry applies regardless of
@@ -78,18 +78,27 @@ policy.
 ### Authorization (`capabilities.authorize`)
 
 Called with the capability the **workflow** is considering, never the one the
-model asked for. In order:
+model asked for, and with the workflow itself. In order:
 
 1. no consequential capability requested → GRANTED;
-2. the actor is not in the capability's allowed actors → DENIED;
-3. policy outcome BLOCK → DENIED;
-4. a consequential capability whose verified evidence does not support the
+2. an unregistered capability → DENIED (fail closed);
+3. a capability the workflow does not own (`WORKFLOW_CAPABILITIES`: a dispute
+   owns APPROVE_REFUND, a login decision owns only the account actions) →
+   DENIED -- a caller naming APPROVE_REFUND on the account route gets a 400 at
+   the API and a DENY from the engine;
+4. the actor is not in the capability's allowed actors → DENIED;
+5. policy outcome BLOCK → DENIED;
+6. a consequential capability whose verified evidence does not support the
    request → DENIED;
-5. policy outcome REQUIRE_HUMAN_REVIEW or TEMPORARY_HOLD → PENDING_HUMAN;
-6. the automated path (SYSTEM) on a capability that requires a human or
+7. policy outcome REQUIRE_HUMAN_REVIEW or TEMPORARY_HOLD → PENDING_HUMAN;
+8. the automated path (SYSTEM) on a capability that requires a human or
    senior reviewer → PENDING_HUMAN;
-7. SYSTEM above the capability's human-review amount threshold → PENDING_HUMAN;
-8. otherwise GRANTED.
+9. SYSTEM above the capability's human-review amount threshold → PENDING_HUMAN;
+10. otherwise GRANTED.
+
+A human approval of a case gets the same answer for the reviewer's actor kind
+(`CaseService.approval`): a policy BLOCK is final for every actor and records
+that contradict the claim cannot be approved.
 
 ### Final action (`composer._final_action`)
 
@@ -148,7 +157,8 @@ satisfied): evidence SUPPORTED, policy not BLOCK / HOLD / REVIEW, and the
 registry GRANTED for SYSTEM -- and only in an authoritative evaluation (every
 control, the active policy and risk model). `tests/test_capability_trace.py`
 drives a model requesting each capability in every workflow and a caller
-requesting each one directly.
+requesting each one directly (denied unless the workflow owns it);
+`tests/test_release_trace.py` pins the defects the final trace found.
 
 ## Evaluation authority (`sentinel/decision/authority.py`)
 
@@ -159,7 +169,10 @@ only when its inputs carry every control, the active version of its policy
 runs in `_finish` on the inputs the decision was actually composed from,
 before anything is written, and raises `ControlDowngrade` otherwise; the
 application sends what-if runs to a runtime that never persists, and every
-decision carries `authoritative`.
+decision carries `authoritative`. A recording runtime also refuses what-if
+*options* before running (`workflows._admit`): the composed inputs cannot show
+a run without prompt provenance, or a custom risk model that reuses the active
+model's version name.
 
 | Parameter class | Parameters | Where accepted |
 |---|---|---|
@@ -191,8 +204,15 @@ A human decision recorded under a reserved system or model actor name
 (`agent`, `ai`, `auto`, `automation`, `bot`, `llm`, `model`, `sentinel`, `system`, any `agent:` / `ai:` / `model:` prefix) or under the name
 of an agent that recommended on the case is refused. Approving needs the
 level the case's capability requires, read from the registry when the case
-opens: `APPROVE_REFUND` → HUMAN_REVIEWER, `APPROVE_TRANSACTION` → HUMAN_REVIEWER, `APPROVE_MERCHANT` → HUMAN_REVIEWER, `FREEZE_ACCOUNT` → HUMAN_REVIEWER, `UNFREEZE_ACCOUNT` → HUMAN_REVIEWER, `CHANGE_PAYOUT` → HUMAN_REVIEWER, `RELEASE_FUNDS` → SENIOR_REVIEWER, `CLOSE_CASE` → HUMAN_REVIEWER, `ALTER_RISK` → SENIOR_REVIEWER, `SKIP_REVIEW` → NOBODY. Denying or escalating needs any human. The reviewer's
-name and level are *declared* -- there is no identity system
+opens: `APPROVE_REFUND` → HUMAN_REVIEWER, `APPROVE_TRANSACTION` → HUMAN_REVIEWER, `APPROVE_MERCHANT` → HUMAN_REVIEWER, `FREEZE_ACCOUNT` → HUMAN_REVIEWER, `UNFREEZE_ACCOUNT` → HUMAN_REVIEWER, `CHANGE_PAYOUT` → HUMAN_REVIEWER, `RELEASE_FUNDS` → SENIOR_REVIEWER, `CLOSE_CASE` → HUMAN_REVIEWER, `ALTER_RISK` → SENIOR_REVIEWER, `SKIP_REVIEW` → NOBODY; and the registry must allow the approval for that
+reviewer's actor kind given the recorded policy outcome and evidence (a policy
+BLOCK or CONTRADICTED records cannot be approved by anyone; a claim the
+classifier could not read -- INSUFFICIENT -- can). Denying or escalating needs
+any human; once escalated, the case is decided by a SENIOR_REVIEWER. Every
+human action -- a manual case, a status change, a decision -- is appended to
+the audit chain before the case is saved (notes and titles hashed), so a
+resolution cannot be written into the case table without a chained record.
+The reviewer's name and level are *declared* -- there is no identity system
 (`docs/LIMITATIONS.md`).
 
 ## Threat taxonomy (15 classes)
@@ -254,6 +274,7 @@ because a model asked for one -- and only a human can resolve it.
 | prose never reaches the policy context or the audit log | `tests/test_trust_boundary.py`, `tests/test_invariants.py` |
 | the model's requested capability is never the one executed | `tests/test_invariants.py`, `tests/test_model_output_separation.py` |
 | AI_AGENT is allowed on no consequential capability | `tests/test_capabilities.py` (asserted again by this renderer) |
+| a workflow executes only its own capabilities; one conversation is one decision; every human case action is audited; approvals get the registry's answer | `tests/test_release_trace.py` |
 | the console holds no decision logic and calls only real routes | `tests/test_ui_api_contract.py` |
 | no persisted decision ran with fewer controls, a historical policy or a historical risk model; every evaluate route refuses every what-if switch | `tests/test_evaluation_authority.py` |
 | every consequential capability, requested by a model in every workflow or by a caller, executes only through the full path | `tests/test_capability_trace.py`, `tests/test_policy_adversarial.py` |

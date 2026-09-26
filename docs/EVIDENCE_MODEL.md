@@ -34,10 +34,16 @@ threat class).
 ## Claims
 
 Untrusted text is opaque. The only value ever derived from prose is a coarse
-`ClaimType` (a small ordered set of regexes in `UntrustedText.classify`; a
-clear "never arrived" wins over a tracking mention). The claim type is a
-**selector** for which trusted field to check -- never evidence. `Claim`
-carries the type, the source, the trust class and a hash of the text; the
+`ClaimType`, read by the deterministic claim classifier
+(`sentinel/security/claims.py`, called from `UntrustedText.classify`): weighted
+pattern families, a negation guard, a hedge detector and a conflict rule, with
+an explicit confidence. When it cannot read a claim it **abstains**; a message
+it recognises as asserting nothing refundable is a **non-claim**. The claim
+type is a **selector** for which trusted field to check -- never evidence. The
+classifier is defence in depth, not the security foundation: a wrong reading
+can only select a different trusted field, and the records still decide.
+`Claim` carries the type, the source, the trust class, the confidence, the
+kind (claim / non-claim / abstain), the signals and a hash of the text; the
 text itself is not stored on the decision or in the audit chain.
 
 | ClaimType | Checked against | Values that support it |
@@ -118,8 +124,9 @@ console, the case packet and the decision.
 | `CONTRADICTED` | a trusted record says the opposite | DENY, with a `Contradiction` object attached |
 | `INSUFFICIENT` | the claim cannot be mapped to a trusted fact yet | REQUIRE_HUMAN_REVIEW (fail-safe) |
 
-**Dispute** (`reconcile_dispute`): an UNSPECIFIED claim is UNSUPPORTED (nothing
-recognisable to verify); IN_TRANSIT is CONTRADICTED when the ledger says
+**Dispute** (`reconcile_dispute`): an abstain is INSUFFICIENT (the claim could
+not be read; held for a human); a recognised non-claim is UNSUPPORTED (nothing
+refundable asserted); IN_TRANSIT is CONTRADICTED when the ledger says
 delivered and INSUFFICIENT otherwise (a premature dispute, held for a human);
 any other claim is SUPPORTED when `supports()` holds, CONTRADICTED when the
 contradiction engine found a conflict on the claim's field, and UNSUPPORTED

@@ -38,13 +38,13 @@ Open http://localhost:8000/ for the console.
 | GET, POST | `/v1/scenarios`, `/v1/scenarios/{key}/run` | flagship scenarios |
 | GET | `/v1/evaluations` | `results/*.json` |
 
-## Options (any evaluate route)
+## Options (the five workflow evaluate routes)
 
 ```jsonc
 "options": {
   // user-controllable: accepted everywhere
   "hardened": false,         // hardened-prompt agent
-  "skip_agent": false,       // evaluate without any model call
+  "skip_agent": false,       // no model call -- so no model-output check either (see below)
   // what-if: refused (403) on the evaluate routes
   "controls": ["provenance","detection","risk","adjudication","policy","authorization"],
   "unguarded": false,        // shorthand for controls: []
@@ -52,6 +52,13 @@ Open http://localhost:8000/ for the console.
   "risk_model": "txn-1.0"    // a historical model of the route's surface
 }
 ```
+
+`skip_agent` is for callers that want the deterministic decision without a
+recommendation (batch runs, latency). With no model there is no model output,
+so the gateway's check of the model's tool call does not run; the text scan,
+evidence, policy and authorization are unchanged, and the outcome is still
+only what the records support. The caller of this API is the institution's
+own system, not the customer.
 
 A caller may request an evaluation; it may not weaken one. On the five
 evaluate routes `controls`, `unguarded` (in `options` or top-level),
