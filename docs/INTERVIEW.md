@@ -5,7 +5,125 @@ The strongest sentence in the project:
 > **The model can recommend the action. Sentinel decides whether the action is allowed to happen.**
 
 Below: the questions a serious interviewer asks, and the answers the code
-backs up. Every claim points at a module or a test.
+backs up. Every claim points at a module or a test. The first section answers
+the twelve that matter most, each split three ways -- **implemented** (code and
+a test), **simulated** (it runs, on synthetic or offline stand-ins) and **not
+implemented** (say so before you are asked).
+
+<!-- gen:interview-twelve -->
+## The twelve questions
+
+**1. Why not just use a fraud model?**
+*Implemented:* a transparent, versioned rule model (`sentinel/risk/`) whose score
+is one input to policy -- never the decision -- with every factor explained.
+A fraud model answers "does this payment look like fraud?". It does not answer
+"is this customer's claim true?", "may this agent's tool call execute?" or "who
+may release these funds?"; those are evidence, policy and authorization.
+*Simulated:* the labels are injected scenarios from a seeded generator; a
+model trained on them would learn the generator. *Not implemented:* a trained
+model. It would plug in as one more trusted signal feeding policy, never as
+the authority.
+
+**2. Why not just use an LLM?**
+*Implemented:* LLM agents recommend (`sentinel/agents/`; an Anthropic provider
+and an offline simulator); their output is typed `MODEL_GENERATED` and the
+decision is computed without it. An LLM reads the attacker's text, so its
+output is a function of attacker-controlled input; a lie with no injection
+persuades it, and it cannot be replayed or audited like a deterministic rule.
+*Simulated:* the "persuadable agent" in every number is the offline
+simulator. *Not implemented:* a live-model result -- the row is `not_run`.
+
+**3. What exactly is protected?**
+*Implemented:* the execution of consequential capabilities (refunds,
+authorisations, merchant approval, freezes / unfreezes, payout changes, fund
+release, case closure, risk overrides, skipping review): untrusted text and
+model output cannot produce an outcome the trusted records do not support,
+and no evaluation with a weakened control, a historical policy or a
+historical risk model is ever recorded. *Not protected:* the truth of the
+records themselves -- Sentinel adjudicates against its facts; it does not
+verify them, and demo input is trusted by contract (every decision says which
+it was, `facts_source`) -- nor the identity of the humans who review.
+
+**4. What is the trust boundary?**
+*Implemented:* trust is a type (`TrustClass`); `UntrustedContent` refuses a
+trusted class; `DisputeFacts` / `KYBFacts` are built from records only; the
+composer's `_TrustedView` has no field for prose or model output; every
+decision names where its facts came from. *Simulated:* the "system of record"
+is a synthetic SQLite store; the ad-hoc API forms accept caller-supplied
+facts, labelled `caller_supplied`. *Not implemented:* integration with real
+systems of record, and caller authentication beyond one optional bearer token.
+
+**5. What happens if detection misses the attack?**
+*Implemented:* nothing changes for execution. Three threat classes
+(adjudication gaming, financial social engineering, false evidence) have
+nothing to detect -- the gateway scores 0% on them -- and their guarded
+attack success is still 0.0%, because adjudication checks the records. The
+ablation shows detection alone leaks exactly those classes. *Simulated:* the
+corpus and the gateway share an author.
+
+**6. Why is adjudication different from injection detection?**
+Detection asks "does this text look like an attack?" -- phrasing-dependent,
+heuristic, and it can only tighten an outcome. Adjudication asks "do the
+institution's records support this request?" -- independent of phrasing. A
+customer who simply lies trips no detector; the ledger still says
+"delivered". *Implemented:* both; only adjudication, policy and authorization
+can let money move. Claim classification sits between them: it reads *which*
+claim to check, abstains to a human when it cannot, and is defence in depth.
+
+**7. Why must model output be untrusted?**
+Because it is downstream of the attacker. *Implemented:*
+`AIRecommendation` is always `MODEL_GENERATED`, never enters an
+`EvidenceSet`, is never read by the composer; an off-surface tool call is a
+CRITICAL escalation; the integrity suite replays 360 decisions with a
+different recommendation and none changes. *Simulated:* the recommendations
+come from the offline simulator.
+
+**8. Why does point-in-time correctness matter?**
+A decision scored with data from its own future looks better than it was.
+*Implemented:* every feature is as-of; graph edges are timestamped; account
+status counts from `status_since`; payout sharing reads the bank accounts held
+at T; a benchmark re-scores 3,648 decisions against 9 kinds of later record
+with 0 leaks -- and its 2.2.0 extension found two current-state reads first.
+*Not implemented:* a fully event-sourced history. Merchant classification is
+a static attribute; a later re-classification would not be visible as a
+change. "0 leaks observed" is a tested invariant, not a proof.
+
+**9. Why is replay useful?**
+*Implemented:* any recorded decision re-runs from its stored inputs under
+another policy version, rule threshold, risk model or recommendation, with a
+field-level diff, the versions on each side, policy drift and engine drift --
+and the recorded side is checked against the audit chain, so a rewritten
+record cannot replay as unchanged. It answers "what would v1 have done?",
+"did the engine change?" and "does this record match what was audited?".
+*Not implemented:* bulk backtesting over a history, or scheduled drift
+monitoring.
+
+**10. What does the audit chain actually guarantee?**
+*Implemented:* tamper-evidence. Modification, deletion, insertion, reordering
+and unreadable records are reported as AUDIT INTEGRITY ERROR with the first
+bad record (exit 2); a consistent rewrite of the whole chain is detected only
+against a checkpoint stored elsewhere, HMAC-signed with a shared key. *Not
+guaranteed:* that an event is true (a compromised writer writes false events
+honestly), availability, or immutability. It is a tamper-evident application
+audit chain -- not a blockchain, not an immutable ledger.
+
+**11. Why aren't synthetic benchmarks enough?**
+The corpus and the gateway share an author; the victim agent is a simulator;
+the risk labels are the generator's; the risk point values were tuned on the
+development seed; the classifier's held-out score went from 7/21 to 17/21
+after changes made by someone who had seen the misses. Structural rows (0 by
+construction) are regression checks; empirical rows describe this corpus and
+this generator. Enough would be labelled real disputes and transactions, a
+red-team corpus written by someone else, and a live-model run.
+
+**12. What would production require?**
+Integration with the systems of record and APIs that take identifiers, not
+facts; authentication, roles and four-eyes approval so the human path means
+something; signed policy releases and key management; an event-sourced
+history; a production edge (TLS, a real server, rate limits per identity);
+PII handling and retention; monitoring; a live-model evaluation; a trained
+risk model as an extra signal; and regulatory review. None of it is claimed.
+<!-- /gen:interview-twelve -->
 
 ## Architecture
 

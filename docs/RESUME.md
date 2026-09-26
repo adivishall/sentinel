@@ -17,53 +17,33 @@ transactions, financial savings or regulatory claims are made.
 > classes against a simulated naive agent with 0.0% false positives, 0.0% of decisions
 > executed without ledger support under attack, replayable and hash-chained.
 
-## Six bullets (pick three)
+## Three bullets
 
-- **Security architecture.** Designed a typed trust boundary (seven trust
-  classes; only two can authorize) and a decision composer whose trusted view
-  has no field for prose or model output, so an LLM's recommendation is
-  recorded but never authoritative. Measured the property as enforced:
-  across 170 attacks, **0.0% exceeded the ledger-supported ceiling and
-  0.0% executed without ledger support**; 360 recommendation replays changed
-  nothing; the unguarded contrast is 83.5%.
-- **Financial risk engine.** Built a deterministic, versioned, factor-level
-  explainable risk engine (point-in-time behavioural baselines,
-  device/geography/velocity, as-of entity profiles, a time-aware relationship
-  graph, transaction-monitoring patterns) over a coherent synthetic world with
-  labelled fraud scenarios and a temporal-leakage benchmark (0 leaks in 3,648 decisions);
-  transaction-level precision 86.7% / recall 67.2% at 0.19% FPR and
-  account-level precision 90.0% / recall 90.0% on the development seed, with
-  held-out seeds reported (Python, SQLite).
-- **Capability / policy enforcement.** Implemented schema-validated,
-  versioned, fail-closed policy-as-code (every referenced field present and
-  correctly typed; shipped versions pinned by digest; content hashed into
-  every decision; a linter for rules that can never fire), engine-enforced
-  evaluation authority (no request can select an older policy or risk model
-  or switch a control off), and a capability registry (risk,
-  reversibility, monetary impact, allowed actors, human-review thresholds) in
-  which no AI actor may execute a consequential capability; off-surface
-  requests become CRITICAL security events and P1 cases, never executions.
-- **Adversarial evaluation.** Authored a 15-class attack corpus (200 attacks
-  over dispute, transaction, account-security and investigation surfaces,
-  targeting refunds, authorisations, freezes, unfreezes, payout changes, fund
-  release, case closure and risk overrides) plus an independent held-out set
-  and a balanced 47-case KYB benchmark; an 8-configuration ablation shows a
-  hardened prompt still leaks 23.3% and detection alone 20.0%, while
-  trusted-evidence adjudication + policy reach 0.0% with 0.0% false
-  positives, held at 0.0%/0.0% on unseen wording.
-- **Explainability & auditability.** Every decision carries evidence with
-  provenance, contradictions, matched policy rules and an authorization
-  reason; decisions are replayable under other policy/risk-model versions
-  with a field-level diff and policy / engine drift detection, anchored to
-  the audit chain so a rewritten record cannot replay as unchanged; the
-  tamper-evident audit chain stores hashes, never prose, reports every
-  modified, deleted, inserted, reordered or unreadable record, and exports
-  HMAC-signed checkpoints.
-- **Engineering.** Standard-library-only core (SQLite, http.server), one
-  application layer behind a versioned API, a CLI and an API-backed console
-  with no decision logic; 564 tests including property-tested security
-  invariants and end-to-end hostile vectors; CI with lint, types, coverage,
-  evaluation smoke and Docker; protected pipeline p95 ≈ 0.7267 ms offline.
+- **Financial decision-security architecture.** Designed and built Sentinel,
+  a Python decision-security layer in which an LLM agent may recommend but only
+  trusted records, versioned policy and a capability registry can authorize a
+  refund, payout change, merchant approval or account action: the decision is
+  computed from a view with no field for prose or model output, and the engine
+  refuses to record any evaluation run with a weakened control, a historical
+  policy or a historical risk model. Across 170 attacks, attacker text loosened
+  0.0% of protected decisions (vs 83.5% with no controls) and 360
+  model-recommendation replays changed none.
+- **Point-in-time risk engineering.** Built an explainable, versioned
+  rule-based risk engine -- point-in-time behavioural baselines, a time-aware
+  relationship graph, as-of entity profiles and transaction monitoring -- over
+  a seeded synthetic world, and a temporal-leakage benchmark that re-scored
+  3,648 decisions against nine kinds of later record with 0 leaks (after it
+  found two current-state reads, which were fixed); transaction precision
+  86.7% / recall 67.2% at 0.19% FPR on the development seed, with held-out seeds
+  reported and early-burst misses explained rather than tuned away.
+- **Adversarial evaluation, policy and authorization.** Authored a
+  15-class, 200-attack corpus across four surfaces plus a held-out set and a
+  balanced 47-case KYB benchmark; an ablation shows prompt hardening still
+  leaks 23.3% and detection alone 20.0%, while trusted-evidence adjudication with
+  fail-closed, digest-pinned policy-as-code and actor-scoped authorization
+  holds unauthorised execution at 0.0% with 0.0% false positives against a
+  simulated naive agent; every decision replays against a tamper-evident
+  application audit chain.
 
 ## Interview explanation (~60 seconds)
 
@@ -85,19 +65,13 @@ support, none of the deserved refunds were held, and every decision replays
 deterministically under a different policy version."
 <!-- /gen:resume -->
 
-## Which three to pick
+## Why these three
 
-The strongest set, in order, when the role is fintech / risk / AI security:
-
-1. **Security architecture** (trusted evidence decides; the model recommends).
-2. **Financial risk engine** (point-in-time correctness, explainable, honest
-   about being a rule model).
-3. **Adversarial evaluation** (four surfaces, held-out set, balanced KYB,
-   ablation).
-
-For a platform / backend role swap the third for **Explainability &
-auditability** (replay with drift detection, tamper-evident audit chain with
-signed checkpoints).
+They cover the three things a fintech, risk or AI-security reviewer checks
+first: that the security property is architectural (bullet 1), that the risk
+engineering is careful about time (bullet 2), and that the claims were
+attacked rather than asserted (bullet 3). Every number is generated from
+`results/` by `make docs`; if a number changes, the bullet changes with it.
 
 ## What NOT to claim
 
