@@ -385,6 +385,11 @@ def cmd_security(args: argparse.Namespace) -> int:
         print(
             f"Attack: {ATTACKS[key].name}  [{sb['attack_class']} -> {sb['target_workflow']} / {sb['target_capability']}]"
         )
+        print(
+            "The AI agent is Sentinel's deterministic offline simulator of a naive tool-calling "
+            "agent, not a real LLM (unless a live provider is configured); the facts are a "
+            "synthetic demo fixture."
+        )
         print("Attacker input:\n  " + (sb["attacker_input"] or "").replace("\n", "\n  "))
         if sb.get("attacker_document"):
             print("Attacker document:\n  " + sb["attacker_document"].replace("\n", "\n  "))

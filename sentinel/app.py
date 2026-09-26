@@ -662,9 +662,11 @@ class SentinelApp:
                 },
                 {
                     "stage": "ai_recommendation",
-                    "title": "LLM recommendation",
+                    "title": "AI recommendation",
                     "value": (
-                        f"{b.ai.recommended_action.upper()} (MODEL_GENERATED)" if b.ai else "n/a"
+                        f"{b.ai.recommended_action.upper()} (MODEL_GENERATED, {b.ai.provider})"
+                        if b.ai
+                        else "n/a"
                     ),
                     "status": "alert" if (b.ai and b.ai.requested_capability) else "ok",
                 },

@@ -201,3 +201,5 @@ td.wrap{white-space:normal}
 .appr.ok{border-color:rgba(63,191,127,.4)}.appr.no{border-color:rgba(226,87,79,.45)}
 .review-form{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
 .review-form select{width:auto;min-width:130px}.review-form input{flex:1;min-width:160px;width:auto}
+.stack{display:flex;flex-direction:column;gap:14px;min-width:0}
+.timeline .tl{grid-template-columns:132px 88px 1fr}
