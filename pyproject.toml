@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sentinel-decision-security"
 version = "2.2.0"
-description = "Financial Decision Security Infrastructure for AI-native finance: AI may recommend; trusted evidence, deterministic risk controls and explicit policy authorize."
+description = "Financial decision security for AI-assisted finance: AI may recommend; trusted evidence, deterministic policy and authorization decide."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "adivishall" }]
-keywords = ["ai-security", "prompt-injection", "fraud-risk", "policy-as-code", "fintech", "decision-integrity", "audit"]
+keywords = ["fintech", "ai-security", "llm-security", "prompt-injection", "fraud-detection", "policy-as-code", "audit-log", "decision-integrity"]
 dependencies = []  # the core is standard library only (sqlite3, http.server, dataclasses)
 
 [project.urls]

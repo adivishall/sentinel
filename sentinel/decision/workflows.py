@@ -89,7 +89,8 @@ class RunOptions:
     """How to run one evaluation. ``controls``, ``policy_version`` and ``risk_model`` are
     what-if switches (``sentinel.decision.authority``): any of them makes the run a
     what-if that is never recorded as a decision. ``hardened`` and ``skip_agent`` only
-    change the model call and are allowed on the authoritative path."""
+    change the model call and are allowed on the authoritative path (with no model
+    call there is no model output to check; nothing else changes)."""
 
     controls: frozenset[str] = FULL
     policy_version: int | None = None

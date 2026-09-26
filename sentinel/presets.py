@@ -178,7 +178,7 @@ SCENARIOS: dict[str, ScenarioPreset] = {
         "H — Graph-linked fraud",
         "investigation",
         "Three accounts share a device and payout instrument; velocity and circular transfers.",
-        "linked-entity risk; investigation case",
+        "circular transfers and a shared device; investigation case",
     ),
     "structuring_like": ScenarioPreset(
         "structuring_like",

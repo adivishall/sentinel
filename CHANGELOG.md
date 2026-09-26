@@ -4,7 +4,7 @@ All notable changes to Sentinel. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [Semantic Versioning](https://semver.org/).
 
-## [2.2.0] — 2026-09-26
+## [2.2.0] — 2026-09-27
 
 A release-candidate review of 2.1.0 as if the system protected real money,
 done in two passes: every consequential capability traced from input to
@@ -43,7 +43,7 @@ because the data or the evaluation became more honest.
   BLOCK rule (now a fail-safe human review); a document without
   `default_outcome` meant ALLOW, unknown keys were ignored and impossible
   capability / enum values were only linted (now load errors); shipped
-  versions are pinned in `policies/MANIFEST.json` (`sentinel policy pin`) and a
+  versions are pinned in `sentinel/policy/policies/MANIFEST.json` (`sentinel policy pin`) and a
   store that recorded other content for a version refuses to open.
 - **Malformed trusted records**: an unparseable or negative ledger amount was
   coerced to 0 / -N and passed the auto-limit, and `"inf"` crashed; dispute
@@ -141,6 +141,51 @@ because the data or the evaluation became more honest.
   the interview guide answers twelve questions as implemented / simulated /
   not implemented; `submission/` and `social/` are marked historical drafts.
 - Version 2.2.0.
+
+### Final release pass (2026-09-27)
+An independent source-level trace of every consequential capability through
+every entry point, a documentation-versus-code audit, and a console pass for
+screenshots. Nine defects were found and fixed, each with a regression test
+(`tests/test_release_trace.py`):
+- **A workflow executes only the capabilities it owns**
+  (`capabilities.WORKFLOW_CAPABILITIES`, enforced in `authorize()`). The
+  account route executed any capability a caller named -- APPROVE_REFUND on a
+  login session was allowed, executed and audited. The API and CLI refuse an
+  off-surface capability with 400.
+- **One conversation, one decision.** A multi-turn dispute audited every turn,
+  could open a case per turn and "executed" the refund once per turn while
+  storing only the last; `DisputeSession.add` is now an interim assessment
+  that never records and `decide()` records once.
+- **Human case actions are audited** (manual case, status change, human
+  decision; notes hashed). Before, a resolution lived only in the mutable
+  cases table.
+- **A human approval gets the registry's answer** for the reviewer's actor
+  kind: a policy BLOCK or contradicted records cannot be approved by anyone; a
+  claim the classifier could not read can. An escalated case needs a
+  SENIOR_REVIEWER.
+- **A recording runtime refuses what-if options up front** (`_admit`): a run
+  without prompt provenance, or a custom risk model reusing the active version
+  name, had been persisted as authoritative.
+- Ledger flags must be booleans (`"false"` read as True); transaction amounts
+  must be positive integers; `mfa_passed` must be a boolean.
+- A model's tool name is a bounded identifier; replay `rule_values` must name
+  real rules with short scalar values; a content `source` / `kind` is a
+  sanitised label (it was an unscanned channel into the agent prompt).
+- Console: every clickable table rendered its cells as wrapped blocks (a
+  `.row` CSS collision); "Replay it under v1" also opened a drawer over its
+  own result; the no-controls column showed verdicts no control had enforced;
+  "risk over time" bucketed by batch run time. The four main views were
+  reworked for a first-time viewer, with shareable URLs, and four screenshots
+  of the running console were added (`make screenshots`).
+- Documentation: every attack count is scoped (main 150 / held-out 20 /
+  surfaces 30 / integrity 170 = main + held-out / 360 replays = 60 main-corpus
+  attacks × 6); the temporal result is "0 observed leaks", a tested invariant
+  rather than a structural guarantee; the classifier's 17/21 is described as
+  partially informed; the burst misses are explained per position; the KYB
+  any-input rate names its denominator; stale descriptions (evidence model,
+  architecture dependencies, demo script, `.env.example`) corrected.
+- Deterministic metrics are unchanged by these fixes (regenerated with
+  `make eval`); only timings moved.
 
 ## [2.1.0] — 2026-09-25
 

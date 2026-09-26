@@ -793,7 +793,8 @@ def cmd_version(args: argparse.Namespace) -> int:
 # ---- parser ----------------------------------------------------------------------------------------
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="sentinel", description="Sentinel -- Financial Decision Security Infrastructure"
+        prog="sentinel",
+        description="Sentinel -- financial decision security for AI-assisted finance",
     )
     p.add_argument(
         "--db",

@@ -1,10 +1,11 @@
-"""Sentinel -- Financial Decision Security Infrastructure for AI-native finance.
+"""Sentinel -- Financial decision security for AI-assisted finance.
 
-    AI may recommend. Trusted evidence, deterministic risk controls and explicit
-    policy authorize.
+    AI may recommend. Trusted evidence, deterministic policy and authorization
+    decide.
 
 The package is a modular monolith. Each sub-package owns one concern and the
-dependency direction is strictly downward:
+dependency direction is downward (two deferred imports are documented in
+docs/ARCHITECTURE.md):
 
     domain      typed primitives (entities, evidence, risk, security, decisions, cases)
     security    provenance, normalisation, injection detection, trust boundary,
