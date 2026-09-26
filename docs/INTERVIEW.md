@@ -4,126 +4,181 @@ The strongest sentence in the project:
 
 > **The model can recommend the action. Sentinel decides whether the action is allowed to happen.**
 
-Below: the questions a serious interviewer asks, and the answers the code
-backs up. Every claim points at a module or a test. The first section answers
-the twelve that matter most, each split three ways -- **implemented** (code and
-a test), **simulated** (it runs, on synthetic or offline stand-ins) and **not
+Below: the pitch, then the questions a serious interviewer asks, with the
+answers the code backs up. Every claim points at a module or a test, and every
+important answer is split three ways -- **implemented** (code and a test),
+**simulated** (it runs, on synthetic or offline stand-ins) and **not
 implemented** (say so before you are asked).
 
-<!-- gen:interview-twelve -->
-## The twelve questions
+<!-- gen:interview-pitch -->
+## The 60-second pitch
 
-**1. Why not just use a fraud model?**
-*Implemented:* a transparent, versioned rule model (`sentinel/risk/`) whose score
-is one input to policy -- never the decision -- with every factor explained.
-A fraud model answers "does this payment look like fraud?". It does not answer
-"is this customer's claim true?", "may this agent's tool call execute?" or "who
-may release these funds?"; those are evidence, policy and authorization.
-*Simulated:* the labels are injected scenarios from a seeded generator; a
-model trained on them would learn the generator. *Not implemented:* a trained
-model. It would plug in as one more trusted signal feeding policy, never as
-the authority.
+"Banks and fintechs are putting AI agents into decision paths -- refunds,
+onboarding, account security -- and those agents read attacker-controlled text
+through legitimate channels: a dispute narrative, an uploaded invoice. Most
+defences look for injected instructions. The harder attack has none: the
+customer simply lies about a fact and a persuadable model approves; a hardened
+prompt doesn't help against a lie. Sentinel's answer is architectural: the
+model may recommend, but the authoritative decision is computed from a view
+that has no field for the prose or the model's opinion. The institution's own
+records decide whether the claim is supported, versioned fail-closed policy
+decides the outcome, a capability registry decides who may execute it, and a
+tamper-evident audit chain records why, so every decision replays. On
+synthetic corpora against a simulated naive agent, unauthorised execution
+goes from 90.0% to 0.0% with 0.0% false positives on deserved refunds -- and I can
+show you exactly what that does and doesn't prove."
+<!-- /gen:interview-pitch -->
 
-**2. Why not just use an LLM?**
-*Implemented:* LLM agents recommend (`sentinel/agents/`; an Anthropic provider
-and an offline simulator); their output is typed `MODEL_GENERATED` and the
-decision is computed without it. An LLM reads the attacker's text, so its
-output is a function of attacker-controlled input; a lie with no injection
-persuades it, and it cannot be replayed or audited like a deterministic rule.
-*Simulated:* the "persuadable agent" in every number is the offline
-simulator. *Not implemented:* a live-model result -- the row is `not_run`.
+<!-- gen:interview-core -->
+## The core questions
 
-**3. What exactly is protected?**
-*Implemented:* the execution of consequential capabilities (refunds,
-authorisations, merchant approval, freezes / unfreezes, payout changes, fund
-release, case closure, risk overrides, skipping review): untrusted text and
-model output cannot produce an outcome the trusted records do not support,
-and no evaluation with a weakened control, a historical policy or a
-historical risk model is ever recorded. *Not protected:* the truth of the
-records themselves -- Sentinel adjudicates against its facts; it does not
-verify them, and demo input is trusted by contract (every decision says which
-it was, `facts_source`) -- nor the identity of the humans who review.
+Each answer separates what is **IMPLEMENTED** (code and a test), what is
+**SIMULATED** (it runs, on synthetic or offline stand-ins) and what is **NOT
+IMPLEMENTED** (say it before you are asked).
 
-**4. What is the trust boundary?**
-*Implemented:* trust is a type (`TrustClass`); `UntrustedContent` refuses a
-trusted class; `DisputeFacts` / `KYBFacts` are built from records only; the
-composer's `_TrustedView` has no field for prose or model output; every
-decision names where its facts came from. *Simulated:* the "system of record"
-is a synthetic SQLite store; the ad-hoc API forms accept caller-supplied
-facts, labelled `caller_supplied`. *Not implemented:* integration with real
-systems of record, and caller authentication beyond one optional bearer token.
+**1. Why isn't the LLM authoritative?**
+It reads the attacker's text, so its output is a function of attacker-controlled
+input; a customer who simply lies persuades it, and it cannot be replayed or
+audited like a rule. **IMPLEMENTED:** agents recommend (`sentinel/agents/`);
+their output is typed `MODEL_GENERATED`, never enters an `EvidenceSet`, and the
+composer's `_TrustedView` has no field for it; an off-surface tool call is a
+CRITICAL escalation; 360 replays with a different recommendation changed no
+outcome (60 main-corpus attacks × 6 recommendations). **SIMULATED:** every "persuaded agent" number
+is the offline simulator. **NOT IMPLEMENTED:** a live-model result -- `not_run`.
 
-**5. What happens if detection misses the attack?**
-*Implemented:* nothing changes for execution. Three threat classes
-(adjudication gaming, financial social engineering, false evidence) have
-nothing to detect -- the gateway scores 0% on them -- and their guarded
-attack success is still 0.0%, because adjudication checks the records. The
-ablation shows detection alone leaks exactly those classes. *Simulated:* the
-corpus and the gateway share an author.
+**2. Why isn't prompt hardening enough?**
+Hardening teaches a model to refuse *instructions*; a false claim contains
+none. **SIMULATED:** against the offline agent a hardened prompt still leaks
+23.3% of the main corpus, and fails 100% on the false-claim classes
+(ablation, `docs/EVALUATION.md` §E-F). **IMPLEMENTED:** the protection that works
+is not in the prompt -- the records are checked. **NOT IMPLEMENTED:** the same
+comparison on a live model.
 
-**6. Why is adjudication different from injection detection?**
-Detection asks "does this text look like an attack?" -- phrasing-dependent,
-heuristic, and it can only tighten an outcome. Adjudication asks "do the
-institution's records support this request?" -- independent of phrasing. A
-customer who simply lies trips no detector; the ledger still says
-"delivered". *Implemented:* both; only adjudication, policy and authorization
-can let money move. Claim classification sits between them: it reads *which*
-claim to check, abstains to a human when it cannot, and is defence in depth.
+**3. What is adjudication gaming?**
+A narrative engineered to exploit the decision maker's heuristics (loyalty,
+urgency, sympathy) while lying about a verifiable fact, with no injected
+instruction at all. **IMPLEMENTED:** a threat class with its own corpus rows; the
+gateway detects 0.0% of it and guarded attack success is still
+0.0%, because the narrative only yields a claim type and the ledger yields the
+fact (`make attack-compare` then `--scenario adjudication_gaming`).
+**SIMULATED:** the phrasings are hand-authored.
 
-**7. Why must model output be untrusted?**
-Because it is downstream of the attacker. *Implemented:*
-`AIRecommendation` is always `MODEL_GENERATED`, never enters an
-`EvidenceSet`, is never read by the composer; an off-surface tool call is a
-CRITICAL escalation; the integrity suite replays 360 decisions with a
-different recommendation and none changes. *Simulated:* the recommendations
-come from the offline simulator.
+**4. Why does point-in-time data matter?**
+A decision scored with data from its own future looks better than it was, in
+evaluation and in replay. **IMPLEMENTED:** every feature is as-of; graph edges are
+timestamped; account status counts from `status_since`; payout sharing reads the
+bank accounts held at T; a benchmark re-scores 3,648 checks against
+9 kinds of later record: **0 observed leaks across the tested synthetic
+benchmark** -- and its 2.2.0 extension first found two current-state reads, now
+fixed. **NOT IMPLEMENTED:** a fully event-sourced history; merchant registration,
+flags and MCC tier are static attributes. Zero observed is evidence for a
+tested invariant, not a proof.
 
-**8. Why does point-in-time correctness matter?**
-A decision scored with data from its own future looks better than it was.
-*Implemented:* every feature is as-of; graph edges are timestamped; account
-status counts from `status_since`; payout sharing reads the bank accounts held
-at T; a benchmark re-scores 3,648 decisions against 9 kinds of later record
-with 0 leaks -- and its 2.2.0 extension found two current-state reads first.
-*Not implemented:* a fully event-sourced history. Merchant classification is
-a static attribute; a later re-classification would not be visible as a
-change. "0 leaks observed" is a tested invariant, not a proof.
+**5. Why is the claim classifier not the security foundation?**
+It only chooses *which* trusted field is checked. **IMPLEMENTED:** deterministic
+pattern families with a confidence; an abstain goes to a human
+(INSUFFICIENT), a recognised non-claim is UNSUPPORTED; whatever it reads,
+nothing executes unless the selected field supports the claim. A misreading
+is a cost (a human review), not a breach. **SIMULATED:** its benchmark shares its
+author; on 21 held-out unusual phrasings it read 7 on the first, blind run and
+17 after the patterns were extended by someone who had seen the misses --
+partially informed, not a clean benchmark. It is defence in depth.
 
-**9. Why is replay useful?**
-*Implemented:* any recorded decision re-runs from its stored inputs under
-another policy version, rule threshold, risk model or recommendation, with a
-field-level diff, the versions on each side, policy drift and engine drift --
-and the recorded side is checked against the audit chain, so a rewritten
-record cannot replay as unchanged. It answers "what would v1 have done?",
-"did the engine change?" and "does this record match what was audited?".
-*Not implemented:* bulk backtesting over a history, or scheduled drift
-monitoring.
+**6. What does the audit chain protect?**
+**IMPLEMENTED:** tamper-evidence for every decision, every human case action
+(manual case, status change, decision) and every replay: modification,
+deletion, insertion, reordering and unreadable records are an AUDIT INTEGRITY
+ERROR naming the first bad record (exit 2); a consistent rewrite of the whole
+chain is caught only against a checkpoint stored elsewhere, HMAC-signed with a
+shared key. It stores hashes of untrusted text, never the text. **NOT
+IMPLEMENTED:** proof that an event is true (a compromised writer writes false
+events honestly), availability, immutability, key management. It is a
+tamper-evident application audit chain -- not a blockchain, not an immutable ledger.
 
-**10. What does the audit chain actually guarantee?**
-*Implemented:* tamper-evidence. Modification, deletion, insertion, reordering
-and unreadable records are reported as AUDIT INTEGRITY ERROR with the first
-bad record (exit 2); a consistent rewrite of the whole chain is detected only
-against a checkpoint stored elsewhere, HMAC-signed with a shared key. *Not
-guaranteed:* that an event is true (a compromised writer writes false events
-honestly), availability, or immutability. It is a tamper-evident application
-audit chain -- not a blockchain, not an immutable ledger.
+**7. Why is replay useful?**
+**IMPLEMENTED:** any recorded decision re-runs from its stored inputs under another
+policy version, rule threshold, risk model or recommendation, with a
+field-level diff, the versions on each side, policy drift and engine drift;
+the recorded side is checked against its audit event, so a rewritten record
+cannot replay as unchanged. It answers "what would v1 have done?" (the console
+example: a v3 denial of a second refund that v1 would have paid), "did the
+engine change?" and "does this record match what was audited?". **NOT
+IMPLEMENTED:** bulk backtesting over a history, scheduled drift monitoring.
 
-**11. Why aren't synthetic benchmarks enough?**
+**8. What can Sentinel actually guarantee?**
+**IMPLEMENTED, structural and tested:** no consequential capability executes
+unless the trusted records support it, the active policy allows it and the
+registry authorizes the actor -- attacker text and model output cannot change
+that; a workflow executes only the capabilities it owns; no evaluation with a
+weakened control, a historical policy or a historical risk model is recorded;
+only a human decision resolves a case, checked against the registry; tampering
+with a recorded event is detected; a recorded decision replays
+deterministically. **NOT guaranteed:** that the records are true, who the
+reviewer is, that detection catches everything, that the risk model is
+accurate, temporal correctness beyond the tested record kinds.
+
+**9. What happens if detection misses the attack?**
+Nothing changes for execution. **IMPLEMENTED:** three classes
+(adjudication_gaming, financial_social_engineering, false_evidence) have nothing to detect -- the gateway scores 0% on them --
+and their guarded attack success is still 0.0%; the ablation shows detection alone
+leaks exactly those classes. **SIMULATED:** the corpus and the gateway share an author.
+
+**10. What is the trust boundary?**
+**IMPLEMENTED:** trust is a type (`TrustClass`); `UntrustedContent` refuses a
+trusted class and its source is a sanitised label; `DisputeFacts` / `KYBFacts`
+are built from records only, and a malformed record goes to a human; every
+decision names where its facts came from (`facts_source`). **SIMULATED:** the
+"system of record" is a synthetic SQLite store; the ad-hoc API forms accept
+caller-supplied facts, labelled `caller_supplied` or `demo_fixture`. **NOT
+IMPLEMENTED:** real systems of record; caller authentication beyond one optional
+bearer token.
+
+**11. How would caller-supplied facts be replaced?**
+**IMPLEMENTED:** every workflow already has an id form (`dispute_id`,
+`transaction_id`, `application_id`, `session_id`, `account_id`) that reads the
+facts from the record store and labels the decision `system_of_record`; the
+context builders in `sentinel/app.py` are the single seam. **SIMULATED:** the
+store is synthetic. **NOT IMPLEMENTED:** production would take identifiers only on
+the authoritative API (the fact-carrying forms move to a sandbox), have the
+context builders read the ledger, payment switch and KYB provider through
+authenticated service calls with freshness checks, and record per fact the
+source system and record version.
+
+**12. How would reviewer authentication work?**
+**IMPLEMENTED:** the registry defines the level each capability needs; the case
+service refuses system and model names, checks the declared level and the
+registry's answer for a human actor, requires a senior once a case is
+escalated, and chains every human action with the declared role. **NOT
+IMPLEMENTED:** identity. Production would take the reviewer from an
+authenticated session (SSO / OIDC), roles from the identity provider rather
+than the request body, four-eyes approval (two distinct reviewers) above a
+threshold, and record the authenticated principal in the audit event.
+
+**13. Why not just use a fraud model?**
+A fraud model answers "does this payment look like fraud?", not "is this
+claim true?", "may this tool call execute?" or "who may release these funds?".
+**IMPLEMENTED:** a transparent, versioned rule model whose score is one input to
+policy, every factor explained. **SIMULATED:** labels come from a seeded generator;
+a model trained on them would learn the generator. **NOT IMPLEMENTED:** a trained
+model -- it would be one more trusted signal, never the authority.
+
+**14. Why aren't synthetic benchmarks enough?**
 The corpus and the gateway share an author; the victim agent is a simulator;
-the risk labels are the generator's; the risk point values were tuned on the
-development seed; the classifier's held-out score went from 7/21 to 17/21
-after changes made by someone who had seen the misses. Structural rows (0 by
-construction) are regression checks; empirical rows describe this corpus and
-this generator. Enough would be labelled real disputes and transactions, a
-red-team corpus written by someone else, and a live-model run.
+the risk labels are the generator's and the point values were tuned on the
+development seed; the classifier's held-out score was partially informed.
+Structural rows (0 by construction) are regression checks; empirical rows
+describe this corpus and this generator. Enough would be labelled real
+disputes and transactions, a red-team corpus written by someone else, and a
+live-model run.
 
-**12. What would production require?**
-Integration with the systems of record and APIs that take identifiers, not
-facts; authentication, roles and four-eyes approval so the human path means
-something; signed policy releases and key management; an event-sourced
-history; a production edge (TLS, a real server, rate limits per identity);
-PII handling and retention; monitoring; a live-model evaluation; a trained
-risk model as an extra signal; and regulatory review. None of it is claimed.
-<!-- /gen:interview-twelve -->
+**15. What would production require?**
+Integration with the systems of record behind an identifier-only API;
+authentication, roles and four-eyes approval; signed policy releases and key
+management; an event-sourced history; a production edge (TLS, a real server,
+per-identity rate limits); PII handling and retention; monitoring; a
+live-model evaluation; a trained risk model as an extra signal; and regulatory
+review. None of it is claimed.
+<!-- /gen:interview-core -->
 
 ## Architecture
 
@@ -188,27 +243,6 @@ same query surface (`accounts_sharing_device`, `linked_accounts`, cycles).
 The full taxonomy with detection kind and typical targets is rendered in
 `docs/SECURITY_MODEL.md`.
 
-**Why is prompt-injection detection insufficient?**
-Because the hardest attack contains no injection: a false claim in ordinary
-prose. The ablation shows `detection_only` leaks exactly those classes at
-100% and the hardened-prompt baseline fails 100% on them. Only checking the
-claim against the ledger closes them.
-
-**What is adjudication gaming?**
-Writing a narrative engineered to exploit the decision maker's heuristics
-(loyalty, sympathy, urgency) while lying about a verifiable fact. Sentinel
-defeats it structurally: the narrative yields a claim *type*, the ledger
-yields the fact, the contradiction engine records the mismatch.
-
-**What if the detector misses the attack?**
-Nothing changes for the outcome. Detection informs severity (which can only
-tighten); it is not on the authorization path. Held-out detection recall is
-reported honestly and is well below 100%; guarded attack success is still 0%
--- and it is 0% *by construction*: an attack on an unsupporting ledger cannot
-execute under the design, so that number is a regression check, not a
-detection result. The honest empirical numbers are the false-positive rate on
-deserved claims and the claim classifier's held-out coverage.
-
 **Isn't "0% attack success" then vacuous?**
 On its own, yes, and the docs say so. What makes it meaningful is the
 contrast, and the honest shape of the property on ledgers that *do* support
@@ -245,26 +279,12 @@ is a CRITICAL security event that blocks the request and opens a P1 case.
 Invariants 2 and 6 and the integrity suite (`model_influence_protected = 0`)
 pin this.
 
-**Why are model outputs untrusted?**
-Because the model read the attacker's text. Trust does not launder through a
-model call.
-
 **What happens when evidence conflicts?**
 `Reconciliation` distinguishes SUPPORTED, UNSUPPORTED (no confirmation),
 CONTRADICTED (the record says the opposite) and INSUFFICIENT (cannot be
 verified yet). Only SUPPORTED can execute; INSUFFICIENT fails safe to a human;
 the rest deny. Contradictions are recorded as first-class objects and shown in
 the UI and the case.
-
-**What about the audit log?**
-A tamper-evident application audit chain -- deliberately not called a
-blockchain or an immutable ledger. Modification, deletion, insertion and
-reordering are detected and the first bad record is named; a consistent
-rewrite from genesis is caught against an exported, HMAC-signed checkpoint
-that the operator stores elsewhere. It stores hashes of untrusted content,
-never prose, and even detector spans are hashed. Lookups by event or
-decision id are indexed; verification deliberately is not
-(`docs/AUDIT_MODEL.md`).
 
 ## Finance
 
@@ -383,15 +403,9 @@ and switch phones too, so the signals are not free. Account-level recall is 90.0
 0.7% FPR. A review found the per-transaction baseline counting
 disputes filed *after* the transaction; fixing that leak (and then every other
 aggregation) is why there is a temporal-leakage benchmark; extending it in 2.2.0 found two
-more current-state reads (account status, payout destination), now fixed: 0 leaks
-in 3,648 decisions tested.
+more current-state reads (account status, payout destination), now fixed: 0 observed
+leaks in 3,648 checks -- evidence for the invariant, not a proof.
 <!-- /gen:interview-financial -->
-
-**Why not simply train a fraud model?**
-You should, eventually -- as *one more trusted signal*. It does not replace
-the architecture: a trained score is still a recommendation, evidence still
-decides support, policy still decides who may execute. Sentinel makes the
-place for it explicit (`RiskAssessment.model_version`).
 
 **Why not use an LLM for everything?**
 Because an LLM reading hostile input cannot be the authority over an
@@ -432,17 +446,20 @@ offline agent, the KYB records. Everything is labelled synthetic.
 <!-- gen:interview-claims -->
 **What claims can you actually prove?**
 Structural ones, by test: untrusted text and model output cannot produce an
-outcome the trusted records do not support (integrity suite over 170
-attacks: 0.0% exceeded the ledger-supported ceiling, 0.0% executed
-without support, 0.0% of 360 recommendation replays changed anything, vs
-83.5% permissive influence with no controls); zero unauthorised capability
-executions across 200 attacks on four surfaces and 24 hostile KYB applications --
-which is 0 by construction and is kept as a regression check; 0 temporal leaks in
-3,648 decisions tested; audit tampering is detected. Empirical ones, on synthetic data:
-0.0% false positives on deserved refunds, 0.0% on unseen legitimate wording,
-26.3% of clean-but-hostile KYB applications held for a human, and the financial
-figures with their held-out-seed range. Nothing about a live model: the live
-row is `not_run`. See `docs/EVALUATION.md`, which separates the three kinds.
+outcome the trusted records do not support (integrity suite, 170 attacks = main
+150 + held-out 20: 0.0% exceeded the ledger-supported ceiling, 0.0%
+executed without support, 0.0% of 360 recommendation replays changed
+anything, vs 83.5% permissive influence with no controls); zero unauthorised
+capability executions across the main (150), held-out (20) and other-surface (30)
+corpora and 24 hostile KYB applications -- 0 by construction, kept as a regression
+check; a workflow executes only its own capabilities; audit tampering is
+detected. Empirical ones, on synthetic data: 0.0% false positives on the 10
+deserved refunds of the main corpus and 0.0% on the 4 of the held-out corpus;
+26.3% of records-approve KYB applications not approved because of a hostile
+upload; the financial figures with their held-out-seed range; 0 observed
+temporal leaks in 3,648 checks (a tested invariant, not a proof). Nothing about
+a live model: the live row is `not_run`. `docs/EVALUATION.md` separates the
+three kinds.
 <!-- /gen:interview-claims -->
 
 **Why is the classifier deterministic rather than an LLM?**
@@ -455,19 +472,6 @@ not a denial and not an approval. Its benchmark shares its author and is
 labelled a regression floor, not a generalisation claim; an LLM classifier
 would be a recommendation-tier upgrade that keeps the same abstain semantics.
 
-**Why does point-in-time correctness matter?**
-Because a decision evaluated with data from its own future looks better than
-it was. The v2.0.1 review found the per-transaction baseline counting disputes
-filed after the transaction; the wider audit found profiles reading the whole
-dataset and a cycle finder unbounded in time. Every feature now takes `as_of`,
-every graph edge carries a timestamp, and a benchmark re-scores a stratified
-sample over two worlds with nine kinds of future record appended at four
-offsets and publishes exact counts (0 leaks in 3,648 decisions tested) with an
-upper bound. Extending it in 2.2.0 found two more leaks -- a later freeze and
-a later payout change altered earlier decisions because both read the
-account's *current* fields -- and they were fixed. It is a check over a
-synthetic world, not a proof.
-
 **How do you stop a caller from choosing a weaker policy or model?**
 Structurally, not at the edge. An evaluation is authoritative only if the
 inputs it was composed from carry every control, the active policy version
@@ -478,33 +482,23 @@ API returns 403 and the CLI has no flag, but those are conveniences: the
 release review found the first version of this fix lived only in the API and
 CLI, while the engine would still have recorded a downgraded run.
 
-**What did the release-candidate review actually find?**
-Real defects, each now pinned by a test: a caller-selected policy version
-that paid a second refund; a caller-selected risk model that approved flagged
-fraud; a case resolvable without a human; replay trusting an editable record;
-a malformed audit record crashing verification; a string amount that switched
-a BLOCK rule off; a policy file with no default meaning ALLOW; an unparseable
-ledger amount coerced to 0 (under every limit); two temporal leaks through
-current-state fields; `make eval` itself failing after the ablation suite; and
-a classifier pattern that read "never made it to my house" as fraud.
-
-**Why are synthetic benchmarks limited?**
-Three reasons the docs state everywhere: the attack corpus and the detector
-share an author; the "no controls" victim is a deterministic simulator, so
-its attack-success rate is a property of that simulator; and the financial
-generator, however realistic its legitimate behaviour now is, is still a
-generator whose labels the rules were designed against. The structural rows
-are 0 by construction and are regression checks; the empirical rows describe
-this corpus and this generator; the live-model row is `not_run` until someone
-runs it, and one model on one day would still be one data point.
-
-**What would production require?**
-Real record integrations in place of the SQLite context builders; per-user
-identity and roles before a human decision means anything; a production edge
-(TLS, a real WSGI/ASGI server, key management); binary document parsing; a
-trained risk model as one more trusted signal; real sanctions / AML providers
-as VERIFIED_EXTERNAL evidence; retention and PII policies; and a live-model
-evaluation on the operator's own key.
+**What did the release reviews actually find?**
+Real defects, each now pinned by a test. The release-candidate review: a
+caller-selected policy version that paid a second refund; a caller-selected
+risk model that approved flagged fraud; a case resolvable without a human;
+replay trusting an editable record; a malformed audit record crashing
+verification; a string amount that switched a BLOCK rule off; a policy file
+with no default meaning ALLOW; an unparseable ledger amount coerced to 0; two
+temporal leaks through current-state fields; `make eval` itself failing; a
+classifier pattern that read "never made it to my house" as fraud. The final
+consequential-capability trace (`tests/test_release_trace.py`): the account
+route executed any capability a caller named, including APPROVE_REFUND on a
+login; a multi-turn dispute executed and audited the refund once per turn;
+human case decisions were not audited; a human could approve a case the
+registry forbids (policy BLOCK, contradicted records); `"false"` read as True
+in a ledger flag; a negative transaction amount was authorised; and model
+prose, replay overrides and a content `source` label reached places only
+bounded identifiers should.
 
 ## Questions where the honest answer is "not implemented"
 
@@ -517,8 +511,10 @@ evaluation on the operator's own key.
   live row is `not_run` in this repository.
 - **Is there user identity on the API?** No. One optional bearer token, no
   roles. Only a human decision resolves a case, reserved system / model names
-  are refused and the registry's review level is checked, but the reviewer's
-  name and level are declared by the caller.
+  are refused, the registry's review level and its answer for a human actor
+  are checked, an escalated case needs a senior, and every human action is
+  chained into the audit log -- but the reviewer's name and level are declared
+  by the caller.
 - **Does it parse PDFs or images?** No. Uploads are untrusted text.
 - **Does it scale horizontally?** Not as built. One process, one SQLite
   file, an in-memory graph; the seams where real infrastructure would attach
@@ -531,9 +527,3 @@ evaluation on the operator's own key.
   read 7 of 21 at first and 17 of 21 after the patterns were extended (by an
   author who had seen the misses). A miss abstains and the case goes to a
   human; the 100% on ordinary paraphrases is on phrasings by the same author.
-
-**What remains unimplemented for production?**
-Real record integrations, binary document parsing, a trained risk model,
-real sanctions/AML providers, per-tenant auth and roles, a production edge
-(reverse proxy, TLS, WSGI/ASGI), key management, PII handling beyond hashing,
-retention policies, and a live-model evaluation on the operator's own key.
