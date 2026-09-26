@@ -130,7 +130,7 @@
     "asr_unguarded": "empirical (simulated agent)",
     "detection_recall": "empirical"
   },
-  "seconds": 0.06,
+  "seconds": 0.07,
   "methodology": {
     "kind": "synthetic; guarded attack success and 'loosened' are structural",
     "dataset": "attacks arriving through the transaction, account-security and investigation workflows",
