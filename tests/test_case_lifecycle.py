@@ -179,7 +179,11 @@ def test_escalation_is_a_human_decision_that_does_not_resolve():
     assert c.status is CaseStatus.ESCALATED and c.resolution is None
     with pytest.raises(InvalidTransition, match="already escalated"):
         svc.record_human_decision(c.case_id, reviewer="alice", outcome="escalate")
-    c = svc.record_human_decision(c.case_id, reviewer="carol", outcome="approve")
+    with pytest.raises(ReviewerNotAuthorized, match="SENIOR_REVIEWER"):
+        svc.record_human_decision(c.case_id, reviewer="carol", outcome="approve")
+    c = svc.record_human_decision(
+        c.case_id, reviewer="carol", outcome="approve", role="SENIOR_REVIEWER"
+    )
     assert c.status is CaseStatus.RESOLVED
 
 

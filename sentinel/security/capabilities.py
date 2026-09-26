@@ -24,6 +24,7 @@ from sentinel.domain.enums import (
     Capability,
     PolicyOutcome,
     RiskLevel,
+    Workflow,
 )
 
 
@@ -253,6 +254,26 @@ REGISTRY: dict[Capability, CapabilitySpec] = {
 
 CONSEQUENTIAL: frozenset[Capability] = frozenset(c for c, s in REGISTRY.items() if s.consequential)
 
+# The consequential capabilities each workflow's decision may execute. A request for any
+# other capability through a workflow is denied: a login decision can never approve a
+# refund, whatever the caller asks for. CLOSE_CASE, ALTER_RISK and SKIP_REVIEW belong to
+# no workflow -- only the case service, and only for a human.
+WORKFLOW_CAPABILITIES: dict[Workflow, frozenset[Capability]] = {
+    Workflow.DISPUTE: frozenset({Capability.APPROVE_REFUND}),
+    Workflow.TRANSACTION: frozenset({Capability.APPROVE_TRANSACTION}),
+    Workflow.MERCHANT_ONBOARDING: frozenset({Capability.APPROVE_MERCHANT}),
+    Workflow.ACCOUNT_SECURITY: frozenset(
+        {
+            Capability.FREEZE_ACCOUNT,
+            Capability.UNFREEZE_ACCOUNT,
+            Capability.CHANGE_PAYOUT,
+            Capability.RELEASE_FUNDS,
+        }
+    ),
+    Workflow.INVESTIGATION: frozenset(),
+    Workflow.AI_SECURITY: frozenset(),
+}
+
 
 def spec(capability: Capability) -> CapabilitySpec:
     return REGISTRY[capability]
@@ -288,6 +309,9 @@ def matrix() -> list[dict[str, Any]]:
                 "human_review_threshold": s.human_review_threshold,
                 "requires_verified_evidence": s.consequential,
                 "policy_gates": sorted(gates.get(cap.value, ())),
+                "workflows": sorted(
+                    w.value for w, own in WORKFLOW_CAPABILITIES.items() if cap in own
+                ),
                 "description": s.description,
             }
         )
@@ -305,12 +329,14 @@ def authorize(
     amount: int,
     policy_outcome: PolicyOutcome,
     evidence_supported: bool,
+    workflow: Workflow | None = None,
 ) -> Authorization:
     """Deterministic authorization for one requested capability.
 
     The model's wish never enters here -- ``capability`` is what the *decision
     path* is considering executing, ``actor`` is who is asking (SYSTEM for the
-    automated path), and policy/evidence are trusted inputs."""
+    automated path), and policy/evidence are trusted inputs. With ``workflow`` (the
+    composer always passes it) a capability the workflow does not own is denied."""
     if capability is None:
         return Authorization(
             AuthorizationStatus.GRANTED, None, actor, "no consequential capability requested"
@@ -319,6 +345,13 @@ def authorize(
     if s is None:  # fail closed: an unregistered capability is never authorized
         return Authorization(
             AuthorizationStatus.DENIED, capability, actor, f"unregistered capability {capability!r}"
+        )
+    if workflow is not None and capability not in WORKFLOW_CAPABILITIES.get(workflow, ()):
+        return Authorization(
+            AuthorizationStatus.DENIED,
+            capability,
+            actor,
+            f"{capability.value} is not executable from the {workflow.value} workflow",
         )
     if actor not in s.allowed_actors:
         return Authorization(

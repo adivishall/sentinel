@@ -52,3 +52,8 @@ class Case:
     # Who may approve: derived from the capability registry when the case is opened
     # (HUMAN_REVIEWER | SENIOR_REVIEWER | NOBODY). Denying or escalating needs any human.
     required_authorization: str = "HUMAN_REVIEWER"
+    # What the decision that opened the case would execute and on what footing; a human
+    # approval is checked against the registry with these (``CaseService.approval``).
+    capability: str | None = None
+    policy_outcome: str | None = None
+    evidence_verdict: str | None = None

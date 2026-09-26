@@ -232,13 +232,16 @@ def cmd_account(args: argparse.Namespace) -> int:
     app = _app(args)
     if args.target.endswith(".json"):
         from sentinel.api import schemas as S
+        from sentinel.domain.enums import Workflow
 
         data = _load_json(args.target)
         s = S.login_session(data if "session" in data else {"session": data})
         b = app.evaluate_account(
             s,
             message=data.get("message"),
-            requested_capability=S.capability(data, "requested_capability"),
+            requested_capability=S.capability(
+                data, "requested_capability", workflow=Workflow.ACCOUNT_SECURITY
+            ),
             options=_options(args),
         )
     else:

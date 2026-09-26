@@ -22,7 +22,7 @@ from sentinel.agents.providers import LLMProvider
 from sentinel.audit.chain import AuditChain, AuditEvent
 from sentinel.cases.service import CaseService
 from sentinel.decision import composer
-from sentinel.decision.authority import require_authoritative
+from sentinel.decision.authority import ControlDowngrade, require_authoritative
 from sentinel.decision.composer import DecisionInputs, compose
 from sentinel.decision.snapshot import snapshot, snapshot_hash
 from sentinel.domain.cases import Case
@@ -74,6 +74,11 @@ class Runtime:
     audit: AuditChain = field(default_factory=AuditChain)
     provider: LLMProvider | None = None
     persist: bool = True  # write audit events and open cases
+
+    def __post_init__(self) -> None:
+        # a recording runtime chains every human case action into its own audit chain
+        if self.persist and self.cases.audit is None:
+            self.cases.audit = self.audit
 
     def agent(self, key: str) -> Agent:
         return Agent(SPECS[key], self.provider)
@@ -140,6 +145,17 @@ def _run_agent(rt: Runtime, key: str, prompt: str, opts: RunOptions) -> AIRecomm
         return None
     agent = rt.agent(f"{key}_hardened" if opts.hardened and f"{key}_hardened" in SPECS else key)
     return agent.recommend(prompt)
+
+
+def _admit(rt: Runtime, opts: RunOptions) -> None:
+    """A recording runtime refuses what-if options before anything runs. ``_finish`` also
+    checks the composed inputs; this catches what the inputs cannot show -- a run without
+    prompt provenance, or a custom risk model that reuses the active model's version name."""
+    if rt.persist and opts.what_if:
+        raise ControlDowngrade(
+            "refusing a what-if run on a recording runtime (reduced controls, a named policy "
+            "version or a supplied risk model); use the what-if runtime or replay"
+        )
 
 
 def _finish(
@@ -323,6 +339,7 @@ class DisputeRequest:
 def run_dispute(
     rt: Runtime, req: DisputeRequest, opts: RunOptions = DEFAULT_OPTIONS
 ) -> DecisionBundle:
+    _admit(rt, opts)
     facts = DisputeFacts.from_ledger(req.ledger)
     dispute_id = req.dispute_id or new_id("DSP")
     try:
@@ -424,7 +441,23 @@ class TransactionRequest:
 def run_transaction(
     rt: Runtime, req: TransactionRequest, opts: RunOptions = DEFAULT_OPTIONS
 ) -> DecisionBundle:
+    _admit(rt, opts)
     t = req.transaction
+    if isinstance(t.amount, bool) or not isinstance(t.amount, int) or t.amount <= 0:
+        # a caller-supplied record with a zero, negative or non-integer amount is not a
+        # payment to authorise; it goes to a human, never through the limit checks
+        return _fail_safe(
+            rt,
+            Workflow.TRANSACTION,
+            "transaction",
+            t.transaction_id,
+            0,
+            Capability.APPROVE_TRANSACTION,
+            "transaction-authorization",
+            f"transaction amount {t.amount!r} is not a positive integer",
+            opts,
+            req.facts_source,
+        )
     risk = txn_risk.assess_transaction(
         t, req.context, scoring.model_for("transaction", opts.risk_model)
     )
@@ -529,6 +562,7 @@ class KYBRequest:
 
 
 def run_kyb(rt: Runtime, req: KYBRequest, opts: RunOptions = DEFAULT_OPTIONS) -> DecisionBundle:
+    _admit(rt, opts)
     if opts.risk_model is not None:
         raise ValueError(
             f"risk model {opts.risk_model.version} does not apply to merchant onboarding "
@@ -613,6 +647,7 @@ class AccountSecurityRequest:
 def run_account_security(
     rt: Runtime, req: AccountSecurityRequest, opts: RunOptions = DEFAULT_OPTIONS
 ) -> DecisionBundle:
+    _admit(rt, opts)
     s = req.session
     risk = account_security.assess_login(
         s, req.context, scoring.model_for("login", opts.risk_model)
@@ -710,6 +745,7 @@ class InvestigationRequest:
 def run_investigation(
     rt: Runtime, req: InvestigationRequest, opts: RunOptions = DEFAULT_OPTIONS
 ) -> DecisionBundle:
+    _admit(rt, opts)
     risk = monitoring.assess_account_activity(
         req.context, scoring.model_for("account", opts.risk_model)
     )

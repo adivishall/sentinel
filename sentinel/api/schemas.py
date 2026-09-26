@@ -9,9 +9,10 @@ from typing import Any
 from sentinel.decision import composer
 from sentinel.decision.workflows import PROVENANCE, RunOptions
 from sentinel.domain.entities import LoginSession, Transaction
-from sentinel.domain.enums import Capability, TrustClass
+from sentinel.domain.enums import Capability, TrustClass, Workflow
 from sentinel.risk import scoring
-from sentinel.security.provenance import UntrustedContent
+from sentinel.security.capabilities import WORKFLOW_CAPABILITIES
+from sentinel.security.provenance import UntrustedContent, label
 
 MAX_TEXT = 20_000
 ALL_CONTROLS = composer.FULL | {PROVENANCE}
@@ -130,8 +131,8 @@ def untrusted_list(d: dict[str, Any], key: str = "contents") -> tuple[UntrustedC
             UntrustedContent(
                 text,
                 trust,
-                str(item.get("source", "external"))[:80],
-                str(item.get("kind", "text"))[:20],
+                label(item.get("source", "external"), "external"),
+                label(item.get("kind", "text"), "text"),
             )
         )
     return tuple(out)
@@ -180,14 +181,30 @@ def run_options(d: dict[str, Any]) -> RunOptions:
     )
 
 
-def capability(d: dict[str, Any], key: str) -> Capability | None:
-    v = opt_str(d, key)
+def capability(
+    d: dict[str, Any], key: str, *, workflow: Workflow | None = None
+) -> Capability | None:
+    v = opt_str(d, key, max_len=40)
     if v is None:
         return None
     try:
-        return Capability(v)
+        cap = Capability(v)
     except ValueError:
         raise ValidationError(f"{key!r} invalid capability {v!r}") from None
+    if workflow is not None and cap not in WORKFLOW_CAPABILITIES[workflow]:
+        # the engine would deny it too; say so before evaluating anything
+        raise ValidationError(
+            f"{cap.value} is not executable from the {workflow.value} workflow; allowed: "
+            f"{sorted(c.value for c in WORKFLOW_CAPABILITIES[workflow])}"
+        )
+    return cap
+
+
+def positive_int(d: dict[str, Any], key: str) -> int:
+    v = d.get(key)
+    if isinstance(v, bool) or not isinstance(v, int) or v <= 0:
+        raise ValidationError(f"{key!r} must be a positive integer")
+    return v
 
 
 def transaction(d: dict[str, Any]) -> Transaction:
@@ -199,7 +216,7 @@ def transaction(d: dict[str, Any]) -> Transaction:
             merchant_id=req_str(t, "merchant_id", max_len=64),
             instrument_id=str(t.get("instrument_id", "unknown"))[:64],
             device_id=str(t.get("device_id", "unknown"))[:64],
-            amount=int(t["amount"]),
+            amount=positive_int(t, "amount"),
             currency=str(t.get("currency", "INR"))[:8],
             timestamp=req_str(t, "timestamp", max_len=40),
             country=str(t.get("country", "IN"))[:4],
@@ -224,7 +241,7 @@ def login_session(d: dict[str, Any]) -> LoginSession:
             ip=str(s.get("ip", "0.0.0.0"))[:45],
             country=str(s.get("country", "IN"))[:4],
             started_at=req_str(s, "started_at", max_len=40),
-            mfa_passed=bool(s.get("mfa_passed", True)),
+            mfa_passed=opt_bool(s, "mfa_passed", True),
             events=tuple(str(x)[:40] for x in s.get("events", []))[:10],
         )
     except (KeyError, TypeError, ValueError) as e:
@@ -244,10 +261,20 @@ class ReplayBody:
 
 def replay_body(d: dict[str, Any]) -> ReplayBody:
     rv = d.get("rule_values", {})
-    if not isinstance(rv, dict) or not all(
-        isinstance(k, str) and isinstance(v, (int, float, str, bool)) for k, v in rv.items()
+    if (
+        not isinstance(rv, dict)
+        or len(rv) > 10
+        or not all(
+            isinstance(k, str)
+            and 0 < len(k) <= 64
+            and isinstance(v, (int, float, str, bool))
+            and (not isinstance(v, str) or len(v) <= 40)
+            for k, v in rv.items()
+        )
     ):
-        raise ValidationError("'rule_values' must map rule ids to scalar values")
+        raise ValidationError(
+            "'rule_values' must map at most 10 rule ids to scalar values (strings <= 40 chars)"
+        )
     rm = opt_str(d, "risk_model")
     if rm and rm not in scoring.MODELS:
         raise ValidationError(f"unknown risk_model {rm!r}")

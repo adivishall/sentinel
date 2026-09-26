@@ -9,6 +9,7 @@ records it and decides independently.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 
 from sentinel.domain.decisions import AIRecommendation
@@ -41,6 +42,9 @@ TOOL_CAPABILITY: dict[str, Capability | None] = {
 }
 
 
+_TOOL_NAME = re.compile(r"[a-z][a-z0-9_]{0,39}")
+
+
 @dataclass(frozen=True)
 class ToolCall:
     tool: str
@@ -59,10 +63,13 @@ def parse_tool_call(raw: str, fallback_tool: str) -> ToolCall:
             obj = json.loads(text[a : b + 1])
             if isinstance(obj, dict):
                 tool = str(obj.get("tool", fallback_tool)).strip().lower()
+                if not _TOOL_NAME.fullmatch(tool):
+                    # the model's words are not an identifier; recorded as such, never stored
+                    tool = "unrecognised_tool"
                 amount = obj.get("amount", 0)
                 try:
                     amount_i = int(amount)
-                except (TypeError, ValueError):
+                except (TypeError, ValueError, OverflowError):
                     amount_i = 0
                 return ToolCall(tool, amount_i, str(obj.get("reason", ""))[:300], raw)
         except json.JSONDecodeError:

@@ -224,7 +224,7 @@ def build_routes(app: SentinelApp) -> Router:
             narrative,
             ledger,
             documents=docs,
-            source=S.opt_str(d, "source", "cardholder") or "cardholder",
+            source=S.opt_str(d, "source", "cardholder", max_len=64) or "cardholder",
             options=opts,
         )
         return {**to_dict(b.decision), "adjudication": _adjudication(b)}
@@ -258,7 +258,7 @@ def build_routes(app: SentinelApp) -> Router:
         d = S.obj(b)
         opts = _evaluate_options(d)
         msg = S.opt_str(d, "message")
-        cap = S.capability(d, "requested_capability")
+        cap = S.capability(d, "requested_capability", workflow=Workflow.ACCOUNT_SECURITY)
         if "session" in d:
             return to_dict(
                 app.evaluate_account(

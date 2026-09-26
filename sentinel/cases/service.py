@@ -1,18 +1,36 @@
 """Case management: open, transition, resolve. Storage is behind a
 small repository protocol so the SQLite store can back it without the
-service knowing."""
+service knowing.
+
+With an audit chain attached (every recording ``Runtime`` attaches its own), each
+human action -- opening a case by hand, a status change, a human decision -- is
+appended to the tamper-evident chain before the case is saved, so a resolution
+cannot be written into the case table without leaving a chained record."""
 
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from sentinel.cases.rules import CaseTrigger, should_open_case
 from sentinel.domain.cases import Case, CaseEvent, HumanDecision
 from sentinel.domain.decisions import Decision
-from sentinel.domain.enums import ActorKind, Capability, CasePriority, CaseStatus, Workflow
-from sentinel.domain.ids import new_id, now_iso
+from sentinel.domain.enums import (
+    ActorKind,
+    AuthorizationStatus,
+    Capability,
+    CasePriority,
+    CaseStatus,
+    EvidenceVerdict,
+    PolicyOutcome,
+    Workflow,
+)
+from sentinel.domain.ids import content_hash, new_id, now_iso
+from sentinel.security.capabilities import authorize
 from sentinel.security.capabilities import spec as cap_spec
+
+if TYPE_CHECKING:
+    from sentinel.audit.chain import AuditChain
 
 # Status moves an analyst or the system may make. RESOLVED is deliberately not a target
 # anywhere in this table: a case reaches RESOLVED only through ``record_human_decision``.
@@ -98,8 +116,51 @@ class MemoryCaseRepository:
 
 
 class CaseService:
-    def __init__(self, repo: CaseRepository | None = None) -> None:
+    def __init__(self, repo: CaseRepository | None = None, audit: AuditChain | None = None) -> None:
         self.repo: CaseRepository = repo or MemoryCaseRepository()
+        self.audit: AuditChain | None = audit
+
+    def _record(self, case: Case, *, actor: str, action: str, detail: dict[str, object]) -> Case:
+        """Chain a human case action, then link it to the case. Free text (titles, notes)
+        is hashed, never stored in the chain."""
+        if self.audit is None:
+            return case
+        ev = self.audit.append(
+            actor=actor,
+            workflow=case.case_type.value,
+            action=action,
+            subject_id=case.case_id,
+            capability=case.capability,
+            case_id=case.case_id,
+            kind="case",
+            detail={**detail, "decision_ids": list(case.decision_ids)},
+        )
+        return replace(case, audit_event_ids=case.audit_event_ids + (ev.event_id,))
+
+    def approval(self, case: Case, role: str) -> tuple[bool, str]:
+        """May a reviewer at ``role`` approve this case? The same registry answer the
+        automated path gets, for a human actor: the role must be allowed the capability, a
+        policy BLOCK is final for every actor, and records that contradict (or do not
+        confirm) the claim cannot be approved. A claim the classifier could not read
+        (INSUFFICIENT) is exactly what the human was asked to read, so it may be."""
+        need = case.required_authorization
+        if need == "NOBODY":
+            return False, "no actor may approve this capability"
+        if _ROLE_RANK.get(role, 0) < _ROLE_RANK.get(need, 99):
+            return False, f"approving this case needs {need}; the reviewer declared {role}"
+        if case.capability is None:
+            return True, "no consequential capability on this case"
+        auth = authorize(
+            Capability(case.capability),
+            actor=ActorKind(role),
+            amount=0,
+            policy_outcome=PolicyOutcome(case.policy_outcome or "REQUIRE_HUMAN_REVIEW"),
+            evidence_supported=case.evidence_verdict
+            in (EvidenceVerdict.SUPPORTED.value, EvidenceVerdict.INSUFFICIENT.value),
+        )
+        if auth.status is AuthorizationStatus.DENIED:
+            return False, f"the capability registry denies it: {auth.reason}"
+        return True, auth.reason
 
     # ---- opening ----------------------------------------------------------------------
     def open_for_decision(self, d: Decision, *, entities: tuple[str, ...] = ()) -> Case | None:
@@ -145,7 +206,11 @@ class CaseService:
             updated_at=now,
             opened_by_rule=trig.rule,
             required_authorization=required_authorization(d.requested_capability),
+            capability=d.requested_capability.value if d.requested_capability else None,
+            policy_outcome=d.policy.outcome.value,
+            evidence_verdict=d.evidence_verdict.value,
         )
+        # an automated case is chained by its decision's audit event (``link_audit``)
         self.repo.save(case)
         return case
 
@@ -179,6 +244,16 @@ class CaseService:
             now,
             "manual",
         )
+        case = self._record(
+            case,
+            actor=actor,
+            action="CASE_OPENED",
+            detail={
+                "rule": "manual",
+                "priority": priority.value,
+                "title_hash": content_hash(title),
+            },
+        )
         self.repo.save(case)
         return case
 
@@ -201,7 +276,14 @@ class CaseService:
             {"from": case.status.value, "to": to.value, "note": note},
             now,
         )
+        prev = case.status
         case = replace(case, status=to, events=case.events + (ev,), updated_at=now)
+        case = self._record(
+            case,
+            actor=actor,
+            action=f"CASE_{to.value}",
+            detail={"from": prev.value, "to": to.value, "note_hash": content_hash(note)},
+        )
         self.repo.save(case)
         return case
 
@@ -242,12 +324,13 @@ class CaseService:
             )
         if outcome == "escalate" and case.status is CaseStatus.ESCALATED:
             raise InvalidTransition("the case is already escalated")
+        if case.status is CaseStatus.ESCALATED and _ROLE_RANK[role] < _ROLE_RANK["SENIOR_REVIEWER"]:
+            # escalating hands the case up; it is not advisory
+            raise ReviewerNotAuthorized("an escalated case is decided by a SENIOR_REVIEWER")
         if outcome == "approve":
-            need = case.required_authorization
-            if need == "NOBODY" or _ROLE_RANK[role] < _ROLE_RANK.get(need, 99):
-                raise ReviewerNotAuthorized(
-                    f"approving this case needs {need}; the reviewer declared {role}"
-                )
+            ok, why = self.approval(case, role)
+            if not ok:
+                raise ReviewerNotAuthorized(why)
         now = now_iso()
         hd = HumanDecision(new_id("HDEC"), case_id, who, outcome, note, now, role)
         ev = CaseEvent(
@@ -259,6 +342,7 @@ class CaseService:
             now,
         )
         to = CaseStatus.ESCALATED if outcome == "escalate" else CaseStatus.RESOLVED
+        prev = case.status
         case = replace(
             case,
             status=to,
@@ -266,6 +350,19 @@ class CaseService:
             events=case.events + (ev,),
             updated_at=now,
             resolution=None if to is CaseStatus.ESCALATED else outcome,
+        )
+        case = self._record(
+            case,
+            actor=who,
+            action=f"HUMAN_{outcome.upper()}",
+            detail={
+                "outcome": outcome,
+                "role": role,  # declared, not authenticated (see LIMITATIONS)
+                "required_authorization": case.required_authorization,
+                "from": prev.value,
+                "to": to.value,
+                "note_hash": content_hash(note),
+            },
         )
         self.repo.save(case)
         return case

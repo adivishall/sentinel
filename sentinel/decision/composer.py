@@ -212,6 +212,7 @@ def _decide(
             amount=v.amount,
             policy_outcome=pol.outcome,
             evidence_supported=supported,
+            workflow=v.workflow,
         )
     else:
         auth = Authorization(

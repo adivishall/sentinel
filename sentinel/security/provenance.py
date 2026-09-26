@@ -10,6 +10,7 @@ gateway, hashed for audit -- but nothing can turn it into a verified fact.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from sentinel.domain.enums import TrustClass
@@ -28,9 +29,22 @@ class UntrustedContent:
     def __post_init__(self) -> None:
         if self.trust.is_trusted:
             raise ValueError("UntrustedContent cannot carry a trusted TrustClass")
+        # ``source`` and ``kind`` are labels, not content: the gateway scans ``text`` only,
+        # so anything else would be an unscanned channel into the agent prompt.
+        object.__setattr__(self, "source", label(self.source, "external"))
+        object.__setattr__(self, "kind", label(self.kind, "text"))
 
     def sha256(self) -> str:
         return content_hash(self.text)
+
+
+_LABEL = re.compile(r"[^A-Za-z0-9_.:@/-]+")
+
+
+def label(value: object, default: str) -> str:
+    """A provenance label: at most 64 characters of ``[A-Za-z0-9_.:@/-]``."""
+    out = _LABEL.sub("_", str(value)).strip("_")[:64]
+    return out or default
 
 
 def wrap_untrusted(content: UntrustedContent) -> str:

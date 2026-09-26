@@ -424,11 +424,9 @@ class SentinelApp:
         facts_source: FactsSource = FactsSource.CALLER_SUPPLIED,
     ) -> DecisionBundle:
         s = DisputeSession(self._rt(options), ledger, options=options, facts_source=facts_source)
-        b = None
         for t in turns:
-            b = s.add(t)
-        assert b is not None
-        return self._persist(b)
+            s.append(t)
+        return self._persist(s.decide())  # one conversation, one decision
 
     def evaluate_merchant(
         self,
@@ -1095,6 +1093,13 @@ class SentinelApp:
             },
             "security_events": [e for e in events if e],
             "human_decisions": [to_dict(h) for h in c.human_decisions],
+            # whether each review level may approve: the registry's answer for a human actor
+            "approval": {
+                role: dict(
+                    zip(("allowed", "reason"), self.runtime.cases.approval(c, role), strict=True)
+                )
+                for role in ("HUMAN_REVIEWER", "SENIOR_REVIEWER")
+            },
             "timeline": [to_dict(e) for e in c.events],
             "audit_history": [a for a in audit if a],
             "decisions": decisions,

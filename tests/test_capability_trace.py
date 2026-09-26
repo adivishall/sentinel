@@ -25,8 +25,9 @@ from sentinel.domain.enums import (
     Capability,
     EvidenceVerdict,
     PolicyOutcome,
+    Workflow,
 )
-from sentinel.security.capabilities import CONSEQUENTIAL, spec
+from sentinel.security.capabilities import CONSEQUENTIAL, WORKFLOW_CAPABILITIES, spec
 from sentinel.security.provenance import UntrustedContent
 
 TOOL = {
@@ -129,7 +130,12 @@ def test_a_caller_requesting_a_capability_gets_the_registry_answer(world, cap):
     b = app.evaluate_account(s, requested_capability=cap)
     d = b.decision
     s_ = spec(cap)
-    if ActorKind.SYSTEM not in s_.allowed_actors or s_.required_authorization.value in (
+    if cap not in WORKFLOW_CAPABILITIES[Workflow.ACCOUNT_SECURITY]:
+        # not this workflow's capability: denied outright, whatever the caller asked
+        assert d.executed_capability is None
+        assert d.authorization.status is AuthorizationStatus.DENIED
+        assert "not executable from the account_security workflow" in d.authorization.reason
+    elif ActorKind.SYSTEM not in s_.allowed_actors or s_.required_authorization.value in (
         "HUMAN_REVIEWER",
         "SENIOR_REVIEWER",
     ):
@@ -137,6 +143,8 @@ def test_a_caller_requesting_a_capability_gets_the_registry_answer(world, cap):
         assert d.executed_capability is None, (cap, d.final_action)
         assert d.final_action.value in ("REQUIRE_HUMAN_REVIEW", "DENY", "BLOCK", "TEMPORARY_HOLD")
     else:
+        # the workflow's own, system-executable capability (FREEZE_ACCOUNT): the full path
+        assert cap is Capability.FREEZE_ACCOUNT
         _check(b, own=cap)
     if b.case is not None and d.human_review.required:
         from sentinel.cases.service import required_authorization

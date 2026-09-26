@@ -54,14 +54,29 @@ def parse_int(value: object) -> int | None:
     return None
 
 
+def parse_bool(value: object) -> bool | None:
+    """A ledger flag as bool, or ``None`` when it is not a JSON boolean. ``bool("false")``
+    is True in Python; a flag like ``duplicate_confirmed`` must never be read that way."""
+    return value if isinstance(value, bool) else None
+
+
 def record_problems(
-    record: Mapping[str, object], numeric: tuple[str, ...], required: tuple[str, ...] = ()
+    record: Mapping[str, object],
+    numeric: tuple[str, ...],
+    required: tuple[str, ...] = (),
+    boolean: tuple[str, ...] = (),
 ) -> list[str]:
-    """Why a trusted record cannot be used as-is: a required field missing, or a numeric
-    field that is present but not a finite, non-negative number. The workflows fail
-    SAFE on any problem (human review): coercing ``"ten lakh"`` or ``-50000`` to a
-    number would otherwise slip under an auto-approval limit."""
+    """Why a trusted record cannot be used as-is: a required field missing, a numeric
+    field that is present but not a finite, non-negative number, or a flag that is not a
+    boolean. The workflows fail SAFE on any problem (human review): coercing ``"ten
+    lakh"`` or ``-50000`` to a number, or ``"false"`` to True, would otherwise slip a
+    request past a limit or a check."""
     out = [f"{k} missing" for k in required if k not in record]
+    out += [
+        f"{k}={record[k]!r} is not a boolean"
+        for k in boolean
+        if k in record and parse_bool(record[k]) is None
+    ]
     for k in numeric:
         if k in record:
             v = parse_int(record[k])
@@ -167,6 +182,11 @@ class DisputeFacts(TrustedFacts):
     customer_tenure_days: int = 0
 
     SOURCE: ClassVar[str] = "payment_ledger"
+    BOOLEAN: ClassVar[tuple[str, ...]] = (
+        "duplicate_confirmed",
+        "cancellation_confirmed",
+        "cardholder_present",
+    )
     NUMERIC: ClassVar[tuple[str, ...]] = (
         "amount",
         "prior_disputes_90d",
@@ -176,7 +196,7 @@ class DisputeFacts(TrustedFacts):
 
     @classmethod
     def problems(cls, ledger: Mapping[str, object]) -> list[str]:
-        return record_problems(ledger, cls.NUMERIC, required=("amount",))
+        return record_problems(ledger, cls.NUMERIC, required=("amount",), boolean=cls.BOOLEAN)
 
     @classmethod
     def from_ledger(cls, ledger: Mapping[str, object]) -> DisputeFacts:
@@ -187,9 +207,9 @@ class DisputeFacts(TrustedFacts):
             delivery_status=str(g("delivery_status", "unknown")),
             prior_disputes_90d=as_int(g("prior_disputes_90d", 0)),
             policy_auto_limit=as_int(g("policy_auto_limit", 50_000), 50_000),
-            duplicate_confirmed=bool(g("duplicate_confirmed", False)),
-            cancellation_confirmed=bool(g("cancellation_confirmed", False)),
-            cardholder_present=bool(g("cardholder_present", True)),
+            duplicate_confirmed=parse_bool(g("duplicate_confirmed", False)) is True,
+            cancellation_confirmed=parse_bool(g("cancellation_confirmed", False)) is True,
+            cardholder_present=parse_bool(g("cardholder_present", True)) is not False,
             refund_state=str(g("refund_state", "none")),
             transaction_status=str(g("transaction_status", "settled")),
             merchant_response=str(g("merchant_response", "none")),

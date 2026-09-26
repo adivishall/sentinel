@@ -28,6 +28,7 @@ kind ``replay``) and never overwrites or re-records the original decision."""
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -222,6 +223,13 @@ def anchor_to_audit(
 
 
 def _with_rule_values(policy: Policy, values: dict[str, object]) -> Policy:
+    unknown = sorted(set(values) - {r.rule_id for r in policy.rules})
+    if unknown:
+        raise ValueError(f"{policy.key} has no rule(s) {unknown}")
+    for k, v in values.items():
+        number = isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+        if not (number or isinstance(v, bool) or (isinstance(v, str) and 0 < len(v) <= 40)):
+            raise ValueError(f"rule {k}: a threshold must be a finite number or a short value")
     rules = []
     for r in policy.rules:
         if r.rule_id in values:
