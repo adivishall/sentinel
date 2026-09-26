@@ -302,7 +302,7 @@ def _evaluate(
     groups = scoring.FACTOR_GROUPS
     signal_stats: dict[str, dict[str, Any]] = {}
     for code in sorted(
-        set(sig_fraud) | set(sig_legit), key=lambda c: -(sig_fraud[c] + sig_legit[c])
+        set(sig_fraud) | set(sig_legit), key=lambda c: (-(sig_fraud[c] + sig_legit[c]), c)
     ):
         f_, l_ = sig_fraud[code], sig_legit[code]
         signal_stats[code] = {

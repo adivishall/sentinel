@@ -119,7 +119,8 @@ def run() -> dict[str, Any]:
 
     # C
     c_changed = c_n = 0
-    for c in cases[:60]:
+    replayed = cases[:60]  # the first 60 development-corpus cases, each under every RECS entry
+    for c in replayed:
         b = run_dispute(rt, dispute_request(c), RunOptions(controls=FULL))
         assert b.inputs is not None
         snap = snapshot(b.inputs)
@@ -169,6 +170,8 @@ def run() -> dict[str, Any]:
         "legit_plus_injection_n": b_n,
         "model_influence_protected": round(c_changed / max(1, c_n), 3),
         "model_influence_n": c_n,
+        "model_influence_decisions": len(replayed),
+        "model_influence_recommendations": len(RECS),
         "text_influence_permissive_unguarded": round(d_perm / n, 3),
         "text_beyond_ledger_ceiling": round(e_beyond / n, 3),
         "executed_without_ledger_support": round(e_unsupported_exec / n, 3),

@@ -688,15 +688,6 @@
         "legit_fire_rate": 0.0448,
         "precision_when_fired": 0.0
       },
-      "auth_weak": {
-        "family": "security",
-        "points": 8,
-        "fired_on_fraud": 20,
-        "fired_on_legit": 118,
-        "fraud_fire_rate": 0.3448,
-        "legit_fire_rate": 0.0378,
-        "precision_when_fired": 0.145
-      },
       "amount_anomaly_extreme": {
         "family": "anomaly",
         "points": 22,
@@ -705,6 +696,15 @@
         "fraud_fire_rate": 0.1207,
         "legit_fire_rate": 0.0419,
         "precision_when_fired": 0.051
+      },
+      "auth_weak": {
+        "family": "security",
+        "points": 8,
+        "fired_on_fraud": 20,
+        "fired_on_legit": 118,
+        "fraud_fire_rate": 0.3448,
+        "legit_fire_rate": 0.0378,
+        "precision_when_fired": 0.145
       },
       "rapid_succession": {
         "family": "velocity",
@@ -796,18 +796,18 @@
         "legit_fire_rate": 0.0042,
         "precision_when_fired": 0.316
       },
-      "shared_payout_instrument": {
-        "family": "entity",
-        "points": 20,
+      "shared_device": {
+        "family": "device_geo",
+        "points": 8,
         "fired_on_fraud": 18,
         "fired_on_legit": 0,
         "fraud_fire_rate": 0.3103,
         "legit_fire_rate": 0.0,
         "precision_when_fired": 1.0
       },
-      "shared_device": {
-        "family": "device_geo",
-        "points": 8,
+      "shared_payout_instrument": {
+        "family": "entity",
+        "points": 20,
         "fired_on_fraud": 18,
         "fired_on_legit": 0,
         "fraud_fire_rate": 0.3103,
@@ -1911,15 +1911,6 @@
             "legit_fire_rate": 0.0087,
             "precision_when_fired": 0.206
           },
-          "velocity_spike": {
-            "family": "velocity",
-            "points": 20,
-            "fired_on_fraud": 16,
-            "fired_on_legit": 4,
-            "fraud_fire_rate": 0.2909,
-            "legit_fire_rate": 0.0013,
-            "precision_when_fired": 0.8
-          },
           "new_device": {
             "family": "device_geo",
             "points": 17,
@@ -1928,6 +1919,15 @@
             "fraud_fire_rate": 0.1091,
             "legit_fire_rate": 0.0045,
             "precision_when_fired": 0.3
+          },
+          "velocity_spike": {
+            "family": "velocity",
+            "points": 20,
+            "fired_on_fraud": 16,
+            "fired_on_legit": 4,
+            "fraud_fire_rate": 0.2909,
+            "legit_fire_rate": 0.0013,
+            "precision_when_fired": 0.8
           },
           "account_age_new": {
             "family": "entity",
@@ -1938,18 +1938,18 @@
             "legit_fire_rate": 0.0061,
             "precision_when_fired": 0.0
           },
-          "shared_payout_instrument": {
-            "family": "entity",
-            "points": 20,
+          "shared_device": {
+            "family": "device_geo",
+            "points": 8,
             "fired_on_fraud": 18,
             "fired_on_legit": 0,
             "fraud_fire_rate": 0.3273,
             "legit_fire_rate": 0.0,
             "precision_when_fired": 1.0
           },
-          "shared_device": {
-            "family": "device_geo",
-            "points": 8,
+          "shared_payout_instrument": {
+            "family": "entity",
+            "points": 20,
             "fired_on_fraud": 18,
             "fired_on_legit": 0,
             "fraud_fire_rate": 0.3273,
@@ -1983,15 +1983,6 @@
             "legit_fire_rate": 0.0016,
             "precision_when_fired": 0.444
           },
-          "velocity_burst": {
-            "family": "velocity",
-            "points": 30,
-            "fired_on_fraud": 7,
-            "fired_on_legit": 0,
-            "fraud_fire_rate": 0.1273,
-            "legit_fire_rate": 0.0,
-            "precision_when_fired": 1.0
-          },
           "recent_account_changes": {
             "family": "security",
             "points": 20,
@@ -2000,6 +1991,15 @@
             "fraud_fire_rate": 0.1091,
             "legit_fire_rate": 0.0003,
             "precision_when_fired": 0.857
+          },
+          "velocity_burst": {
+            "family": "velocity",
+            "points": 30,
+            "fired_on_fraud": 7,
+            "fired_on_legit": 0,
+            "fraud_fire_rate": 0.1273,
+            "legit_fire_rate": 0.0,
+            "precision_when_fired": 1.0
           },
           "new_instrument": {
             "family": "device_geo",
@@ -2019,15 +2019,6 @@
             "legit_fire_rate": 0.0003,
             "precision_when_fired": 0.5
           },
-          "impossible_travel": {
-            "family": "device_geo",
-            "points": 20,
-            "fired_on_fraud": 1,
-            "fired_on_legit": 0,
-            "fraud_fire_rate": 0.0182,
-            "legit_fire_rate": 0.0,
-            "precision_when_fired": 1.0
-          },
           "amount_ratio_small_baseline": {
             "family": "anomaly",
             "points": 12,
@@ -2036,6 +2027,15 @@
             "fraud_fire_rate": 0.0,
             "legit_fire_rate": 0.0003,
             "precision_when_fired": 0.0
+          },
+          "impossible_travel": {
+            "family": "device_geo",
+            "points": 20,
+            "fired_on_fraud": 1,
+            "fired_on_legit": 0,
+            "fraud_fire_rate": 0.0182,
+            "legit_fire_rate": 0.0,
+            "precision_when_fired": 1.0
           }
         },
         "family_stats": {
@@ -3054,18 +3054,18 @@
             "legit_fire_rate": 0.0042,
             "precision_when_fired": 0.435
           },
-          "shared_payout_instrument": {
-            "family": "entity",
-            "points": 20,
+          "shared_device": {
+            "family": "device_geo",
+            "points": 8,
             "fired_on_fraud": 18,
             "fired_on_legit": 0,
             "fraud_fire_rate": 0.3462,
             "legit_fire_rate": 0.0,
             "precision_when_fired": 1.0
           },
-          "shared_device": {
-            "family": "device_geo",
-            "points": 8,
+          "shared_payout_instrument": {
+            "family": "entity",
+            "points": 20,
             "fired_on_fraud": 18,
             "fired_on_legit": 0,
             "fraud_fire_rate": 0.3462,
@@ -3399,7 +3399,7 @@
       }
     }
   },
-  "seconds": 2.6,
+  "seconds": 2.5,
   "methodology": {
     "kind": "synthetic (labelled generator scenarios); empirical on that generator",
     "dataset": "seeded synthetic world; development seed plus two held-out seeds",

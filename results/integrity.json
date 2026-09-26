@@ -8,6 +8,8 @@
   "legit_plus_injection_n": 84,
   "model_influence_protected": 0.0,
   "model_influence_n": 360,
+  "model_influence_decisions": 60,
+  "model_influence_recommendations": 6,
   "text_influence_permissive_unguarded": 0.835,
   "text_beyond_ledger_ceiling": 0.0,
   "executed_without_ledger_support": 0.0,
