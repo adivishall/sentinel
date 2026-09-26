@@ -818,7 +818,7 @@ class SentinelApp:
             for e in s["entity_ids"]
             if e.startswith("ACC-")
         }
-        for aid in list(flagged)[:accounts]:
+        for aid in sorted(flagged)[:accounts]:  # sorted: set order varies per process
             self.evaluate_investigation(aid, options=opts)
             n["investigations"] += 1
         for m in self.store.merchants():

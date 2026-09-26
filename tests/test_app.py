@@ -222,3 +222,31 @@ def test_system_info(app):
     info = app.system_info()
     assert info["version"] and info["mode"] == "offline" and "dispute-refund@v2" in info["policies"]
     assert info["audit"]["ok"]
+
+
+def test_analyze_is_deterministic_across_hash_seeds():
+    """The demo world's decisions must not depend on Python's per-process string-hash
+    seed: analyze() once chose which accounts to investigate by iterating a set, so the
+    console, the snapshot and a test fixture differed from run to run."""
+    import os
+    import subprocess
+    import sys
+
+    code = (
+        "from sentinel.app import SentinelApp\n"
+        "a = SentinelApp.demo(seed=4, customers=30, merchants=6, transactions=300)\n"
+        "a.analyze(transactions=3, disputes=2, applications=1, sessions=1, accounts=3)\n"
+        "print(sorted((d['workflow'], d['subject_id'], d['final_action']) "
+        "for d in a.store.decisions(limit=100)))\n"
+    )
+    runs = {
+        seed: subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PYTHONHASHSEED": seed, "SENTINEL_FORCE_OFFLINE": "1"},
+            check=True,
+        ).stdout
+        for seed in ("1", "2")
+    }
+    assert runs["1"] == runs["2"] and runs["1"].strip()

@@ -55,7 +55,9 @@ def server():
     app.analyze(transactions=3, disputes=2, applications=1, sessions=1, accounts=1)
     httpd = make_server(app, "127.0.0.1", 0)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
-    cid = app.cases(limit=1)[0].case_id
+    from sentinel.domain.enums import Workflow
+
+    cid = app.runtime.cases.open_manual(Workflow.DISPUTE, "probe", ("account:A",)).case_id
     yield f"http://127.0.0.1:{httpd.server_address[1]}", cid
     httpd.shutdown()
 
