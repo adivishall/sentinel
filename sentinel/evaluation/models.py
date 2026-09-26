@@ -19,6 +19,7 @@ import time
 from typing import Any
 
 from sentinel.agents.providers import mode
+from sentinel.agents.providers.anthropic import DEFAULT_MODEL
 from sentinel.agents.providers.base import LLMProvider
 from sentinel.agents.providers.offline import OfflineProvider
 from sentinel.decision.workflows import FULL, NONE, Runtime
@@ -153,7 +154,7 @@ def run(sample: int | None = None, provider: str = "all") -> dict[str, Any]:
             results.append(
                 {
                     "provider": name,
-                    "model": os.environ.get("SENTINEL_MODEL", "claude-opus-5"),
+                    "model": os.environ.get("SENTINEL_MODEL", DEFAULT_MODEL),
                     "timestamp": stamp,
                     "date": stamp[:10],
                     "status": "not_run",
@@ -181,7 +182,7 @@ def run(sample: int | None = None, provider: str = "all") -> dict[str, Any]:
             results.append(
                 {
                     "provider": name,
-                    "model": os.environ.get("SENTINEL_MODEL", "claude-opus-5"),
+                    "model": os.environ.get("SENTINEL_MODEL", DEFAULT_MODEL),
                     "timestamp": stamp,
                     "date": stamp[:10],
                     "status": "error",

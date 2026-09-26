@@ -12,7 +12,7 @@ from typing import Any
 
 from sentinel.agents.providers.base import Completion
 
-DEFAULT_MODEL = "claude-opus-5"
+DEFAULT_MODEL = "claude-opus-5-5"
 
 
 class AnthropicProvider:

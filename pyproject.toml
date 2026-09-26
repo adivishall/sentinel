@@ -54,7 +54,7 @@ filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.coverage.run]
 source = ["sentinel"]
-omit = ["*/__pycache__/*", "sentinel/agents/providers/anthropic.py", "sentinel/evaluation/charts.py"]
+omit = ["*/__pycache__/*", "sentinel/evaluation/charts.py"]
 
 [tool.coverage.report]
 fail_under = 80

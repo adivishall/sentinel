@@ -41,7 +41,7 @@ SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models   # same corpus, real 
 | `SENTINEL_DB` | `data/sentinel.db` | SQLite store path (`:memory:` for ephemeral) |
 | `SENTINEL_FORCE_OFFLINE` | `1` in Make/Docker | force the deterministic offline agent |
 | `ANTHROPIC_API_KEY` | — | enables live mode when offline is not forced; never committed or logged |
-| `SENTINEL_MODEL` | `claude-opus-5` | live model id |
+| `SENTINEL_MODEL` | `claude-opus-5-5` | live model id |
 | `SENTINEL_API_KEY` | unset | if set, the API requires this bearer token (`/health`, `/version` stay open) |
 | `SENTINEL_RATE_LIMIT` | `600` | requests per minute per client (0 = off) |
 | `SENTINEL_AUDIT_KEY` | unset | if set, `sentinel audit checkpoint` signs the exported checkpoint with HMAC-SHA256 and `audit verify --checkpoint` authenticates it; keep the key and the checkpoint outside the audit store |
