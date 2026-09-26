@@ -169,7 +169,7 @@ seeds, method and limitations.
 | **Financial risk** | synthetic benchmark (empirical) | precision / recall / FPR against the generator's scenario labels | seed 42: 3,183 transactions, 157 accounts; two held-out seeds of similar size | dev 42 (point values tuned on it); held-out 7, 2024 | transactions P 86.7% R 67.2% FPR 0.19%; accounts P 90.0% R 90.0% | [§G](docs/EVALUATION.md#g-financial-risk-on-labelled-synthetic-data-resultsfinancialjson) |
 | **Temporal correctness** | synthetic invariant check (empirical; not a proof) | a record dated after T changing a decision at T | 192 transactions; 9 kinds of future record at 4 offsets; 3,648 checks | seeds 42, 7 | **0 observed leaks** (95% upper bound 0.082% per check, 1.55% per sampled transaction) | [§I](docs/EVALUATION.md#i-temporal-correctness-resultstemporaljson) |
 | **Claim classifier** | synthetic, same author; defence in depth, not the foundation | legitimate claims read as their type; the rest held for a human | 117 phrasings; 21 held-out unusual phrasings | hand-authored | held-out: first (blind) run 7/21; 17/21 after the patterns were extended by an author who had seen the misses; FN 4/56, FP 0/28 | [§L](docs/EVALUATION.md#l-claim-classifier-resultsclaimsjson) |
-| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.734 ms | [PERFORMANCE.md](docs/PERFORMANCE.md) |
+| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.7608 ms | [PERFORMANCE.md](docs/PERFORMANCE.md) |
 | **Live LLM** | live-model evaluation | the same suites against a real model | -- | `claude-opus-5-5` | **NOT RUN** -- no live number is quoted anywhere | [§K](docs/EVALUATION.md#k-model--provider-evaluation-resultsmodelsjson) |
 <!-- /gen:evaluation-categories -->
 
@@ -314,9 +314,9 @@ are `{error, code, request_id}`; no stack trace ever leaves the server.
 <!-- gen:performance -->
 ### Performance (offline, own overhead)
 
-Full protected dispute pipeline: **p50 0.7185 ms · p95 0.734 ms · 1,387/s**
-sequential single-thread; policy evaluation 0.0152 ms p95 over the composer's real
-26-field context; gateway inspection 0.2267 ms p95 ([all components](docs/PERFORMANCE.md)).
+Full protected dispute pipeline: **p50 0.7205 ms · p95 0.7608 ms · 1,377/s**
+sequential single-thread; policy evaluation 0.0147 ms p95 over the composer's real
+26-field context; gateway inspection 0.2313 ms p95 ([all components](docs/PERFORMANCE.md)).
 <!-- /gen:performance -->
 
 ## Limitations

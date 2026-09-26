@@ -29,7 +29,7 @@ hostile document.
 | **Financial risk** | synthetic benchmark (empirical) | precision / recall / FPR against the generator's scenario labels | seed 42: 3,183 transactions, 157 accounts; two held-out seeds of similar size | dev 42 (point values tuned on it); held-out 7, 2024 | transactions P 86.7% R 67.2% FPR 0.19%; accounts P 90.0% R 90.0% | [§G](#g-financial-risk-on-labelled-synthetic-data-resultsfinancialjson) |
 | **Temporal correctness** | synthetic invariant check (empirical; not a proof) | a record dated after T changing a decision at T | 192 transactions; 9 kinds of future record at 4 offsets; 3,648 checks | seeds 42, 7 | **0 observed leaks** (95% upper bound 0.082% per check, 1.55% per sampled transaction) | [§I](#i-temporal-correctness-resultstemporaljson) |
 | **Claim classifier** | synthetic, same author; defence in depth, not the foundation | legitimate claims read as their type; the rest held for a human | 117 phrasings; 21 held-out unusual phrasings | hand-authored | held-out: first (blind) run 7/21; 17/21 after the patterns were extended by an author who had seen the misses; FN 4/56, FP 0/28 | [§L](#l-claim-classifier-resultsclaimsjson) |
-| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.734 ms | [PERFORMANCE.md](PERFORMANCE.md) |
+| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.7608 ms | [PERFORMANCE.md](PERFORMANCE.md) |
 | **Live LLM** | live-model evaluation | the same suites against a real model | -- | `claude-opus-5-5` | **NOT RUN** -- no live number is quoted anywhere | [§K](#k-model--provider-evaluation-resultsmodelsjson) |
 
 ## Three kinds of numbers
@@ -550,17 +550,17 @@ Sequential, single-threaded, persistence excluded; machine-dependent.
 
 | Component | p50 ms | p95 ms | p99 ms | ops/s |
 |---|---:|---:|---:|---:|
-| `normalize` | 0.0172 | 0.0185 | 0.0188 | 57,449 |
-| `gateway_inspect` | 0.222 | 0.2267 | 0.2329 | 4,495 |
-| `claim_classify` | 0.2567 | 0.2629 | 0.2725 | 3,884 |
-| `evidence_reconcile` | 0.0347 | 0.0355 | 0.0399 | 28,421 |
-| `risk_score_transaction` | 0.0147 | 0.015 | 0.0162 | 67,375 |
-| `graph_linked_accounts` | 0.0039 | 0.004 | 0.0042 | 254,748 |
-| `graph_neighborhood_d2` | 0.0529 | 0.0548 | 0.0597 | 18,635 |
-| `policy_evaluate` | 0.0148 | 0.0152 | 0.0168 | 66,868 |
-| `decision_compose` | 0.0386 | 0.0393 | 0.044 | 25,748 |
-| `audit_append` | 0.0088 | 0.0102 | 0.0135 | 110,537 |
-| `e2e_dispute_pipeline` | 0.7185 | 0.734 | 0.7529 | 1,387 |
+| `normalize` | 0.0173 | 0.0177 | 0.021 | 57,382 |
+| `gateway_inspect` | 0.224 | 0.2313 | 0.2742 | 4,441 |
+| `claim_classify` | 0.2572 | 0.2652 | 0.2884 | 3,867 |
+| `evidence_reconcile` | 0.0345 | 0.036 | 0.0394 | 28,596 |
+| `risk_score_transaction` | 0.0146 | 0.015 | 0.0176 | 66,843 |
+| `graph_linked_accounts` | 0.0038 | 0.004 | 0.0049 | 251,051 |
+| `graph_neighborhood_d2` | 0.0529 | 0.0536 | 0.0572 | 18,572 |
+| `policy_evaluate` | 0.0144 | 0.0147 | 0.0175 | 65,475 |
+| `decision_compose` | 0.0387 | 0.0421 | 0.0568 | 25,264 |
+| `audit_append` | 0.0087 | 0.01 | 0.0132 | 112,277 |
+| `e2e_dispute_pipeline` | 0.7205 | 0.7608 | 0.7985 | 1,377 |
 
 A live LLM call (hundreds of milliseconds) dominates real latency by three
 orders of magnitude; Sentinel's own controls are not the bottleneck.
@@ -571,7 +571,7 @@ orders of magnitude; Sentinel's own controls are not the bottleneck.
 
 | Provider | Model | Date | Status | ASR no controls | ASR Sentinel | FP | Latency p95 ms | Tokens in / out | Note |
 |---|---|---|---|---|---|---|---|---|---|
-| offline | `offline-simulator` | 2026-09-26 | ok | 90.0% | 0.0% | 0.0% | 0.137 | — |  |
+| offline | `offline-simulator` | 2026-09-26 | ok | 90.0% | 0.0% | 0.0% | 0.143 | — |  |
 | anthropic | `claude-opus-5-5` | 2026-09-26 | not_run | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
 
 Each provider row records the model, the run date, per-class outcomes, agent

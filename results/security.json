@@ -151,7 +151,7 @@
     "policy:dispute-refund@v3": 135,
     "trusted_evidence": 135
   },
-  "seconds": 0.18,
+  "seconds": 0.19,
   "methodology": {
     "kind": "synthetic (hand-authored corpus, offline simulated agent); guarded attack success is structural",
     "dataset": "development attack corpus, seeds x amounts straddling the auto-limit, plus legitimate controls",

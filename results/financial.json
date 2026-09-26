@@ -3399,7 +3399,7 @@
       }
     }
   },
-  "seconds": 2.5,
+  "seconds": 2.6,
   "methodology": {
     "kind": "synthetic (labelled generator scenarios); empirical on that generator",
     "dataset": "seeded synthetic world; development seed plus two held-out seeds",
