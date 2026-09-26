@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import time
 from collections import Counter, defaultdict
+from datetime import datetime, timedelta
 from typing import Any
 
 from sentinel.app import SentinelApp
@@ -157,6 +158,49 @@ def run(
     return dev
 
 
+def _burst_positions(app: SentinelApp, model: Any, rows: list[Any]) -> dict[str, Any]:
+    """Transaction-level recall on bursts by the transaction's position in its burst, and
+    split by whether the velocity rule COULD see it at authorization time (at least
+    ``rapid_fire_count`` earlier transactions on the account inside the rapid window).
+    A burst's first transactions look like ordinary purchases when they are authorised:
+    the burst does not exist yet. The account-level monitor, which sees the whole window,
+    is the control for them (``account_level.recall_by_scenario``)."""
+    need = int(model.t("rapid_fire_count", 3))
+    window = timedelta(minutes=model.t("rapid_window_minutes", 10))
+    flagged = {t.transaction_id: ra.level.rank >= RiskLevel.HIGH.rank for t, ra in rows}
+    by_acct: dict[str, list[datetime]] = defaultdict(list)
+    for t, _ in rows:
+        by_acct[t.account_id].append(datetime.fromisoformat(t.timestamp))
+    by_pos: dict[int, list[int]] = defaultdict(lambda: [0, 0])
+    visible = [0, 0]
+    hidden = [0, 0]
+    for tag in app.store.scenarios():
+        if tag["scenario"] != "transaction_burst":
+            continue
+        txs = sorted(
+            (x for x in (app.store.transaction(e) for e in tag["entity_ids"]) if x is not None),
+            key=lambda x: x.timestamp,
+        )
+        for i, t in enumerate(txs, start=1):
+            at = datetime.fromisoformat(t.timestamp)
+            prior = sum(1 for x in by_acct[t.account_id] if at - window <= x < at)
+            hit = int(flagged.get(t.transaction_id, False))
+            by_pos[i][0] += hit
+            by_pos[i][1] += 1
+            bucket = visible if prior >= need else hidden
+            bucket[0] += hit
+            bucket[1] += 1
+    return {
+        "definition": (
+            f"velocity-visible = at least {need} earlier transactions on the account in the "
+            f"{int(window.total_seconds() // 60)} minutes before (the rapid-fire rule's input)"
+        ),
+        "by_position": {str(k): {"flagged": v[0], "n": v[1]} for k, v in sorted(by_pos.items())},
+        "velocity_visible": {"flagged": visible[0], "n": visible[1]},
+        "not_yet_visible": {"flagged": hidden[0], "n": hidden[1]},
+    }
+
+
 def _evaluate(
     seed: int,
     customers: int,
@@ -254,6 +298,7 @@ def _evaluate(
         for f in ra.factors:
             factor_counts[f.code] += 1
     n = len(rows)
+    burst = _burst_positions(app, m, rows)
     groups = scoring.FACTOR_GROUPS
     signal_stats: dict[str, dict[str, Any]] = {}
     for code in sorted(
@@ -392,6 +437,7 @@ def _evaluate(
             "family_stats": family_stats,
             "fraud_n": n_fraud_total,
             "legit_n": n_legit_total,
+            "burst_by_position": burst,
         },
         "account_level": {
             **_prf(atp, afp, afn, atn),
