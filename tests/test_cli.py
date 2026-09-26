@@ -190,7 +190,15 @@ def test_case_policy_audit_replay_scenario(db, capsys, tmp_path):
     code, out = _run(
         capsys, "--db", db, "security", "attack", "--scenario", "adjudication_gaming", "--compare"
     )
-    assert code == 0 and "WITHOUT SENTINEL" in out and "WITH SENTINEL" in out and "simulator" in out
+    assert code == 0 and "WITHOUT Sentinel" in out and "WITH Sentinel" in out and "simulator" in out
+    for step in (
+        "WHAT THE ATTACKER SUBMITTED",
+        "WHAT THE AI RECOMMENDED",
+        "WHAT THE TRUSTED RECORDS SAY",
+        "WHAT POLICY SAID",
+        "WHAT WAS FINALLY ALLOWED",
+    ):
+        assert step in out, step
     code, out = _run(capsys, "--db", db, "policy", "lint")
     assert code == 0 and "clean" in out
     code, out = _run(capsys, "--db", db, "capability", "list")

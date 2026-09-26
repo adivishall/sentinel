@@ -270,6 +270,88 @@ def cmd_investigation(args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_compare(sb: dict[str, Any], name: str) -> None:
+    """The flagship demo in five plain answers: what the attacker submitted, what the AI
+    recommended, what the trusted records say, what policy said, what was allowed."""
+    w, u = sb["with_sentinel"], sb["without_sentinel"]
+    d, ai, rec, sec = w["decision"], w.get("ai") or {}, w.get("reconciliation") or {}, w["security"]
+
+    def head(n: int, title: str, tag: str) -> None:
+        print(f"\n{n}. {title}  [{tag}]")
+
+    def wrap(text: str) -> str:
+        return "     " + (text or "").strip().replace("\n", "\n     ")
+
+    print(
+        f"ATTACK THE FINANCIAL AI -- {name}\n"
+        f"attack class {sb['attack_class']} -> {sb['target_workflow']} / {sb['target_capability']}\n"
+        "The AI agent here is Sentinel's deterministic offline simulator of a naive tool-calling "
+        "agent, not a real LLM.\nThe facts are a shipped demo fixture (synthetic), not a bank ledger."
+    )
+    head(1, "WHAT THE ATTACKER SUBMITTED", "UNTRUSTED")
+    print(wrap(w.get("attacker_input", "")))
+    if w.get("attacker_document"):
+        print("   attached document:")
+        print(wrap(w["attacker_document"]))
+    head(2, "WHAT THE AI RECOMMENDED", "MODEL-GENERATED -- recorded, never authoritative")
+    print(
+        f"     {ai.get('recommended_action', 'n/a')} -> requests {ai.get('requested_capability') or 'nothing'}"
+        + (f"   ({ai['rationale'][:90]})" if ai.get("rationale") else "")
+    )
+    print(
+        f"     AI Security Gateway: {sec['severity']}"
+        + (f" -- {', '.join(sec['threat_classes'])}" if sec.get("threat_classes") else "")
+        + " (detection only tightens; it is not the backstop)"
+    )
+    head(3, "WHAT THE TRUSTED RECORDS SAY", f"TRUSTED -- {d.get('facts_source', '')}")
+    led = w.get("ledger") or {}
+    print(
+        f"     amount=₹{d['amount']:,}, "
+        + ", ".join(f"{k}={v}" for k, v in led.items() if k in _SHOWN_FACTS)
+    )
+    claim = rec.get("claim") or {}
+    print(
+        f"     claim read from the prose: {claim.get('claim_type', 'none')} "
+        f"(confidence {claim.get('confidence', 0):.2f})  ->  verdict {rec.get('verdict')}"
+    )
+    for c in rec.get("contradictions", []):
+        print(
+            f"     contradiction: {c['field']} claimed {c['claimed']!r}, recorded {c['recorded']!r}"
+        )
+    head(4, "WHAT POLICY SAID", f"POLICY {d['policy']['policy_id']}@v{d['policy']['version']}")
+    print(
+        f"     {d['policy']['outcome']}  rules: {', '.join(d['policy']['matched_rules']) or 'none'}"
+    )
+    print(
+        f"     authorization: {d['requested_capability']} -> {d['authorization']['status']} "
+        f"({d['authorization']['reason']})"
+    )
+    head(5, "WHAT WAS FINALLY ALLOWED", "DECISION")
+    ux = u["decision"]["executed_capability"]
+    print(
+        f"     WITHOUT Sentinel (the simulated agent's tool call runs, no controls): "
+        f"{'EXECUTED ' + ux if ux else 'nothing executed'}  -- a what-if, never recorded"
+    )
+    print(
+        f"     WITH Sentinel: {d['final_action']}, executed {d['executed_capability'] or 'nothing'}"
+        f"; first blocked at {w.get('blocked_layer') or '-'}; case {d.get('case_id') or '-'}"
+        f"; audit event {d.get('audit_event_id') or '-'}"
+    )
+    print(f"\n{w['headline']}")
+
+
+_SHOWN_FACTS = (
+    "delivery_status",
+    "refund_state",
+    "transaction_status",
+    "merchant_response",
+    "policy_auto_limit",
+    "prior_disputes_90d",
+    "registration_status",
+    "prior_flags",
+)
+
+
 def cmd_security(args: argparse.Namespace) -> int:
     app = _app(args)
     if args.security_command == "attack":
@@ -295,19 +377,7 @@ def cmd_security(args: argparse.Namespace) -> int:
             print(json.dumps(sb, indent=2, default=str))
             return 0
         if args.compare:
-            for side in ("without_sentinel", "with_sentinel"):
-                s = sb[side]
-                print(f"\n== {s['label']}")
-                if s.get("caveat"):
-                    print(f"   ({s['caveat']})")
-                for st in s["stages"]:
-                    print(f"  {st['title']:<28} {st['value']}")
-                print(f"  -> {s['headline']}")
-            sm = sb["summary"]
-            print(
-                f"\nagent recommended {sm['agent_recommendation']}; without Sentinel executed {sm['without_sentinel_executed']}; "
-                f"with Sentinel {sm['with_sentinel_final_action']} (executed {sm['with_sentinel_executed']}), first blocked at {sm['blocked_layer']}"
-            )
+            _print_compare(sb, ATTACKS[key].name)
             return 0
         print(
             f"Attack: {ATTACKS[key].name}  [{sb['attack_class']} -> {sb['target_workflow']} / {sb['target_capability']}]"
