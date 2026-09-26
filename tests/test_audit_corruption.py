@@ -186,3 +186,24 @@ def test_export_then_verify_round_trips(tmp_path, capsys):
     f = str(tmp_path / "export.jsonl")
     assert cli_main([*args, "audit", "export", f]) == 0
     assert cli_main(["audit", "verify", "--file", f]) == 0
+
+
+def test_checkpoint_exit_codes(tmp_path, capsys, monkeypatch):
+    """0 = matches; 2 = the chain or the checkpoint fails verification (incl. an edited
+    checkpoint, or an unsigned one checked with a key); 1 = the file is not a checkpoint."""
+    monkeypatch.delenv("SENTINEL_AUDIT_KEY", raising=False)
+    db, args = _db_with_chain(tmp_path)
+    cp = tmp_path / "cp.json"
+    assert cli_main([*args, "audit", "checkpoint", "--out", str(cp)]) == 0
+    assert cli_main([*args, "audit", "verify", "--checkpoint", str(cp)]) == 0
+    edited = tmp_path / "edited.json"
+    doc = json.loads(cp.read_text())
+    doc["head_hash"] = "0" * 64
+    edited.write_text(json.dumps(doc))
+    assert cli_main([*args, "audit", "verify", "--checkpoint", str(edited)]) == 2
+    assert "AUDIT INTEGRITY ERROR" in capsys.readouterr().out
+    broken = tmp_path / "broken.json"
+    broken.write_text("{oops")
+    assert cli_main([*args, "audit", "verify", "--checkpoint", str(broken)]) == 1
+    monkeypatch.setenv("SENTINEL_AUDIT_KEY", "k")
+    assert cli_main([*args, "audit", "verify", "--checkpoint", str(cp)]) == 2
