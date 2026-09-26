@@ -123,6 +123,20 @@ def test_attack_compare_mode_labels_both_paths(app):
         single["attack_class"] == "adjudication_gaming"
         and single["blocked_layer"] == "trusted_evidence"
     )
+    # the no-controls path says which controls were off instead of showing verdicts that
+    # nothing enforced (it once showed "policy ALLOW" and an evidence verdict)
+    off = {st["stage"]: st for st in wo["stages"] if st["status"] == "off"}
+    assert set(off) == {"ai_security_gateway", "trusted_evidence", "policy", "authorization"}
+    assert off["trusted_evidence"]["value"].startswith("NOT CONSULTED")
+    assert off["policy"]["value"].startswith("NOT EVALUATED")
+    assert not any(st["status"] == "off" for st in wi["stages"])
+    assert wo["stages"][-1]["value"].startswith("not recorded")  # a what-if, never audited
+
+
+def test_risk_over_time_is_bucketed_by_transaction_date(app):
+    rows = app.overview()["risk_over_time"]
+    txn_days = {t.timestamp[:10] for t in app.store.transactions(limit=5000)}
+    assert len(rows) > 1 and all(r["bucket"] in txn_days and r["n"] > 0 for r in rows)
 
 
 def test_custom_attack_text_and_unguarded_option(app):

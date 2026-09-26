@@ -624,6 +624,9 @@ class SentinelApp:
     ) -> dict[str, Any]:
         d = b.decision
         first_block = d.blocked_by[0] if d.blocked_by else None
+        on = set(d.controls)  # a control that is off is shown as such, not as a verdict
+        cap = d.requested_capability.value if d.requested_capability else "none"
+        executed = d.executed_capability.value if d.executed_capability else None
         return {
             "preset": preset,
             "attack_class": attack_class,
@@ -651,8 +654,11 @@ class SentinelApp:
                 {
                     "stage": "ai_security_gateway",
                     "title": "AI Security Gateway",
-                    "value": f"{b.security.severity.value} · {', '.join(t.value for t in b.security.threat_classes) or 'no findings'}",
-                    "status": "alert" if b.security.flagged else "ok",
+                    "value": f"{b.security.severity.value} · {', '.join(t.value for t in b.security.threat_classes) or 'no findings'}"
+                    + ("" if "detection" in on else " -- computed, not enforced (control off)"),
+                    "status": (
+                        ("alert" if b.security.flagged else "ok") if "detection" in on else "off"
+                    ),
                 },
                 {
                     "stage": "ai_recommendation",
@@ -665,26 +671,57 @@ class SentinelApp:
                 {
                     "stage": "trusted_evidence",
                     "title": "Trusted evidence",
-                    "value": f"{b.reconciliation.verdict.value} — {b.reconciliation.explanation}",
-                    "status": "ok" if b.reconciliation.supports_claim else "alert",
+                    "value": (
+                        f"{b.reconciliation.verdict.value} — {b.reconciliation.explanation}"
+                        if "adjudication" in on
+                        else "NOT CONSULTED -- the agent's tool call is taken at its word "
+                        f"(the records say {b.reconciliation.verdict.value})"
+                    ),
+                    "status": (
+                        ("ok" if b.reconciliation.supports_claim else "alert")
+                        if "adjudication" in on
+                        else "off"
+                    ),
                 },
                 {
                     "stage": "policy",
                     "title": f"Policy {d.policy.policy_id}@v{d.policy.version}",
-                    "value": f"{d.policy.outcome.value} · {', '.join(d.policy.matched_rules) or 'no rules matched'}",
-                    "status": "ok" if d.policy.outcome.value == "ALLOW" else "alert",
+                    "value": (
+                        f"{d.policy.outcome.value} · {', '.join(d.policy.matched_rules) or 'no rules matched'}"
+                        if "policy" in on
+                        else "NOT EVALUATED -- control off"
+                    ),
+                    "status": (
+                        ("ok" if d.policy.outcome.value == "ALLOW" else "alert")
+                        if "policy" in on
+                        else "off"
+                    ),
                 },
                 {
                     "stage": "authorization",
                     "title": "Capability authorization",
-                    "value": f"{(d.requested_capability.value if d.requested_capability else 'none')} → {d.authorization.status.value}",
-                    "status": "ok" if d.authorization.status.value == "GRANTED" else "alert",
+                    "value": (
+                        f"{cap} → {d.authorization.status.value}"
+                        if "authorization" in on
+                        else f"NOT CONSULTED -- {cap} runs because the agent asked"
+                    ),
+                    "status": (
+                        ("ok" if d.authorization.status.value == "GRANTED" else "alert")
+                        if "authorization" in on
+                        else "off"
+                    ),
                 },
                 {
                     "stage": "final",
-                    "title": "Final Sentinel decision",
-                    "value": d.final_action.value,
-                    "status": "ok" if d.final_action.value == "ALLOW" else "alert",
+                    "title": "Final Sentinel decision" if on else "Outcome (no controls)",
+                    "value": f"{d.final_action.value} · "
+                    + (f"EXECUTED {executed}" if executed else "nothing executed"),
+                    "status": (
+                        "ok"
+                        if d.final_action.value == "ALLOW"
+                        and (not executed or b.reconciliation.supports_claim)
+                        else "alert"
+                    ),
                 },
                 {
                     "stage": "case",
@@ -698,7 +735,7 @@ class SentinelApp:
                     "value": (
                         f"event #{b.audit_event.sequence} {b.audit_event.event_hash[:16]}…"
                         if b.audit_event
-                        else "not persisted"
+                        else "not recorded (a what-if run)"
                     ),
                     "status": "info",
                 },

@@ -40,3 +40,17 @@ def test_console_has_no_decision_logic():
         "weights",
     ):
         assert forbidden not in JS, forbidden
+
+
+CSS = Path("ui/styles.css").read_text(encoding="utf-8")
+
+
+def test_console_layout_and_links_that_broke_once():
+    # a clickable table row carries class "row"; the generic flex .row broke every table
+    assert "tr.row{display:table-row}" in CSS
+    # the replay example button must not carry data-dec (the global handler opened a drawer)
+    assert 'id="rp-example" data-example=' in JS and 'id="rp-example" data-dec=' not in JS
+    # shareable views used for the README screenshots
+    for view in ("aisecurity", "replay", "transactions", "investigations"):
+        assert f'key === "{view}"' in JS
+    assert 'arg === "example"' in JS and "wireAttacks(arg)" in JS

@@ -910,9 +910,11 @@ class SentinelStore:
                 out[c] = out.get(c, 0) + 1
         return out
 
-    def risk_over_time(self, buckets: int = 24) -> list[dict[str, Any]]:
+    def risk_over_time(self, buckets: int = 30) -> list[dict[str, Any]]:
+        """Average transaction risk per day of the *transaction* (not of the decision:
+        a batch run scores months of history in seconds)."""
         rows = self._rows(
-            "SELECT substr(created_at, 1, 13) AS h, AVG(risk_score) AS avg_score, COUNT(*) AS n, SUM(CASE WHEN risk_level IN ('HIGH','CRITICAL') THEN 1 ELSE 0 END) AS high FROM decisions WHERE workflow = 'transaction' GROUP BY h ORDER BY h DESC LIMIT ?",
+            "SELECT substr(t.timestamp, 1, 10) AS h, AVG(d.risk_score) AS avg_score, COUNT(*) AS n, SUM(CASE WHEN d.risk_level IN ('HIGH','CRITICAL') THEN 1 ELSE 0 END) AS high FROM decisions d JOIN transactions t ON t.transaction_id = d.subject_id WHERE d.workflow = 'transaction' GROUP BY h ORDER BY h DESC LIMIT ?",
             (buckets,),
         )
         return [
