@@ -43,7 +43,7 @@ AUTHORITATIVE_DECISION ≠ f(MODEL_OUTPUT)
              └─────────────┬──────────────┘
                            ▼
                 ┌───────────────────────┐
-                │ Evidence + Adjudication│  claims vs verified facts;
+                │ Evidence + Adjudication│  claims vs trusted records;
                 │ sentinel/evidence      │  contradiction engine; the model's
                 │                        │  recommendation recorded as a claim
                 └──────────┬────────────┘

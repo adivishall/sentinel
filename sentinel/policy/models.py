@@ -40,7 +40,7 @@ FIELD_CATALOG: dict[str, tuple[str, str]] = {
     "risk_factors": ("list", "Factor codes that fired"),
     "evidence_verdict": ("str", "SUPPORTED | UNSUPPORTED | CONTRADICTED | INSUFFICIENT"),
     "evidence_supports_claim": ("bool", "Verdict is SUPPORTED"),
-    "contradiction_count": ("int", "Claims contradicted by verified facts"),
+    "contradiction_count": ("int", "Claims contradicted by trusted records"),
     "claim_type": ("str", "Claim label derived from untrusted text (selector only)"),
     "security_severity": ("str", "NONE | LOW | MEDIUM | HIGH | CRITICAL"),
     "security_score": ("float", "Peak detection weight"),

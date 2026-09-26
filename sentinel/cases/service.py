@@ -160,7 +160,10 @@ class CaseService:
         )
         if auth.status is AuthorizationStatus.DENIED:
             return False, f"the capability registry denies it: {auth.reason}"
-        return True, auth.reason
+        return True, (
+            f"the registry allows {role} to approve {case.capability} "
+            f"(policy {case.policy_outcome}, evidence {case.evidence_verdict})"
+        )
 
     # ---- opening ----------------------------------------------------------------------
     def open_for_decision(self, d: Decision, *, entities: tuple[str, ...] = ()) -> Case | None:

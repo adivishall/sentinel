@@ -76,7 +76,7 @@ tighten an outcome.
 | `risk_factors` | list | Factor codes that fired | yes |
 | `evidence_verdict` | str | SUPPORTED \| UNSUPPORTED \| CONTRADICTED \| INSUFFICIENT | yes |
 | `evidence_supports_claim` | bool | Verdict is SUPPORTED | yes |
-| `contradiction_count` | int | Claims contradicted by verified facts | yes |
+| `contradiction_count` | int | Claims contradicted by trusted records | yes |
 | `claim_type` | str | Claim label derived from untrusted text (selector only) | yes |
 | `security_severity` | str | NONE \| LOW \| MEDIUM \| HIGH \| CRITICAL | yes |
 | `security_score` | float | Peak detection weight | yes |

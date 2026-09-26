@@ -199,10 +199,10 @@ function stages(st) {
 function storyboard(sb) {
   const meta = `<div class="row small muted" style="margin:6px 0">${sb.attack_class ? chip(sb.attack_class, "untrusted") : ""} target ${chip(sb.target_workflow || "dispute", "trusted")} → ${chip(sb.target_capability || "APPROVE_REFUND", "kind-structural")} · controls: <span class="mono">${esc((sb.controls || []).join(", ") || "none")}</span> · first blocked at: <span class="mono">${esc(sb.blocked_layer || "—")}</span></div>`;
   return `<div class="headline">${esc(sb.headline)}</div>${meta}${legend()}
-  <div class="split"><div>${card("Attacker input " + trustChip("USER_CONTROLLED"), `<pre>${esc(sb.attacker_input)}</pre>`)}${sb.attacker_document ? card("Attacker document " + trustChip("DOCUMENT_CONTROLLED"), `<pre>${esc(sb.attacker_document)}</pre>`) : ""}${card("Trusted ledger " + trustChip("TRUSTED_INTERNAL") + " " + factsChip(sb.decision && sb.decision.facts_source), kv(sb.ledger || {}) + `<div class="subtle" style="margin-top:6px">${sb.decision && sb.decision.facts_source !== "system_of_record" ? "Demo / simulation facts: Sentinel treats them as the institution's records for this run; they were not read from any system of record." : "Read by reference from the record store (synthetic)."}</div>`)}</div>
+  <div class="split"><div>${card("Attacker input " + trustChip("USER_CONTROLLED"), `<pre>${esc(sb.attacker_input)}</pre>`)}${sb.attacker_document ? card("Attacker document " + trustChip("DOCUMENT_CONTROLLED"), `<pre>${esc(sb.attacker_document)}</pre>`) : ""}${card("Trusted records " + trustChip("TRUSTED_INTERNAL") + " " + factsChip(sb.decision && sb.decision.facts_source), kv(sb.ledger || {}) + `<div class="subtle" style="margin-top:6px">${sb.decision && sb.decision.facts_source !== "system_of_record" ? "Demo / simulation facts: Sentinel treats them as the institution's records for this run; they were not read from any system of record." : "Read by reference from the record store (synthetic)."}</div>`)}</div>
   <div>${stages(sb.stages || [])}</div></div>
   <div class="card"><h3>Full decision</h3>${decisionBlock(sb.decision)}</div>
-  ${sb.reconciliation ? card("Evidence (claims vs verified facts)", claimLine(sb.reconciliation) + evidenceTable(sb.reconciliation.evidence.items) + (sb.reconciliation.contradictions.length ? `<div class="note" style="margin-top:8px">CONTRADICTION: ${sb.reconciliation.contradictions.map(c => `${esc(c.field)} claimed <b>${esc(String(c.claimed))}</b>, recorded <b>${esc(String(c.recorded))}</b> → ${esc(c.impact)}`).join("; ")}</div>` : "")) : ""}
+  ${sb.reconciliation ? card("Evidence (claims vs trusted records)", claimLine(sb.reconciliation) + evidenceTable(sb.reconciliation.evidence.items) + (sb.reconciliation.contradictions.length ? `<div class="note" style="margin-top:8px">CONTRADICTION: ${sb.reconciliation.contradictions.map(c => `${esc(c.field)} claimed <b>${esc(String(c.claimed))}</b>, recorded <b>${esc(String(c.recorded))}</b> → ${esc(c.impact)}`).join("; ")}</div>` : "")) : ""}
   ${sb.risk ? card("Dispute risk", riskBlock(sb.risk)) : ""}`;
 }
 function compareView(c) {
@@ -222,7 +222,7 @@ function compareView(c) {
   ${legend()}
   <div class="compare">${side(c.without_sentinel, "bad")}${side(c.with_sentinel, "good")}</div>
   <div class="card"><h3>WITH SENTINEL — full decision</h3>${decisionBlock(c.with_sentinel.decision)}</div>
-  ${c.with_sentinel.reconciliation ? card("Evidence (claims vs verified facts)", claimLine(c.with_sentinel.reconciliation) + evidenceTable(c.with_sentinel.reconciliation.evidence.items)) : ""}`;
+  ${c.with_sentinel.reconciliation ? card("Evidence (claims vs trusted records)", claimLine(c.with_sentinel.reconciliation) + evidenceTable(c.with_sentinel.reconciliation.evidence.items)) : ""}`;
 }
 function timelineView(items, meId) {
   if (!items || !items.length) return empty("no activity in the window");
@@ -501,7 +501,7 @@ risk intelligence (transaction · behavioural · entity · graph · monitoring �
         ↓
 AI recommendation (MODEL_GENERATED — recorded, never authoritative)
         ↓
-trusted-evidence reconciliation (claims vs verified facts · contradictions)
+trusted-evidence reconciliation (claims vs trusted records · contradictions)
         ↓
 versioned, content-hashed, fail-closed policy → capability authorization → human review
         ↓

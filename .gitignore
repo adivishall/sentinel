@@ -13,3 +13,4 @@ results/_eval_run.log
 *.egg-info/
 build/
 dist/
+audit-checkpoint.json
