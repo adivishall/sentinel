@@ -14,7 +14,7 @@ an adversarial evaluation and a tamper-evident audit trail.
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 ![Runs offline](https://img.shields.io/badge/runs_offline-no_API_key-2e8b57)
 ![Zero runtime deps](https://img.shields.io/badge/runtime_deps-0_(stdlib)-2e6da4)
-![Tests](https://img.shields.io/badge/tests-600_passing-2e8b57)
+![Tests](https://img.shields.io/badge/tests-601_passing-2e8b57)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
 [Live console (static snapshot)](https://adivishall.github.io/sentinel/) · [Evaluation](docs/EVALUATION.md) · [Security model](docs/SECURITY_MODEL.md) · [Limitations](docs/LIMITATIONS.md) · [Interview guide](docs/INTERVIEW.md)
@@ -308,7 +308,7 @@ review packet.
 ```bash
 git clone https://github.com/adivishall/sentinel.git && cd sentinel
 make install          # dev tooling + the `sentinel` command; the core has zero runtime dependencies
-make test             # 600 tests, offline
+make test             # 601 tests, offline
 make attack-compare   # the flagship demo, no key needed
 make api              # API + console at http://localhost:8000 (in-memory demo dataset)
 ```
