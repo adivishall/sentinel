@@ -1,4 +1,4 @@
-.PHONY: help install test lint typecheck cov eval bench docs demo api ui snapshot data analyze attack audit-verify audit-checkpoint replay docker-build docker-run clean live-check
+.PHONY: help install test cov lint data analyze demo attack attack-compare api ui screenshots snapshot eval eval-quick bench docs audit-verify audit-checkpoint live-check docker-build docker-run clean
 
 PY ?= python3
 DB ?= data/sentinel.db
@@ -28,9 +28,9 @@ data:             ## generate the deterministic synthetic dataset into $(DB)
 analyze:          ## run the engine over a slice of the dataset (populates the console)
 	$(PY) -m sentinel --db $(DB) analyze
 
-demo: attack      ## the flagship demo
+demo: attack-compare  ## the flagship demo (alias of attack-compare)
 
-attack:           ## "Attack the financial AI" -- the flagship demonstration
+attack:           ## the flagship attack, WITH Sentinel only (stage by stage)
 	$(PY) -m sentinel --db :memory: security attack --scenario document_injection
 
 attack-compare:   ## the same attack WITHOUT (simulated agent, no controls) and WITH Sentinel, side by side
@@ -40,6 +40,9 @@ api:              ## API + console on :8000 (in-memory demo dataset, analysed on
 	$(PY) -m sentinel --db :memory: serve --host 0.0.0.0 --port 8000 --analyze
 
 ui: api           ## alias: the console is served by the API
+
+screenshots:      ## capture docs/img/*.png from a running console (make api) with local headless Chrome
+	scripts/screenshots.sh
 
 snapshot:         ## static console snapshot (GitHub Pages) computed by the real engine
 	$(PY) -m sentinel --db :memory: ui snapshot --out ui/snapshot.json
@@ -60,7 +63,7 @@ eval-quick:       ## the CI subset
 bench:            ## component + end-to-end latency benchmark
 	$(PY) -m sentinel bench
 
-docs:             ## re-render docs/EVALUATION.md, docs/PERFORMANCE.md and the README / résumé numbers from results/
+docs:             ## re-render every generated doc section and number from results/ and the code (README, docs/*)
 	$(PY) scripts/render_docs.py
 
 audit-verify:     ## verify the tamper-evident audit chain in $(DB)
