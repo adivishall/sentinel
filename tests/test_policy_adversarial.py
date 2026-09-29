@@ -53,9 +53,12 @@ from sentinel.security.capabilities import CONSEQUENTIAL, REGISTRY, authorize
 from sentinel.security.provenance import UntrustedContent
 from sentinel.trust.issuer import Issuer
 from sentinel.trust.keys import TrustStore
+from tests.records import ledger as complete
 
 CLAIM = "My order never arrived, please refund."
-LEDGER = {"amount": 12000, "delivery_status": "not_delivered", "policy_auto_limit": 50000}
+LEDGER = complete(
+    **{"amount": 12000, "delivery_status": "not_delivered", "policy_auto_limit": 50000}
+)
 
 # the facts these calls authorize on are the institution's own records
 LOCAL = ProvenanceStatus.TRUSTED_LOCAL

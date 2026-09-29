@@ -12,9 +12,11 @@ call these functions -- there is no second pipeline.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from typing import Protocol
 
 from sentinel import __version__
 from sentinel.agents.base import Agent
@@ -59,6 +61,7 @@ from sentinel.risk import (
     transaction as txn_risk,
 )
 from sentinel.risk.scoring import RiskModel
+from sentinel.security.capabilities import execution_key
 from sentinel.security.gateway import GATEWAY, AISecurityGateway, Conversation
 from sentinel.security.normalize import InvalidSubmission, validate
 from sentinel.security.provenance import UntrustedContent, wrap_many
@@ -71,6 +74,32 @@ from sentinel.trust.keys import TrustStore
 PROVENANCE = "provenance"  # wrap untrusted spans in the agent prompt
 FULL: frozenset[str] = composer.FULL | {PROVENANCE}
 NONE: frozenset[str] = frozenset()
+
+
+class ExecutionLedger(Protocol):
+    """Which decision (or human approval) executed each capability on each subject."""
+
+    def holder(self, key: str) -> str | None: ...
+
+    def claim(self, key: str, by: str) -> str | None:
+        """Claim ``key`` for ``by``; None when claimed now, else the existing holder."""
+        ...
+
+
+class MemoryExecutions:
+    def __init__(self) -> None:
+        self._held: dict[str, str] = {}
+        self._lock = threading.Lock()
+
+    def holder(self, key: str) -> str | None:
+        return self._held.get(key)
+
+    def claim(self, key: str, by: str) -> str | None:
+        with self._lock:
+            if key in self._held:
+                return self._held[key]
+            self._held[key] = by
+            return None
 
 
 @dataclass
@@ -92,11 +121,17 @@ class Runtime:
     # issuer's signed statement. Without it, deleting a statement from the store would
     # silently downgrade a tampered record to TRUSTED_LOCAL instead of exposing it.
     require_signed_facts: bool = False
+    # One execution per subject and capability (idempotency): a re-evaluation of a record
+    # that already paid, onboarded or authorised is denied, not executed again.
+    executions: ExecutionLedger = field(default_factory=lambda: MemoryExecutions())
 
     def __post_init__(self) -> None:
-        # a recording runtime chains every human case action into its own audit chain
+        # a recording runtime chains every human case action into its own audit chain, and
+        # a human approval claims the same execution a decision would
         if self.persist and self.cases.audit is None:
             self.cases.audit = self.audit
+        if self.persist and self.cases.executions is None:
+            self.cases.executions = self.executions
 
     def agent(self, key: str) -> Agent:
         return Agent(SPECS[key], self.provider)
@@ -361,7 +396,19 @@ def _finish(
         # Structural: nothing is audited, cased or stored as authoritative unless it ran
         # with every control, the active policy and the active risk model.
         require_authoritative(inputs, rt.policies)
+    if rt.persist and inputs.candidate_capability is not None:
+        key = execution_key(
+            inputs.workflow.value, inputs.subject_id, inputs.candidate_capability.value
+        )
+        inputs = replace(inputs, prior_execution=rt.executions.holder(key))
     decision = compose(inputs)
+    if rt.persist and decision.executed_capability is not None:
+        key = execution_key(
+            decision.workflow.value, decision.subject_id, decision.executed_capability.value
+        )
+        prior = rt.executions.claim(key, decision.decision_id)
+        if prior is not None:  # claimed concurrently since the check above
+            decision = compose(replace(inputs, prior_execution=prior))
     if rt.persist:
         decision = replace(decision, authoritative=True)
     sec = inputs.security

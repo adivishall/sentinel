@@ -86,6 +86,9 @@ class DecisionInputs:
     # there was one, so replay can verify it again.
     provenance: FactProvenance | None = None
     fact_envelope: dict[str, object] | None = None
+    # the decision (or human approval) that already executed this capability on this
+    # subject, if any: a capability runs once per subject (Runtime.executions)
+    prior_execution: str | None = None
 
 
 @dataclass(frozen=True)
@@ -108,6 +111,7 @@ class _TrustedView:
     claim_type: str | None
     # what establishes the primary record (sentinel.trust); None = no primary record
     provenance: ProvenanceStatus | None = None
+    prior_execution: str | None = None
 
 
 _NO_SECURITY = SecurityAssessment(
@@ -223,6 +227,7 @@ def _decide(
             evidence_supported=supported,
             workflow=v.workflow,
             facts_provenance=v.provenance,
+            already_executed=v.prior_execution,
         )
     else:
         auth = Authorization(
@@ -262,6 +267,7 @@ def _trusted_view(inputs: DecisionInputs) -> _TrustedView:
         controls=inputs.controls,
         claim_type=inputs.claim_type,
         provenance=inputs.provenance.status if inputs.provenance is not None else None,
+        prior_execution=inputs.prior_execution,
     )
     return view
 

@@ -10,7 +10,7 @@ cannot be written into the case table without leaving a chained record."""
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sentinel.cases.rules import CaseTrigger, should_open_case
 from sentinel.domain.cases import Case, CaseEvent, HumanDecision
@@ -27,7 +27,7 @@ from sentinel.domain.enums import (
     Workflow,
 )
 from sentinel.domain.ids import content_hash, new_id, now_iso
-from sentinel.security.capabilities import authorize
+from sentinel.security.capabilities import authorize, execution_key
 from sentinel.security.capabilities import spec as cap_spec
 
 if TYPE_CHECKING:
@@ -120,6 +120,9 @@ class CaseService:
     def __init__(self, repo: CaseRepository | None = None, audit: AuditChain | None = None) -> None:
         self.repo: CaseRepository = repo or MemoryCaseRepository()
         self.audit: AuditChain | None = audit
+        # the runtime's execution ledger (a recording Runtime attaches it): a human approval
+        # executes the case's capability, so it claims the same key a decision would
+        self.executions: Any = None
 
     def _record(self, case: Case, *, actor: str, action: str, detail: dict[str, object]) -> Case:
         """Chain a human case action, then link it to the case. Free text (titles, notes)
@@ -218,6 +221,7 @@ class CaseService:
             policy_outcome=d.policy.outcome.value,
             evidence_verdict=d.evidence_verdict.value,
             facts_provenance=d.provenance.status.value if d.provenance is not None else None,
+            subject_id=d.subject_id,
         )
         # an automated case is chained by its decision's audit event (``link_audit``)
         self.repo.save(case)
@@ -340,6 +344,16 @@ class CaseService:
             ok, why = self.approval(case, role)
             if not ok:
                 raise ReviewerNotAuthorized(why)
+            if self.executions is not None and case.capability and case.subject_id:
+                # the approval executes the capability: once per subject, whoever executes
+                held = self.executions.claim(
+                    execution_key(case.case_type.value, case.subject_id, case.capability),
+                    f"case:{case_id}",
+                )
+                if held is not None:
+                    raise ReviewerNotAuthorized(
+                        f"{case.capability} already executed on this subject ({held})"
+                    )
         now = now_iso()
         hd = HumanDecision(new_id("HDEC"), case_id, who, outcome, note, now, role)
         ev = CaseEvent(

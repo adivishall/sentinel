@@ -66,6 +66,7 @@ CREATE INDEX IF NOT EXISTS ix_audit_decision ON audit_events(decision_id, sequen
 CREATE TABLE IF NOT EXISTS replays (replay_id TEXT PRIMARY KEY, decision_id TEXT, changed INTEGER, created_at TEXT, payload TEXT);
 CREATE TABLE IF NOT EXISTS policy_versions (policy_id TEXT, version INTEGER, workflow TEXT, payload TEXT, PRIMARY KEY (policy_id, version));
 CREATE TABLE IF NOT EXISTS fact_envelopes (record_key TEXT PRIMARY KEY, subject TEXT, kind TEXT, issuer TEXT, sequence INTEGER, envelope TEXT);
+CREATE TABLE IF NOT EXISTS executions (key TEXT PRIMARY KEY, holder TEXT);
 CREATE TABLE IF NOT EXISTS fact_sequences (issuer TEXT, subject TEXT, sequence INTEGER, envelope_digest TEXT, PRIMARY KEY (issuer, subject));
 """
 
@@ -1123,6 +1124,7 @@ class SqliteCaseRepository:
             p.get("policy_outcome"),
             p.get("evidence_verdict"),
             p.get("facts_provenance"),
+            p.get("subject_id"),
         )
 
     def get(self, case_id: str) -> Case | None:
@@ -1164,3 +1166,26 @@ class SqliteSequences:
 
     def advance(self, issuer: str, subject: str, sequence: int, envelope_digest: str) -> None:
         self._store.advance_fact_sequence(issuer, subject, sequence, envelope_digest)
+
+
+class SqliteExecutions:
+    """One execution per subject and capability (``workflows.ExecutionLedger``), in the
+    store so a restart does not forget what already paid. Claiming is a single
+    INSERT OR IGNORE under the store's lock: of two concurrent requests, one wins."""
+
+    def __init__(self, store: SentinelStore) -> None:
+        self._store = store
+
+    def holder(self, key: str) -> str | None:
+        r = self._store._one("SELECT holder FROM executions WHERE key = ?", (key,))
+        return str(r["holder"]) if r else None
+
+    def claim(self, key: str, by: str) -> str | None:
+        with self._store._lock:
+            cur = self._store._conn.execute(
+                "INSERT OR IGNORE INTO executions VALUES (?, ?)", (key, by)
+            )
+            self._store._conn.commit()
+            if cur.rowcount == 1:
+                return None
+        return self.holder(key)

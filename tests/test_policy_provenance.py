@@ -46,9 +46,10 @@ from sentinel.security.trust_boundary import DisputeFacts, UntrustedText
 from sentinel.trust import local, untrusted
 from sentinel.trust.issuer import Issuer
 from sentinel.trust.keys import TrustStore
+from tests.records import ledger
 
 CLAIM = "My order never arrived after three weeks."
-SUPPORTING = {"amount": 18000, "delivery_status": "not_delivered", "refund_state": "none"}
+SUPPORTING = ledger(amount=18000, delivery_status="not_delivered", refund_state="none")
 ISSUER = Issuer.ephemeral("core-ledger")
 TRUST = TrustStore.empty().with_key(ISSUER.key)
 
@@ -136,11 +137,26 @@ def test_the_policy_context_always_names_the_provenance():
 
 # ---- the policy: declarative requirements ----------------------------------------------------
 def test_a_failed_signature_is_blocked_by_policy():
+    """A statement that does not verify is never decided on (it fails safe); a stored row
+    that disagrees with its statement is decided on the row -- and the policy BLOCKs it."""
     forged = Issuer.ephemeral("core-ledger").sign(FactKind.DISPUTE_LEDGER, "D-1", SUPPORTING)
     b = run_dispute(_rt(), DisputeRequest(UntrustedContent(CLAIM), {}, "D-1", envelope=forged))
-    assert b.decision.provenance.status is ProvenanceStatus.INVALID
-    assert "block-failed-fact-provenance" in b.decision.policy.matched_rules
-    assert b.decision.final_action is FinalAction.DENY and not b.decision.executed
+    assert b.decision.provenance.status is ProvenanceStatus.INVALID and not b.decision.executed
+    stored = SentinelApp.demo(seed=7, customers=30, merchants=6, transactions=300)
+    d = next(
+        x
+        for x in stored.store.all_disputes()
+        if stored.evaluate_dispute(dispute_id=x.dispute_id).decision.final_action
+        is not FinalAction.BLOCK
+    )
+    stored.store._conn.execute(
+        "UPDATE disputes SET amount = amount + 1 WHERE dispute_id = ?", (d.dispute_id,)
+    )
+    stored.store._conn.commit()
+    t = stored.evaluate_dispute(dispute_id=d.dispute_id)
+    assert t.decision.provenance.status is ProvenanceStatus.INVALID
+    assert "block-failed-fact-provenance" in t.decision.policy.matched_rules
+    assert t.decision.final_action is FinalAction.DENY and not t.decision.executed
 
 
 @pytest.mark.parametrize(
@@ -297,3 +313,68 @@ def test_a_human_approval_is_checked_with_the_system_floor_skipped():
             facts_provenance=ProvenanceStatus.UNTRUSTED,
         )
         assert a.status is expected, actor
+
+
+# ---- idempotency: a capability runs once per subject -------------------------------------
+def test_re_evaluating_a_record_that_already_executed_does_not_execute_again():
+    """The provenance review: every re-evaluation of the same record recorded another
+    executed decision (a second refund on the same dispute)."""
+    app = SentinelApp.demo(seed=7, customers=30, merchants=6, transactions=300)
+    d, first = next(
+        (x, b)
+        for x in app.store.all_disputes()
+        if (b := app.evaluate_dispute(dispute_id=x.dispute_id)).decision.executed
+    )
+    again = app.evaluate_dispute(dispute_id=d.dispute_id)
+    assert not again.decision.executed and again.decision.final_action is FinalAction.DENY
+    assert first.decision.decision_id in again.decision.authorization.reason
+    env = app.issuer.sign(FactKind.DISPUTE_LEDGER, "DSP-ONCE", SUPPORTING)
+    assert app.evaluate_dispute(CLAIM, envelope=env).decision.executed
+    assert not app.evaluate_dispute(CLAIM, envelope=env).decision.executed  # same statement
+
+
+def test_the_execution_ledger_survives_a_restart(tmp_path):
+    from sentinel.data.store import SentinelStore
+
+    db = str(tmp_path / "s.db")
+    issuer = Issuer.ephemeral("core-ledger")
+    env = issuer.sign(FactKind.DISPUTE_LEDGER, "DSP-R", SUPPORTING)
+    assert (
+        SentinelApp(SentinelStore(db), issuer=issuer)
+        .evaluate_dispute(CLAIM, envelope=env)
+        .decision.executed
+    )
+    reopened = SentinelApp(SentinelStore(db), issuer=issuer)
+    assert not reopened.evaluate_dispute(CLAIM, envelope=env).decision.executed
+
+
+def test_two_concurrent_requests_execute_once():
+    import threading
+
+    app = SentinelApp.demo(seed=7, customers=30, merchants=6, transactions=300)
+    env = app.issuer.sign(FactKind.DISPUTE_LEDGER, "DSP-RACE", SUPPORTING)
+    results: list[bool] = []
+    barrier = threading.Barrier(8)
+
+    def go() -> None:
+        barrier.wait()
+        results.append(app.evaluate_dispute(CLAIM, envelope=env).decision.executed)
+
+    threads = [threading.Thread(target=go) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert results.count(True) == 1, results
+
+
+def test_a_human_approval_is_an_execution_too():
+    svc_rt = Runtime(trust=TRUST)  # recording: its case service claims executions
+    b = run_dispute(svc_rt, _signed({**SUPPORTING, "amount": 60_000}, "DSP-H"))  # over the limit
+    assert b.case is not None and not b.decision.executed
+    c = svc_rt.cases.transition(b.case.case_id, CaseStatus.INVESTIGATING, actor="analyst")
+    c = svc_rt.cases.record_human_decision(c.case_id, reviewer="alice", outcome="approve")
+    assert c.resolution == "approve"
+    # the refund was paid by the human's approval: the system does not pay it again
+    again = run_dispute(svc_rt, _signed({**SUPPORTING, "amount": 60_000}, "DSP-H"))
+    assert not again.decision.executed and "case:" in again.decision.authorization.reason

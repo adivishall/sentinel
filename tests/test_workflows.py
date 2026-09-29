@@ -38,6 +38,7 @@ from sentinel.risk.graph import EntityGraph
 from sentinel.security.provenance import UntrustedContent
 from sentinel.trust.issuer import Issuer
 from sentinel.trust.keys import TrustStore
+from tests.records import kyb_record
 
 T0 = datetime(2026, 9, 1, 10, 0)
 
@@ -297,16 +298,7 @@ def test_kyb_document_cannot_onboard_shell_merchant():
             ),
             {},
             "MER-BOOKS",
-            envelope=acquirer.sign(
-                FactKind.KYB_RECORD,
-                "MER-BOOKS",
-                {
-                    "registration_status": "verified",
-                    "domain_age_days": 900,
-                    "business_age_days": 1600,
-                    "prior_flags": 0,
-                },
-            ),
+            envelope=acquirer.sign(FactKind.KYB_RECORD, "MER-BOOKS", kyb_record()),
         ),
     )
     assert signed.decision.executed_capability is Capability.APPROVE_MERCHANT

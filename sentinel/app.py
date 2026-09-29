@@ -19,6 +19,7 @@ from sentinel.data.store import (
     SentinelStore,
     SqliteAuditBackend,
     SqliteCaseRepository,
+    SqliteExecutions,
     SqliteSequences,
 )
 from sentinel.decision.session import DisputeSession
@@ -178,6 +179,7 @@ class SentinelApp:
             trust=trust,
             sequences=sequences,
             require_signed_facts=require_signed_facts,
+            executions=SqliteExecutions(self.store),
         )
         # What-if runs (reduced controls, a historical policy or risk model) use the same
         # policies, gateway and provider but never persist: no audit event, no case, no

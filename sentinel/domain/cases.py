@@ -58,3 +58,4 @@ class Case:
     policy_outcome: str | None = None
     evidence_verdict: str | None = None
     facts_provenance: str | None = None  # ProvenanceStatus of the decision's primary record
+    subject_id: str | None = None  # what the decision was about (for execution idempotency)
