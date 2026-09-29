@@ -7,8 +7,8 @@ AUTHORITATIVE
     (``scoring.ACTIVE``). No request parameter changes any of the three.
 
 WHAT-IF
-    The attack simulator's no-controls side, a scenario run under another version,
-    replay, backtests and the evaluation suites. The same engine computes the
+    The attack simulator (both sides: its facts are fixtures signed on request), a
+    scenario run under another version, replay, backtests and the evaluation suites. The same engine computes the
     result and returns it; it is never recorded as a decision.
 
 Version classes, for every policy and risk model:

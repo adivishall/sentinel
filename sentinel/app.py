@@ -677,6 +677,12 @@ class SentinelApp:
         ``evaluate_dispute``: a signed ``envelope``, or an unsigned ``ledger`` (UNTRUSTED)."""
         if (ledger is None) == (envelope is None):
             raise ValueError("pass exactly one of a ledger or a signed envelope")
+        named = _named(envelope, FactKind.DISPUTE_LEDGER)
+        if named and self.store.dispute(named):
+            # as for evaluate_dispute: a stored dispute is evaluated as stored (its recorded
+            # submission, its account's risk), never re-pointed with new text and its own
+            # statement
+            raise ValueError(f"{named} is held by the record store; evaluate it by id")
         return self._persist(
             self._conversation(turns, ledger or {}, envelope, FactsSource.CALLER_SUPPLIED, options)
         )
@@ -860,10 +866,15 @@ class SentinelApp:
     ) -> dict[str, Any]:
         """Run an attack preset through the real engine. With ``compare`` the same
         input is run twice -- against the *simulated naive agent with no controls*
-        and against full Sentinel -- and both storyboards are returned, labelled."""
+        and against full Sentinel -- and both storyboards are returned, labelled.
+
+        Every simulator run is a what-if: the preset's ledger is signed on request, so it
+        proves nothing about any real payment, and a decision built on it is never recorded
+        and never executes (an API caller cannot mint executed refunds through it)."""
         p = ATTACKS[kind]
 
         def _run(opts: RunOptions) -> tuple[DecisionBundle, str]:
+            opts = replace(opts, simulation=True)
             # The preset's ledger stands for the institution's record of the disputed
             # payment: the demo issuer signs it, exactly as it signs the dataset.
             dispute_id = new_id("DSP")
@@ -1064,7 +1075,11 @@ class SentinelApp:
                 {
                     "stage": "case",
                     "title": "Case",
-                    "value": b.case.case_id if b.case else "no case",
+                    "value": (
+                        b.case.case_id
+                        if b.case
+                        else "no case" if d.authoritative else "none (a what-if run opens no case)"
+                    ),
                     "status": "info",
                 },
                 {

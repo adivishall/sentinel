@@ -115,11 +115,17 @@ class RunOptions:
     hardened: bool = False
     session_id: str | None = None
     skip_agent: bool = False  # evaluate without calling any model
+    # an attack-simulator run: its facts are demo fixtures signed on request, so however it
+    # is decided it is a simulation -- never recorded, never executed
+    simulation: bool = False
 
     @property
     def what_if(self) -> bool:
         return (
-            self.controls != FULL or self.policy_version is not None or self.risk_model is not None
+            self.controls != FULL
+            or self.policy_version is not None
+            or self.risk_model is not None
+            or self.simulation
         )
 
 

@@ -568,6 +568,18 @@ def test_f1_a_stored_dispute_cannot_be_re_pointed_with_its_own_statement(app):
         app.evaluate_dispute("It never arrived.", LEDGER, dispute_id=d.dispute_id)
 
 
+def test_g1_the_conversation_route_does_not_re_point_a_stored_dispute_either(app):
+    """The review of #12 found the conversation route took a stored dispute's own signed
+    statement with new text: by id DSP-000042 (seed 2) went to review; through the
+    conversation it executed APPROVE_REFUND with the account's risk dropped."""
+    for d in app.store.all_disputes()[:25]:
+        own = app.store.fact_envelope(f"dispute:{d.dispute_id}")
+        assert own is not None
+        with pytest.raises(ValueError, match="evaluate it by id"):
+            app.evaluate_dispute_conversation(("Hello,", "it never arrived."), envelope=own)
+    assert not any(e.kind == "decision" for e in app.runtime.audit.events())
+
+
 def test_f2_deleting_the_rollback_marks_does_not_reopen_an_older_statement(app):
     old = app.issuer.sign(KIND, "DSP-ROLL", LEDGER, sequence=1)
     new = app.issuer.sign(KIND, "DSP-ROLL", {**LEDGER, "refund_state": "refunded"}, sequence=2)
