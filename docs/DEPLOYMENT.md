@@ -60,6 +60,7 @@ sentinel trust keygen --issuer core-ledger --scopes dispute_ledger \
 sentinel trust sign --key /secure/core-ledger.pem --issuer core-ledger \
     --kind dispute_ledger --id DSP-000123 --payload ledger.json --out envelope.json
 sentinel --trust-store /etc/sentinel/trust.json trust verify envelope.json --kind dispute_ledger
+sentinel --trust-store /etc/sentinel/trust.json trust ingest envelope.json   # store it beside the record
 sentinel --trust-store /etc/sentinel/trust.json trust revoke <key_id> --reason compromised
 ```
 

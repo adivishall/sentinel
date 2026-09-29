@@ -29,7 +29,7 @@ hostile document.
 | **Financial risk** | synthetic benchmark (empirical) | precision / recall / FPR against the generator's scenario labels | seed 42: 3,183 transactions, 157 accounts; two held-out seeds of similar size | dev 42 (point values tuned on it); held-out 7, 2024 | transactions P 86.7% R 67.2% FPR 0.19%; accounts P 90.0% R 90.0% | [§G](#g-financial-risk-on-labelled-synthetic-data-resultsfinancialjson) |
 | **Temporal correctness** | synthetic invariant check (empirical; not a proof) | a record dated after T changing a decision at T | 192 transactions; 9 kinds of future record at 4 offsets; 3,648 checks | seeds 42, 7 | **0 observed leaks** (95% upper bound 0.082% per check, 1.55% per sampled transaction) | [§I](#i-temporal-correctness-resultstemporaljson) |
 | **Claim classifier** | synthetic, same author; defence in depth, not the foundation | legitimate claims read as their type; the rest held for a human | 117 phrasings; 21 held-out unusual phrasings | hand-authored | held-out: first (blind) run 7/21; 17/21 after the patterns were extended by an author who had seen the misses; FN 4/56, FP 0/28 | [§L](#l-claim-classifier-resultsclaimsjson) |
-| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 1.1244 ms | [PERFORMANCE.md](PERFORMANCE.md) |
+| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.2425 ms | [PERFORMANCE.md](PERFORMANCE.md) |
 | **Live LLM** | live-model evaluation | the same suites against a real model | -- | `claude-opus-5-5` | **NOT RUN** -- no live number is quoted anywhere | [§K](#k-model--provider-evaluation-resultsmodelsjson) |
 
 ## Three kinds of numbers
@@ -551,18 +551,18 @@ Sequential, single-threaded, persistence excluded; machine-dependent.
 
 | Component | p50 ms | p95 ms | p99 ms | ops/s |
 |---|---:|---:|---:|---:|
-| `normalize` | 0.0178 | 0.0187 | 0.0209 | 55,706 |
-| `gateway_inspect` | 0.233 | 0.2664 | 0.3281 | 4,181 |
-| `claim_classify` | 0.264 | 0.317 | 0.3919 | 3,672 |
-| `evidence_reconcile` | 0.0361 | 0.0413 | 0.1019 | 26,009 |
-| `fact_verify` | 0.177 | 0.2302 | 0.4146 | 5,277 |
-| `risk_score_transaction` | 0.0149 | 0.0174 | 0.0608 | 61,828 |
-| `graph_linked_accounts` | 0.004 | 0.0047 | 0.0069 | 234,666 |
-| `graph_neighborhood_d2` | 0.0578 | 0.0642 | 0.2271 | 16,499 |
-| `policy_evaluate` | 0.0149 | 0.0173 | 0.0377 | 63,593 |
-| `decision_compose` | 0.0398 | 0.0482 | 0.0883 | 23,885 |
-| `audit_append` | 0.009 | 0.0114 | 0.0288 | 102,580 |
-| `e2e_dispute_pipeline` | 0.9452 | 1.1244 | 1.2266 | 1,025 |
+| `normalize` | 0.0188 | 0.0196 | 0.0223 | 52,882 |
+| `gateway_inspect` | 0.2297 | 0.2388 | 0.2447 | 4,348 |
+| `claim_classify` | 0.2608 | 0.2688 | 0.2744 | 3,820 |
+| `evidence_reconcile` | 0.0352 | 0.0375 | 0.041 | 28,084 |
+| `fact_verify` | 0.1761 | 0.1833 | 0.2085 | 5,585 |
+| `risk_score_transaction` | 0.0147 | 0.0158 | 0.0208 | 66,681 |
+| `graph_linked_accounts` | 0.004 | 0.0041 | 0.0047 | 246,165 |
+| `graph_neighborhood_d2` | 0.0537 | 0.0581 | 0.0873 | 18,088 |
+| `policy_evaluate` | 0.0148 | 0.0155 | 0.02 | 66,387 |
+| `decision_compose` | 0.039 | 0.0423 | 0.0492 | 25,340 |
+| `audit_append` | 0.0087 | 0.0102 | 0.0134 | 111,469 |
+| `e2e_dispute_pipeline` | 0.2282 | 0.2425 | 0.2889 | 4,337 |
 
 A live LLM call (hundreds of milliseconds) dominates real latency by three
 orders of magnitude; Sentinel's own controls are not the bottleneck.
@@ -573,7 +573,7 @@ orders of magnitude; Sentinel's own controls are not the bottleneck.
 
 | Provider | Model | Date | Status | ASR no controls | ASR Sentinel | FP | Latency p95 ms | Tokens in / out | Note |
 |---|---|---|---|---|---|---|---|---|---|
-| offline | `offline-simulator` | 2026-09-29 | ok | 90.0% | 0.0% | 0.0% | 0.163 | — |  |
+| offline | `offline-simulator` | 2026-09-29 | ok | 90.0% | 0.0% | 0.0% | 0.14 | — |  |
 | anthropic | `claude-opus-5-5` | 2026-09-29 | not_run | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
 
 Each provider row records the model, the run date, per-class outcomes, agent
@@ -637,5 +637,5 @@ make eval                      # everything above (main + held-out + surfaces = 
 make docs                      # re-render this file and every generated block from results/ and the code
 sentinel eval run --suite security|heldout|surfaces|kyb|baselines|ablation|financial|integrity|temporal|claims|performance|models|charts
 sentinel eval run --suite financial --full     # larger dataset (400 customers / 12k transactions)
-make test                      # 739 tests, incl. tests/test_results_regression.py which recomputes the headline claims
+make test                      # 717 tests, incl. tests/test_results_regression.py which recomputes the headline claims
 ```

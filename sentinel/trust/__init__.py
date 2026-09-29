@@ -17,11 +17,17 @@ from collections.abc import Mapping
 from sentinel.domain.enums import FactKind, ProvenanceStatus
 from sentinel.domain.ids import content_hash
 from sentinel.domain.provenance import RECORD_STORE, REQUEST_BODY, FactProvenance
+from sentinel.trust.canonical import CanonicalError, digest
 
 
 def record_digest(record: Mapping[str, object]) -> str:
-    """SHA-256 of an unsigned record as used (it may hold values canonical JSON refuses)."""
-    return content_hash(dict(record), length=64)
+    """SHA-256 of a record as used: its canonical form when it has one (so a verified
+    statement's digest is its signed ``payload_sha256``), otherwise a stable JSON hash of
+    what was there (a request body may hold values canonical JSON refuses)."""
+    try:
+        return digest(dict(record))
+    except CanonicalError:
+        return content_hash(dict(record), length=64)
 
 
 def local(kind: FactKind, record_id: str, record: Mapping[str, object]) -> FactProvenance:

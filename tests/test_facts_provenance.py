@@ -59,15 +59,28 @@ def test_each_entry_point_labels_its_facts(app):
         (app.evaluate_dispute_conversation(("It never arrived.",), LEDGER), CALLER),
         (app.evaluate_transaction(t.transaction_id), SOR),
         (app.evaluate_transaction(t), SOR),  # the stored record itself
-        (app.evaluate_transaction(replace(t, amount=t.amount + 1)), CALLER),  # an edited copy
+        # a transaction the store does not hold, sent in the body
+        (
+            app.evaluate_transaction(replace(t, transaction_id="TX-BODY", amount=t.amount + 1)),
+            CALLER,
+        ),
         (app.evaluate_merchant("", application_id=k.application_id), SOR),
         (app.evaluate_merchant("We sell shoes.", {"registration_status": "verified"}), CALLER),
         (app.evaluate_account(s.session_id), SOR),
-        (app.evaluate_account(replace(s, country="RO")), CALLER),
+        (app.evaluate_account(replace(s, session_id="SES-BODY", country="RO")), CALLER),
         (app.evaluate_investigation(st.accounts()[0].account_id), SOR),
     ]
     for b, want in cases:
         assert b.decision.facts_source == want, (b.decision.workflow, want)
+    # an edited copy of a stored record is refused, not decided as caller input: a stored
+    # record is evaluated by id (its statement and submission are the store's)
+    for edited in (
+        lambda: app.evaluate_transaction(replace(t, amount=t.amount + 1)),
+        lambda: app.evaluate_account(replace(s, country="RO")),
+        lambda: app.evaluate_dispute("It never arrived.", LEDGER, dispute_id=d.dispute_id),
+    ):
+        with pytest.raises(ValueError, match="held by the record store"):
+            edited()
     sim = app.simulate_attack("document_injection", compare=True)
     assert sim["with_sentinel"]["decision"]["facts_source"] == FIXTURE
     assert sim["without_sentinel"]["decision"]["facts_source"] == FIXTURE

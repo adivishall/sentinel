@@ -123,6 +123,16 @@ block.
     `UNTRUSTED`, it cannot execute either way. A signed statement's timestamp
     is the issuer's and is used as stated.
 
+    Rollback protection is as strong as the audit chain. A database writer
+    who also rewrites the chain after the last checkpoint (item 17) could
+    replay an older, unexpired statement. Statement expiry
+    (`max_validity_days`) bounds that window, as it does for a statement older
+    than the issuer's latest that this deployment never acted on.
+
+    The workflow functions (`run_*`) are internal: whoever calls them is
+    inside the boundary and states how the facts arrived. The public
+    `SentinelApp`, API and CLI derive that themselves.
+
     Auth is optional, and the server warns when it starts open on a
     non-loopback address. What-if switches (controls, policy version, risk
     model, `as_of`) are refused on the evaluate routes, and the engine never

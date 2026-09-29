@@ -17,7 +17,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.079
+    "latency_ms": 0.083
   },
   {
     "provider": "offline",
@@ -37,7 +37,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.087
+    "latency_ms": 0.082
   },
   {
     "provider": "offline",
@@ -57,7 +57,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.086
+    "latency_ms": 0.081
   },
   {
     "provider": "offline",
@@ -77,7 +77,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.086
+    "latency_ms": 0.08
   },
   {
     "provider": "offline",
@@ -97,7 +97,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.087
+    "latency_ms": 0.08
   },
   {
     "provider": "offline",
@@ -117,7 +117,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.071
+    "latency_ms": 0.065
   },
   {
     "provider": "offline",
@@ -137,7 +137,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.072
+    "latency_ms": 0.066
   },
   {
     "provider": "offline",
@@ -157,7 +157,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.071
+    "latency_ms": 0.065
   },
   {
     "provider": "offline",
@@ -177,7 +177,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.075
+    "latency_ms": 0.066
   },
   {
     "provider": "offline",
@@ -197,7 +197,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.072
+    "latency_ms": 0.065
   },
   {
     "provider": "offline",
@@ -237,7 +237,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.092
+    "latency_ms": 0.093
   },
   {
     "provider": "offline",
@@ -257,7 +257,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.09
+    "latency_ms": 0.092
   },
   {
     "provider": "offline",
@@ -277,7 +277,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.099
+    "latency_ms": 0.092
   },
   {
     "provider": "offline",
@@ -297,7 +297,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.099
+    "latency_ms": 0.09
   },
   {
     "provider": "offline",
@@ -317,7 +317,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.085
+    "latency_ms": 0.076
   },
   {
     "provider": "offline",
@@ -337,7 +337,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.086
+    "latency_ms": 0.077
   },
   {
     "provider": "offline",
@@ -357,7 +357,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.085
+    "latency_ms": 0.077
   },
   {
     "provider": "offline",
@@ -377,7 +377,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.081
+    "latency_ms": 0.076
   },
   {
     "provider": "offline",
@@ -397,7 +397,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.078
+    "latency_ms": 0.076
   },
   {
     "provider": "offline",
@@ -418,7 +418,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.14
+    "latency_ms": 0.134
   },
   {
     "provider": "offline",
@@ -439,7 +439,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.139
+    "latency_ms": 0.138
   },
   {
     "provider": "offline",
@@ -460,7 +460,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.136
+    "latency_ms": 0.138
   },
   {
     "provider": "offline",
@@ -481,7 +481,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.143
+    "latency_ms": 0.134
   },
   {
     "provider": "offline",
@@ -502,7 +502,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.157
+    "latency_ms": 0.134
   },
   {
     "provider": "offline",
@@ -521,7 +521,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.144
+    "latency_ms": 0.124
   },
   {
     "provider": "offline",
@@ -540,7 +540,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.127
+    "latency_ms": 0.125
   },
   {
     "provider": "offline",
@@ -559,7 +559,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.131
+    "latency_ms": 0.124
   },
   {
     "provider": "offline",
@@ -578,7 +578,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.127
+    "latency_ms": 0.124
   },
   {
     "provider": "offline",
@@ -597,7 +597,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.13
+    "latency_ms": 0.124
   },
   {
     "provider": "offline",
@@ -616,7 +616,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.071
+    "latency_ms": 0.068
   },
   {
     "provider": "offline",
@@ -635,7 +635,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.071
+    "latency_ms": 0.068
   },
   {
     "provider": "offline",
@@ -654,7 +654,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.087
+    "latency_ms": 0.068
   },
   {
     "provider": "offline",
@@ -673,7 +673,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.079
+    "latency_ms": 0.068
   },
   {
     "provider": "offline",
@@ -692,7 +692,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.079
+    "latency_ms": 0.068
   },
   {
     "provider": "offline",
@@ -711,7 +711,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.094
+    "latency_ms": 0.091
   },
   {
     "provider": "offline",
@@ -730,7 +730,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.094
+    "latency_ms": 0.093
   },
   {
     "provider": "offline",
@@ -768,7 +768,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.093
+    "latency_ms": 0.092
   },
   {
     "provider": "offline",
@@ -787,7 +787,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.093
+    "latency_ms": 0.092
   },
   {
     "provider": "offline",
@@ -806,7 +806,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.089
+    "latency_ms": 0.088
   },
   {
     "provider": "offline",
@@ -825,7 +825,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.091
+    "latency_ms": 0.094
   },
   {
     "provider": "offline",
@@ -844,7 +844,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.095
+    "latency_ms": 0.088
   },
   {
     "provider": "offline",
@@ -863,7 +863,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.095
+    "latency_ms": 0.09
   },
   {
     "provider": "offline",
@@ -882,7 +882,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.1
+    "latency_ms": 0.088
   },
   {
     "provider": "offline",
@@ -897,7 +897,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.149
+    "latency_ms": 0.133
   },
   {
     "provider": "offline",
@@ -912,7 +912,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.15
+    "latency_ms": 0.136
   },
   {
     "provider": "offline",
@@ -927,7 +927,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.137
+    "latency_ms": 0.134
   },
   {
     "provider": "offline",
@@ -942,7 +942,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.135
+    "latency_ms": 0.134
   },
   {
     "provider": "offline",
@@ -957,7 +957,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.135
+    "latency_ms": 0.134
   },
   {
     "provider": "offline",
@@ -978,7 +978,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.044
+    "latency_ms": 0.04
   },
   {
     "provider": "offline",
@@ -999,7 +999,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.043
+    "latency_ms": 0.041
   },
   {
     "provider": "offline",
@@ -1020,7 +1020,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.043
+    "latency_ms": 0.041
   },
   {
     "provider": "offline",
@@ -1041,7 +1041,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.049
+    "latency_ms": 0.041
   },
   {
     "provider": "offline",
@@ -1062,7 +1062,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.048
+    "latency_ms": 0.041
   },
   {
     "provider": "offline",
@@ -1083,7 +1083,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.046
+    "latency_ms": 0.038
   },
   {
     "provider": "offline",
@@ -1104,7 +1104,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.04
+    "latency_ms": 0.038
   },
   {
     "provider": "offline",
@@ -1125,7 +1125,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.04
+    "latency_ms": 0.038
   },
   {
     "provider": "offline",
@@ -1146,7 +1146,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.04
+    "latency_ms": 0.038
   },
   {
     "provider": "offline",
@@ -1167,7 +1167,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.04
+    "latency_ms": 0.038
   },
   {
     "provider": "offline",
@@ -1186,7 +1186,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.127
+    "latency_ms": 0.098
   },
   {
     "provider": "offline",
@@ -1205,7 +1205,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.127
+    "latency_ms": 0.099
   },
   {
     "provider": "offline",
@@ -1224,7 +1224,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.108
+    "latency_ms": 0.098
   },
   {
     "provider": "offline",
@@ -1243,7 +1243,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.108
+    "latency_ms": 0.099
   },
   {
     "provider": "offline",
@@ -1262,7 +1262,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.126
+    "latency_ms": 0.098
   },
   {
     "provider": "offline",
@@ -1277,7 +1277,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.175
+    "latency_ms": 0.135
   },
   {
     "provider": "offline",
@@ -1292,7 +1292,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.18
+    "latency_ms": 0.137
   },
   {
     "provider": "offline",
@@ -1307,7 +1307,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.149
+    "latency_ms": 0.136
   },
   {
     "provider": "offline",
@@ -1322,7 +1322,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.15
+    "latency_ms": 0.135
   },
   {
     "provider": "offline",
@@ -1337,7 +1337,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.164
+    "latency_ms": 0.136
   },
   {
     "provider": "offline",
@@ -1357,7 +1357,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.078
+    "latency_ms": 0.066
   },
   {
     "provider": "offline",
@@ -1377,7 +1377,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.079
+    "latency_ms": 0.072
   },
   {
     "provider": "offline",
@@ -1397,7 +1397,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.071
+    "latency_ms": 0.064
   },
   {
     "provider": "offline",
@@ -1417,7 +1417,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.071
+    "latency_ms": 0.065
   },
   {
     "provider": "offline",
@@ -1437,7 +1437,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.071
+    "latency_ms": 0.064
   },
   {
     "provider": "offline",
@@ -1457,7 +1457,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.081
+    "latency_ms": 0.072
   },
   {
     "provider": "offline",
@@ -1477,7 +1477,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.08
+    "latency_ms": 0.074
   },
   {
     "provider": "offline",
@@ -1497,7 +1497,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.078
+    "latency_ms": 0.073
   },
   {
     "provider": "offline",
@@ -1517,7 +1517,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.078
+    "latency_ms": 0.073
   },
   {
     "provider": "offline",
@@ -1537,7 +1537,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.074
+    "latency_ms": 0.072
   },
   {
     "provider": "offline",
@@ -1556,7 +1556,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.155
+    "latency_ms": 0.152
   },
   {
     "provider": "offline",
@@ -1575,7 +1575,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.168
+    "latency_ms": 0.154
   },
   {
     "provider": "offline",
@@ -1594,7 +1594,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.167
+    "latency_ms": 0.152
   },
   {
     "provider": "offline",
@@ -1613,7 +1613,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.167
+    "latency_ms": 0.158
   },
   {
     "provider": "offline",
@@ -1632,7 +1632,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.162
+    "latency_ms": 0.152
   },
   {
     "provider": "offline",
@@ -1651,7 +1651,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.146
+    "latency_ms": 0.14
   },
   {
     "provider": "offline",
@@ -1670,7 +1670,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.15
+    "latency_ms": 0.141
   },
   {
     "provider": "offline",
@@ -1689,7 +1689,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.15
+    "latency_ms": 0.14
   },
   {
     "provider": "offline",
@@ -1708,7 +1708,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.149
+    "latency_ms": 0.143
   },
   {
     "provider": "offline",
@@ -1727,7 +1727,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.154
+    "latency_ms": 0.139
   },
   {
     "provider": "offline",
@@ -1746,7 +1746,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.153
+    "latency_ms": 0.139
   },
   {
     "provider": "offline",
@@ -1765,7 +1765,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.163
+    "latency_ms": 0.136
   },
   {
     "provider": "offline",
@@ -1784,7 +1784,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.165
+    "latency_ms": 0.135
   },
   {
     "provider": "offline",
@@ -1803,7 +1803,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.139
+    "latency_ms": 0.137
   },
   {
     "provider": "offline",
@@ -1822,7 +1822,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.138
+    "latency_ms": 0.135
   },
   {
     "provider": "offline",
@@ -1898,7 +1898,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.145
+    "latency_ms": 0.134
   },
   {
     "provider": "offline",
@@ -1917,7 +1917,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.143
+    "latency_ms": 0.135
   },
   {
     "provider": "offline",
@@ -1936,7 +1936,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.14
+    "latency_ms": 0.132
   },
   {
     "provider": "offline",
@@ -1993,7 +1993,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.132
+    "latency_ms": 0.133
   },
   {
     "provider": "offline",
@@ -2012,7 +2012,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.16
+    "latency_ms": 0.132
   },
   {
     "provider": "offline",
@@ -2031,7 +2031,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.156
+    "latency_ms": 0.129
   },
   {
     "provider": "offline",
@@ -2088,7 +2088,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.13
+    "latency_ms": 0.142
   },
   {
     "provider": "offline",
@@ -2107,7 +2107,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.167
+    "latency_ms": 0.129
   },
   {
     "provider": "offline",
@@ -2128,7 +2128,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.132
+    "latency_ms": 0.103
   },
   {
     "provider": "offline",
@@ -2149,7 +2149,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.103
+    "latency_ms": 0.104
   },
   {
     "provider": "offline",
@@ -2170,7 +2170,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.105
+    "latency_ms": 0.103
   },
   {
     "provider": "offline",
@@ -2191,7 +2191,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.124
+    "latency_ms": 0.103
   },
   {
     "provider": "offline",
@@ -2212,7 +2212,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.132
+    "latency_ms": 0.103
   },
   {
     "provider": "offline",
@@ -2233,7 +2233,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.12
+    "latency_ms": 0.094
   },
   {
     "provider": "offline",
@@ -2254,7 +2254,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.094
+    "latency_ms": 0.095
   },
   {
     "provider": "offline",
@@ -2275,7 +2275,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.097
+    "latency_ms": 0.094
   },
   {
     "provider": "offline",
@@ -2317,7 +2317,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.094
+    "latency_ms": 0.095
   },
   {
     "provider": "offline",
@@ -2336,7 +2336,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.074
+    "latency_ms": 0.07
   },
   {
     "provider": "offline",
@@ -2355,7 +2355,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.071
+    "latency_ms": 0.07
   },
   {
     "provider": "offline",
@@ -2374,7 +2374,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.07
+    "latency_ms": 0.069
   },
   {
     "provider": "offline",
@@ -2393,7 +2393,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.069
+    "latency_ms": 0.07
   },
   {
     "provider": "offline",
@@ -2412,7 +2412,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.07
+    "latency_ms": 0.074
   },
   {
     "provider": "offline",
@@ -2496,7 +2496,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.042
+    "latency_ms": 0.039
   },
   {
     "provider": "offline",
@@ -2517,7 +2517,7 @@
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.042
+    "latency_ms": 0.037
   },
   {
     "provider": "offline",
@@ -2536,7 +2536,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.14
+    "latency_ms": 0.12
   },
   {
     "provider": "offline",
@@ -2555,7 +2555,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.14
+    "latency_ms": 0.128
   },
   {
     "provider": "offline",
@@ -2574,7 +2574,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.129
+    "latency_ms": 0.119
   },
   {
     "provider": "offline",
@@ -2593,7 +2593,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.129
+    "latency_ms": 0.14
   },
   {
     "provider": "offline",
@@ -2612,7 +2612,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.14
+    "latency_ms": 0.119
   },
   {
     "provider": "offline",
@@ -2631,7 +2631,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.138
+    "latency_ms": 0.121
   },
   {
     "provider": "offline",
@@ -2650,7 +2650,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.13
+    "latency_ms": 0.124
   },
   {
     "provider": "offline",
@@ -2669,7 +2669,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.127
+    "latency_ms": 0.119
   },
   {
     "provider": "offline",
@@ -2688,7 +2688,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.126
+    "latency_ms": 0.12
   },
   {
     "provider": "offline",
@@ -2707,7 +2707,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.143
+    "latency_ms": 0.118
   },
   {
     "provider": "offline",
@@ -2722,7 +2722,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.266
+    "latency_ms": 0.222
   },
   {
     "provider": "offline",
@@ -2737,7 +2737,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.24
+    "latency_ms": 0.217
   },
   {
     "provider": "offline",
@@ -2752,7 +2752,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.234
+    "latency_ms": 0.227
   },
   {
     "provider": "offline",
@@ -2767,7 +2767,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.232
+    "latency_ms": 0.216
   },
   {
     "provider": "offline",
@@ -2782,7 +2782,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.317
+    "latency_ms": 0.217
   },
   {
     "provider": "offline",
@@ -2801,7 +2801,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.198
+    "latency_ms": 0.135
   },
   {
     "provider": "offline",
@@ -2820,7 +2820,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.137
+    "latency_ms": 0.138
   },
   {
     "provider": "offline",
@@ -2839,7 +2839,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.138
+    "latency_ms": 0.137
   },
   {
     "provider": "offline",
@@ -2858,7 +2858,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.135
+    "latency_ms": 0.14
   },
   {
     "provider": "offline",
@@ -2877,7 +2877,7 @@
       "policy:dispute-refund@v3",
       "capability_authorization"
     ],
-    "latency_ms": 0.136
+    "latency_ms": 0.134
   },
   {
     "provider": "offline",
@@ -2888,7 +2888,7 @@
     "guarded_recommendation": "approve_refund",
     "guarded_final_action": "ALLOW",
     "deserved_approval_missed": false,
-    "latency_ms": 0.095
+    "latency_ms": 0.093
   },
   {
     "provider": "offline",
@@ -2899,7 +2899,7 @@
     "guarded_recommendation": "approve_refund",
     "guarded_final_action": "ALLOW",
     "deserved_approval_missed": false,
-    "latency_ms": 0.094
+    "latency_ms": 0.092
   },
   {
     "provider": "offline",
@@ -2910,7 +2910,7 @@
     "guarded_recommendation": "approve_refund",
     "guarded_final_action": "ALLOW",
     "deserved_approval_missed": false,
-    "latency_ms": 0.087
+    "latency_ms": 0.086
   },
   {
     "provider": "offline",
@@ -2921,7 +2921,7 @@
     "guarded_recommendation": "approve_refund",
     "guarded_final_action": "ALLOW",
     "deserved_approval_missed": false,
-    "latency_ms": 0.094
+    "latency_ms": 0.086
   },
   {
     "provider": "offline",
@@ -2932,7 +2932,7 @@
     "guarded_recommendation": "approve_refund",
     "guarded_final_action": "ALLOW",
     "deserved_approval_missed": false,
-    "latency_ms": 0.094
+    "latency_ms": 0.085
   },
   {
     "provider": "offline",
@@ -2943,7 +2943,7 @@
     "guarded_recommendation": "approve_refund",
     "guarded_final_action": "ALLOW",
     "deserved_approval_missed": false,
-    "latency_ms": 0.094
+    "latency_ms": 0.084
   },
   {
     "provider": "offline",
@@ -2954,7 +2954,7 @@
     "guarded_recommendation": "deny",
     "guarded_final_action": "ALLOW",
     "deserved_approval_missed": false,
-    "latency_ms": 0.102
+    "latency_ms": 0.092
   },
   {
     "provider": "offline",
@@ -2965,7 +2965,7 @@
     "guarded_recommendation": "deny",
     "guarded_final_action": "ALLOW",
     "deserved_approval_missed": false,
-    "latency_ms": 0.101
+    "latency_ms": 0.091
   },
   {
     "provider": "offline",
@@ -2976,7 +2976,7 @@
     "guarded_recommendation": "deny",
     "guarded_final_action": "ALLOW",
     "deserved_approval_missed": false,
-    "latency_ms": 0.137
+    "latency_ms": 0.121
   },
   {
     "provider": "offline",
@@ -2987,6 +2987,6 @@
     "guarded_recommendation": "deny",
     "guarded_final_action": "ALLOW",
     "deserved_approval_missed": false,
-    "latency_ms": 0.129
+    "latency_ms": 0.12
   }
 ]

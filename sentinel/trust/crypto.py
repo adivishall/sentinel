@@ -1,8 +1,8 @@
 """Ed25519 signatures, via pyca/cryptography. The only module that imports it.
 
 Sentinel implements no cryptographic primitive. It uses Ed25519 (RFC 8032) as provided
-by an established library for three things: issuers sign fact envelopes, policy signers
-sign policy releases, and verifiers hold only public keys. A key is identified by the
+by an established library: issuers sign fact envelopes (and, with signed policy releases,
+policy signers sign releases), and verifiers hold only public keys. A key is identified by the
 SHA-256 fingerprint of its raw public bytes, so a trust-store entry cannot claim another
 key's identity.
 """

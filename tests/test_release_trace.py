@@ -53,6 +53,7 @@ from sentinel.domain.enums import (
 from sentinel.risk import scoring
 from sentinel.security.capabilities import CONSEQUENTIAL, WORKFLOW_CAPABILITIES, authorize
 from sentinel.security.provenance import UntrustedContent, wrap_untrusted
+from tests.records import ledger
 
 NOT_DELIVERED = {"amount": 9_000, "delivery_status": "not_delivered", "policy_auto_limit": 50_000}
 
@@ -125,7 +126,7 @@ def test_a_multi_turn_dispute_is_decided_and_audited_once(app):
     n_audit, n_dec = len(app.runtime.audit), app.store.count("decisions")
     b = app.evaluate_dispute_conversation(
         ("Hello,", "about my order,", "it never arrived."),
-        envelope=app.issuer.sign(FactKind.DISPUTE_LEDGER, "DSP-MULTI", NOT_DELIVERED),
+        envelope=app.issuer.sign(FactKind.DISPUTE_LEDGER, "DSP-MULTI", ledger(**NOT_DELIVERED)),
     )
     assert len(app.runtime.audit) == n_audit + 1
     assert app.store.count("decisions") == n_dec + 1
@@ -292,7 +293,9 @@ def test_a_flag_that_is_not_a_boolean_is_a_malformed_record(app, flag):
 def test_a_non_positive_transaction_amount_is_never_authorised(app, api):
     t = app.store.transactions(limit=1)[0]
     for amount in (-5_000_000, 0):
-        d = app.evaluate_transaction(replace(t, amount=amount)).decision
+        d = app.evaluate_transaction(
+            replace(t, transaction_id="TX-NOT-STORED", amount=amount)
+        ).decision
         assert d.final_action is FinalAction.REQUIRE_HUMAN_REVIEW and not d.executed
     body = {"transaction": {**json.loads(json.dumps(t.__dict__)), "amount": -5}}
     assert _post(api + "/v1/transactions/evaluate", body)[0] == 400

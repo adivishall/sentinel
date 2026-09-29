@@ -119,6 +119,13 @@ event records both, together with the payload digest.
 
 `facts_envelope` is accepted on the dispute, merchant, transaction and account
 evaluate routes. Sending it together with the body facts it replaces is a 400.
+A signed statement must state every field its kind requires, otherwise it is
+`INVALID`: Sentinel does not fill in an issuer's silence with defaults.
+
+A record the store holds is evaluated **by id** only. Body facts or a
+statement for a stored dispute, application, transaction or session are a 400
+("held by the record store; evaluate it by id"). Its recorded submission, its
+account's context and its stored statement decide.
 
 Account security: a `requested_capability` is a claim about what the session
 asked for, and the session record is the evidence. A request the record does
