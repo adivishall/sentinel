@@ -21,11 +21,83 @@ class TrustClass(StrEnum):
     MERCHANT_CONTROLLED = "MERCHANT_CONTROLLED"  # merchant application copy, website text
     DOCUMENT_CONTROLLED = "DOCUMENT_CONTROLLED"  # an uploaded invoice / PDF / receipt
     MODEL_GENERATED = "MODEL_GENERATED"  # anything an LLM produced
+    # a record whose source Sentinel could not establish: supplied in a request body, or
+    # carried by a signature that failed, expired, was revoked or was superseded
+    UNVERIFIED_RECORD = "UNVERIFIED_RECORD"
     UNKNOWN = "UNKNOWN"
 
     @property
     def is_trusted(self) -> bool:
         return self in (TrustClass.TRUSTED_INTERNAL, TrustClass.VERIFIED_EXTERNAL)
+
+
+class ProvenanceStatus(StrEnum):
+    """What establishes the facts a decision was made on (``sentinel.trust``). Computed by
+    Sentinel from how the facts arrived and what verified -- never read from a request.
+
+    Only the first two carry authority. ``VERIFIED_EXTERNAL`` is the only status a
+    signature can produce, and only a signature that verifies against the operator's
+    trust store can produce it."""
+
+    VERIFIED_EXTERNAL = "VERIFIED_EXTERNAL"  # an issuer's signed fact envelope verified
+    TRUSTED_LOCAL = "TRUSTED_LOCAL"  # read by id from Sentinel's own record store
+    UNTRUSTED = "UNTRUSTED"  # supplied in a request body, unsigned
+    EXPIRED = "EXPIRED"  # a valid signature past its expiry
+    SUPERSEDED = "SUPERSEDED"  # a valid signature older than one already consumed (rollback)
+    REVOKED = "REVOKED"  # signed by a key the operator revoked
+    INVALID = "INVALID"  # malformed, altered, unknown or wrong signer, wrong subject, ...
+
+    @property
+    def rank(self) -> int:
+        return _PROVENANCE_RANK[self]
+
+    @property
+    def trusted(self) -> bool:
+        """May these facts support an outcome? (TRUSTED_LOCAL or better)"""
+        return self.rank >= _PROVENANCE_RANK[ProvenanceStatus.TRUSTED_LOCAL]
+
+    @property
+    def failed(self) -> bool:
+        """Did a verification fail in a way that signals tampering or a revoked key?"""
+        return self.rank < 0
+
+    def meets(self, required: ProvenanceStatus) -> bool:
+        return self.rank >= required.rank
+
+
+_PROVENANCE_RANK = {
+    ProvenanceStatus.VERIFIED_EXTERNAL: 3,
+    ProvenanceStatus.TRUSTED_LOCAL: 2,
+    ProvenanceStatus.UNTRUSTED: 1,
+    ProvenanceStatus.EXPIRED: 0,
+    ProvenanceStatus.SUPERSEDED: 0,
+    ProvenanceStatus.REVOKED: -1,
+    ProvenanceStatus.INVALID: -1,
+}
+
+
+class FactKind(StrEnum):
+    """The kinds of record an issuer can sign, and the subject prefix each is about."""
+
+    DISPUTE_LEDGER = "dispute_ledger"  # subject dispute:<dispute_id>
+    KYB_RECORD = "kyb_record"  # subject merchant:<merchant_id>
+    TRANSACTION = "transaction"  # subject transaction:<transaction_id>
+    LOGIN_SESSION = "login_session"  # subject session:<session_id>
+
+    @property
+    def subject_prefix(self) -> str:
+        return _SUBJECT_PREFIX[self]
+
+    def subject(self, record_id: str) -> str:
+        return f"{self.subject_prefix}:{record_id}"
+
+
+_SUBJECT_PREFIX = {
+    FactKind.DISPUTE_LEDGER: "dispute",
+    FactKind.KYB_RECORD: "merchant",
+    FactKind.TRANSACTION: "transaction",
+    FactKind.LOGIN_SESSION: "session",
+}
 
 
 class FactsSource(StrEnum):

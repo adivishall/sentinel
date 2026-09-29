@@ -1,4 +1,4 @@
-# Sentinel -- API + console. Standard library only; offline by default.
+# Sentinel -- API + console. One runtime dependency (cryptography); offline by default.
 FROM python:3.11-slim
 
 ARG LIVE=0
