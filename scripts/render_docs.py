@@ -1496,7 +1496,7 @@ computes it (`workflows._resolve_facts`); no request field can set it.
   registry, the authentication service) signs `sentinel.fact/1` envelopes with
   Ed25519 (RFC 8032, via pyca/cryptography; Sentinel implements no
   cryptographic primitive). The signature covers the domain prefix
-  `sentinel.fact/1\n` and the canonical JSON of the header. The header names
+  `sentinel.fact/1\\n` and the canonical JSON of the header. The header names
   the issuer, key, kind, subject, sequence, issued / effective / expires times
   and the payload's SHA-256.
 - **Canonical JSON.** Signing needs one byte string per value. Floats, NaN,
@@ -1509,9 +1509,25 @@ computes it (`workflows._resolve_facts`); no request field can set it.
   fingerprint of its public key, so an entry cannot claim another key's
   identity. Rotation (`not_after`) keeps earlier statements valid until they
   expire. Revocation invalidates everything the key ever signed.
+- **Complete statements.** A signed statement must state every field its kind
+  requires (`workflows.STATEMENT_FIELDS`). An omitted field is not the
+  issuer's word, and Sentinel does not fill it in with a default: an
+  incomplete statement is `INVALID`. A statement that does not verify is never
+  decided on. The decision falls back to the request's own record, which fails
+  safe.
 - **Anti-rollback.** The highest sequence acted on per issuer and subject is
-  stored. An older statement is `SUPERSEDED`, and a different statement with
-  the same sequence is `INVALID` (equivocation).
+  the higher of an index table and the tamper-evident audit chain (every
+  decision event names the statement it used). A database writer who deletes
+  the table's rows must also rewrite the chain. An older statement is
+  `SUPERSEDED`, and a different statement with the same sequence is `INVALID`
+  (equivocation).
+- **Stored records are evaluated by id.** A caller cannot send body facts or a
+  statement for a dispute, application, transaction or session the store
+  holds; that is a 400. Its recorded submission, its account's context and its
+  stored statement decide. A KYB statement names its application, so a
+  statement about one of a merchant's applications cannot stand in for
+  another. `sentinel trust ingest` verifies issuers' statements and stores
+  them beside the records.
 - **Record-store tampering.** A record read by id is checked field by field
   against its stored signed statement. With `require_signed_facts` (on
   whenever the app signs its own records), a stored record whose statement is

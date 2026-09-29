@@ -52,8 +52,29 @@ can be trusted (roadmap issues #11–#20).
 - The audit event of every decision records the fact provenance: status, issuer, key,
   envelope digest, payload digest and sequence. Replay verifies the recorded statement
   again and reports a key revoked since.
-- `sentinel trust keygen | sign | verify | list | revoke`, a `--trust-store` option and
-  `SENTINEL_TRUST_STORE`.
+- `sentinel trust keygen | sign | verify | list | revoke | ingest`, a `--trust-store`
+  option and `SENTINEL_TRUST_STORE`.
+- **Adversarial review of the first draft.** Nothing reached `VERIFIED_EXTERNAL` without
+  an issuer key, and unverified facts never executed. The review found these weaknesses,
+  all fixed with regression tests:
+  - a stored dispute's own statement sent in the body skipped the recorded-submission
+    binding and the account's risk; stored records are now evaluated by id only;
+  - a database writer could delete the anti-rollback marks and act on an older
+    statement; the marks are now also derived from the audit chain;
+  - one application's KYB statement could stand in for another's; statements now name
+    their application;
+  - a statement that failed verification was still decided on, and an oversized integer
+    caused a 500 with an orphan audit event; it now fails safe, and numbers are bounded;
+  - transaction and session audits could name a payload other than the record used;
+  - an incomplete signed statement was completed with permissive defaults; it is now
+    `INVALID`;
+  - replay's re-verification could read as more than a signature check; it is now
+    `signature_now`, withheld when the snapshot disagrees with its audit event;
+  - a 4,300-digit JSON integer dropped the connection.
+
+  Scope correction: the `facts_source` argument is gone from the *public* `SentinelApp`
+  methods. The internal `run_*` workflow layer trusts its caller's transport label, as
+  it always did.
 
 ### Evaluation
 - The corpora's ledgers and acquirer records are signed by an ephemeral evaluation

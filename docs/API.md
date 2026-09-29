@@ -119,6 +119,13 @@ event records both, together with the payload digest.
 
 `facts_envelope` is accepted on the dispute, merchant, transaction and account
 evaluate routes. Sending it together with the body facts it replaces is a 400.
+A signed statement must state every field its kind requires, otherwise it is
+`INVALID`: Sentinel does not fill in an issuer's silence with defaults.
+
+A record the store holds is evaluated **by id** only. Body facts or a
+statement for a stored dispute, application, transaction or session are a 400
+("held by the record store; evaluate it by id"). Its recorded submission, its
+account's context and its stored statement decide.
 
 A stored dispute or application is evaluated on its **recorded** submission.
 A different `narrative` or `application` sent with a record id is a 400: new
