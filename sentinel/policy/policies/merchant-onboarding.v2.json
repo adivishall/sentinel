@@ -1,0 +1,158 @@
+{
+  "policy_id": "merchant-onboarding",
+  "version": 2,
+  "workflow": "merchant_onboarding",
+  "default_outcome": "ALLOW",
+  "effective_from": "2026-09-29",
+  "description": "Merchant onboarding v2: v1 plus fact provenance -- a failed or revoked signature blocks; anything short of the acquirer's signed record goes to a human.",
+  "required_fields": [
+    "evidence_verdict",
+    "security_severity",
+    "registration_status",
+    "prior_flags",
+    "mcc_risk"
+  ],
+  "rules": [
+    {
+      "id": "block-failed-fact-provenance",
+      "when": [
+        {
+          "field": "facts_provenance",
+          "op": "in",
+          "value": [
+            "INVALID",
+            "REVOKED"
+          ]
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "The record's signed statement failed verification or its key was revoked: a tamper signal, never a basis for action."
+    },
+    {
+      "id": "review-unverified-facts",
+      "when": [
+        {
+          "field": "facts_provenance",
+          "op": "in",
+          "value": [
+            "UNTRUSTED",
+            "EXPIRED",
+            "SUPERSEDED"
+          ]
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Nothing establishes these facts (request-body, expired or superseded): a human must, before anything executes."
+    },
+    {
+      "id": "review-unsigned-acquirer-record",
+      "when": [
+        {
+          "field": "facts_provenance",
+          "op": "==",
+          "value": "TRUSTED_LOCAL"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Onboarding is irreversible and its facts are the acquirer's: approving needs the acquirer's signed record, not a stored copy."
+    },
+    {
+      "id": "block-critical-ai-security",
+      "when": [
+        {
+          "field": "security_severity",
+          "op": "==",
+          "value": "CRITICAL"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Critical AI-security finding on the untrusted input."
+    },
+    {
+      "id": "block-capability-escalation",
+      "when": [
+        {
+          "field": "capability_escalation",
+          "op": "is_true"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "The model requested a capability outside its surface."
+    },
+    {
+      "id": "block-shell",
+      "when": [
+        {
+          "field": "registration_status",
+          "op": "==",
+          "value": "shell"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Shell registration."
+    },
+    {
+      "id": "block-repeat-flags",
+      "when": [
+        {
+          "field": "prior_flags",
+          "op": ">=",
+          "value": 2
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Two or more prior fraud flags."
+    },
+    {
+      "id": "block-contradicted",
+      "when": [
+        {
+          "field": "evidence_verdict",
+          "op": "==",
+          "value": "CONTRADICTED"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Acquirer records contradict the application."
+    },
+    {
+      "id": "review-incomplete",
+      "when": [
+        {
+          "field": "evidence_verdict",
+          "op": "in",
+          "value": [
+            "INSUFFICIENT",
+            "UNSUPPORTED"
+          ]
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Verification incomplete."
+    },
+    {
+      "id": "review-high-mcc",
+      "when": [
+        {
+          "field": "mcc_risk",
+          "op": "==",
+          "value": "high"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "High-risk merchant category."
+    },
+    {
+      "id": "review-high-ai-security",
+      "when": [
+        {
+          "field": "security_severity",
+          "op": "==",
+          "value": "HIGH"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "High-severity AI-security finding in the application."
+    }
+  ]
+}

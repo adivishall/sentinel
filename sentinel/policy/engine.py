@@ -10,8 +10,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from sentinel.domain.decisions import PolicyDecision
-from sentinel.domain.enums import Capability, PolicyOutcome, Workflow
+from sentinel.domain.enums import Capability, PolicyOutcome
 from sentinel.domain.ids import content_hash
+from sentinel.domain.vocab import CONTEXT_VALUES
 from sentinel.policy.models import CONTEXT_FIELDS, FIELD_CATALOG, OPS, Condition, Policy, Rule
 
 
@@ -132,19 +133,9 @@ def validate(policy: Policy) -> None:
 
 
 _CAPABILITY_FIELDS = frozenset({"requested_capability"})
-_ENUM_VALUES: dict[str, frozenset[str]] = {
-    "risk_level": frozenset({"LOW", "MEDIUM", "HIGH", "CRITICAL"}),
-    "security_severity": frozenset({"NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"}),
-    "evidence_verdict": frozenset({"SUPPORTED", "UNSUPPORTED", "CONTRADICTED", "INSUFFICIENT"}),
-    "registration_status": frozenset({"verified", "unverified", "shell"}),
-    "mcc_risk": frozenset({"low", "medium", "high"}),
-    "refund_state": frozenset({"none", "pending", "refunded"}),
-    "transaction_status": frozenset({"settled", "pending", "reversed"}),
-    "merchant_response": frozenset({"none", "accepted", "contested"}),
-    "auth_strength": frozenset({"none", "password", "otp", "biometric", "unknown"}),
-    "account_status": frozenset({"active", "frozen", "closed"}),
-    "workflow": frozenset(w.value for w in Workflow),
-}
+# One source with the record validation (sentinel.domain.vocab), so a value a record may
+# hold is exactly a value a rule may name.
+_ENUM_VALUES: dict[str, frozenset[str]] = CONTEXT_VALUES
 
 
 def lint(policy: Policy) -> list[str]:
@@ -221,6 +212,17 @@ def evaluate(policy: Policy, context: Mapping[str, object]) -> PolicyDecision:
     )
     if mistyped:
         raise PolicyEvaluationError(f"{policy.key}: context fields of the wrong type {mistyped}")
+    # A value outside a field's vocabulary makes every rule on it silently false (a BLOCK on
+    # refund_state == "refunded" never fires for "REFUNDED"): fail closed instead.
+    unknown = sorted(
+        f"{f}={context[f]!r}"
+        for f in needed
+        if f in _ENUM_VALUES and context[f] not in _ENUM_VALUES[f]
+    )
+    if unknown:
+        raise PolicyEvaluationError(
+            f"{policy.key}: context values outside the vocabulary {unknown}"
+        )
     matched = [r for r in policy.rules if rule_matches(r, context)]
     outcome = policy.default_outcome
     for r in matched:

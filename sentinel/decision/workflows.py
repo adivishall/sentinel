@@ -32,6 +32,7 @@ from sentinel.domain.entities import LoginSession, Transaction
 from sentinel.domain.enums import (
     Capability,
     EvidenceKind,
+    EvidenceVerdict,
     FactKind,
     FactsSource,
     ProvenanceStatus,
@@ -850,6 +851,16 @@ def session_record(s: LoginSession) -> dict[str, object]:
     }
 
 
+# The session event that evidences each capability an account-security decision may
+# execute (``capabilities.WORKFLOW_CAPABILITIES``).
+SESSION_EVIDENCE: dict[Capability, str] = {
+    Capability.CHANGE_PAYOUT: "payout_change",
+    Capability.FREEZE_ACCOUNT: "freeze_request",
+    Capability.UNFREEZE_ACCOUNT: "unfreeze_request",
+    Capability.RELEASE_FUNDS: "release_request",
+}
+
+
 def run_account_security(
     rt: Runtime, req: AccountSecurityRequest, opts: RunOptions = DEFAULT_OPTIONS
 ) -> DecisionBundle:
@@ -909,6 +920,20 @@ def run_account_security(
     cap = req.requested_capability
     if cap is None:
         cap = Capability.CHANGE_PAYOUT if "payout_change" in s.events else None
+    # A requested capability is a claim about what the session asked for; the session
+    # record is the evidence. A request the authentication service did not record (a
+    # caller asking to FREEZE_ACCOUNT a stored session that never asked) is held for a
+    # human -- it never executes on the caller's word.
+    evidence_event = SESSION_EVIDENCE.get(cap) if cap is not None else None
+    if cap is not None and evidence_event not in s.events:
+        rec = replace(
+            rec,
+            verdict=EvidenceVerdict.INSUFFICIENT,
+            explanation=(
+                f"{cap.value} was requested, but the session record shows no "
+                f"{evidence_event or 'event that requests it'}; held for a human"
+            ),
+        )
     provider, model = _provider_meta(rt, ai)
     feats = risk.features
     inputs = DecisionInputs(

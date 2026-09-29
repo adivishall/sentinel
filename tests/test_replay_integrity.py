@@ -78,7 +78,7 @@ def test_changed_policy_is_an_explicit_diff(app):
     diff = {d["field"]: (d["before"], d["after"]) for d in r.decision_diff}
     assert diff["policy"][1] == "dispute-refund@v1"
     assert diff["final_action"] == ("DENY", "ALLOW") and r.changed
-    assert r.versions["policy"] == {"recorded": "dispute-refund@v3", "replay": "dispute-refund@v1"}
+    assert r.versions["policy"] == {"recorded": "dispute-refund@v4", "replay": "dispute-refund@v1"}
     assert app.store.decision(did)["final_action"] == "DENY"  # the original is untouched
 
 

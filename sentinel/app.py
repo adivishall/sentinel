@@ -342,6 +342,10 @@ class SentinelApp:
             self._world = _World(ds, g, eng, idx)
         return self._world
 
+    def _now(self) -> str:
+        """The system's now: the dataset's as-of time (the synthetic world's clock)."""
+        return self.world.dataset.as_of or datetime.utcnow().isoformat(timespec="seconds")
+
     # ---- persistence of a bundle ------------------------------------------------------------
     def _rt(self, options: RunOptions) -> Runtime:
         return self.what_if_runtime if options.what_if else self.runtime
@@ -526,6 +530,10 @@ class SentinelApp:
                 envelope = self.store.fact_envelope(FactKind.TRANSACTION.subject(t.transaction_id))
             else:
                 src = FactsSource.CALLER_SUPPLIED
+                # an unsigned transaction's timestamp is a claim: it does not choose the
+                # moment its risk context and account status are read as of (backdating
+                # past a freeze or before a burst changes nothing)
+                t = replace(t, timestamp=self._now())
         ctx = self.transaction_context(t)
         acc = self.store.account(t.account_id)
         mprof = self.world.engine.merchant_risk(t.merchant_id, as_of=t.timestamp)
@@ -768,6 +776,7 @@ class SentinelApp:
                 envelope = self.store.fact_envelope(FactKind.LOGIN_SESSION.subject(s.session_id))
             else:
                 src = FactsSource.CALLER_SUPPLIED
+                s = replace(s, started_at=self._now())  # as for an unsigned transaction
         ctx = self.account_security_context(s)
         msg = (
             UntrustedContent(message, TrustClass.USER_CONTROLLED, "customer_message")

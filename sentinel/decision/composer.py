@@ -36,6 +36,7 @@ from sentinel.domain.enums import (
     FactsSource,
     FinalAction,
     PolicyOutcome,
+    ProvenanceStatus,
     RiskLevel,
     Severity,
     TrustClass,
@@ -105,6 +106,8 @@ class _TrustedView:
     actor: ActorKind
     controls: frozenset[str]
     claim_type: str | None
+    # what establishes the primary record (sentinel.trust); None = no primary record
+    provenance: ProvenanceStatus | None = None
 
 
 _NO_SECURITY = SecurityAssessment(
@@ -129,6 +132,7 @@ def build_policy_context(v: _TrustedView) -> dict[str, object]:
         "risk_factors": [f.code for f in v.risk.factors] if (v.risk and RISK in v.controls) else [],
         "evidence_verdict": v.verdict.value,
         "evidence_supports_claim": v.verdict.supports,
+        "facts_provenance": v.provenance.value if v.provenance is not None else "NONE",
         "contradiction_count": v.contradiction_count,
         "claim_type": v.claim_type or "none",
         "security_severity": sec.severity.value,
@@ -218,6 +222,7 @@ def _decide(
             policy_outcome=pol.outcome,
             evidence_supported=supported,
             workflow=v.workflow,
+            facts_provenance=v.provenance,
         )
     else:
         auth = Authorization(
@@ -256,6 +261,7 @@ def _trusted_view(inputs: DecisionInputs) -> _TrustedView:
         actor=inputs.actor,
         controls=inputs.controls,
         claim_type=inputs.claim_type,
+        provenance=inputs.provenance.status if inputs.provenance is not None else None,
     )
     return view
 

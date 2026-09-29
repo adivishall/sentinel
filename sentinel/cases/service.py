@@ -23,6 +23,7 @@ from sentinel.domain.enums import (
     CaseStatus,
     EvidenceVerdict,
     PolicyOutcome,
+    ProvenanceStatus,
     Workflow,
 )
 from sentinel.domain.ids import content_hash, new_id, now_iso
@@ -157,12 +158,16 @@ class CaseService:
             policy_outcome=PolicyOutcome(case.policy_outcome or "REQUIRE_HUMAN_REVIEW"),
             evidence_supported=case.evidence_verdict
             in (EvidenceVerdict.SUPPORTED.value, EvidenceVerdict.INSUFFICIENT.value),
+            facts_provenance=(
+                ProvenanceStatus(case.facts_provenance) if case.facts_provenance else None
+            ),
         )
         if auth.status is AuthorizationStatus.DENIED:
             return False, f"the capability registry denies it: {auth.reason}"
         return True, (
             f"the registry allows {role} to approve {case.capability} "
-            f"(policy {case.policy_outcome}, evidence {case.evidence_verdict})"
+            f"(policy {case.policy_outcome}, evidence {case.evidence_verdict}, "
+            f"facts {case.facts_provenance or 'of unrecorded provenance'})"
         )
 
     # ---- opening ----------------------------------------------------------------------
@@ -212,6 +217,7 @@ class CaseService:
             capability=d.requested_capability.value if d.requested_capability else None,
             policy_outcome=d.policy.outcome.value,
             evidence_verdict=d.evidence_verdict.value,
+            facts_provenance=d.provenance.status.value if d.provenance is not None else None,
         )
         # an automated case is chained by its decision's audit event (``link_audit``)
         self.repo.save(case)

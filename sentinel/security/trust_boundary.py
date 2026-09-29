@@ -27,6 +27,7 @@ from typing import ClassVar
 from sentinel.domain.enums import ClaimType, EvidenceKind, TrustClass
 from sentinel.domain.evidence import Claim, Evidence
 from sentinel.domain.ids import content_hash
+from sentinel.domain.vocab import RECORD_VALUES
 from sentinel.security.claims import ClaimClassification, classify
 
 
@@ -65,6 +66,7 @@ def record_problems(
     numeric: tuple[str, ...],
     required: tuple[str, ...] = (),
     boolean: tuple[str, ...] = (),
+    vocab: tuple[str, ...] = (),
 ) -> list[str]:
     """Why a trusted record cannot be used as-is: a required field missing, a numeric
     field that is present but not a finite, non-negative number, or a flag that is not a
@@ -76,6 +78,11 @@ def record_problems(
         f"{k}={record[k]!r} is not a boolean"
         for k in boolean
         if k in record and record[k] is not None and parse_bool(record[k]) is None
+    ]
+    out += [  # a value the rules were not written for would make them silently false
+        f"{k}={record[k]!r} is not one of {sorted(RECORD_VALUES[k])}"
+        for k in vocab
+        if k in record and record[k] not in RECORD_VALUES[k]
     ]
     for k in numeric:
         if k in record:
@@ -220,7 +227,19 @@ class DisputeFacts(TrustedFacts):
 
     @classmethod
     def problems(cls, ledger: Mapping[str, object]) -> list[str]:
-        return record_problems(ledger, cls.NUMERIC, required=("amount",), boolean=cls.BOOLEAN)
+        return record_problems(
+            ledger,
+            cls.NUMERIC,
+            required=("amount",),
+            boolean=cls.BOOLEAN,
+            vocab=(
+                "delivery_status",
+                "refund_state",
+                "transaction_status",
+                "merchant_response",
+                "auth_strength",
+            ),
+        )
 
     @classmethod
     def from_ledger(cls, ledger: Mapping[str, object]) -> DisputeFacts:
@@ -294,7 +313,11 @@ class KYBFacts(TrustedFacts):
 
     @classmethod
     def problems(cls, records: Mapping[str, object]) -> list[str]:
-        return record_problems(records, ("domain_age_days", "business_age_days", "prior_flags"))
+        return record_problems(
+            records,
+            ("domain_age_days", "business_age_days", "prior_flags"),
+            vocab=("registration_status", "mcc_risk"),
+        )
 
     @classmethod
     def from_records(cls, records: Mapping[str, object]) -> KYBFacts:

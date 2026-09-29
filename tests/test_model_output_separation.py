@@ -20,6 +20,7 @@ from sentinel.domain.decisions import AIRecommendation
 from sentinel.domain.enums import (
     Capability,
     EvidenceStatus,
+    FactKind,
     FactsSource,
     FinalAction,
     TrustClass,
@@ -31,6 +32,7 @@ from sentinel.policy import DEFAULT_REGISTRY
 from sentinel.security.gateway import GATEWAY
 from sentinel.security.provenance import UntrustedContent
 from sentinel.security.trust_boundary import DisputeFacts, UntrustedText
+from sentinel.trust import local
 
 LEDGER = {"amount": 18000, "delivery_status": "delivered", "policy_auto_limit": 50000}
 
@@ -186,6 +188,7 @@ def test_model_amount_never_becomes_the_decision_amount():
                 controls=FULL,
                 input_hash="h",
                 claim_type="non_receipt",
+                provenance=local(FactKind.DISPUTE_LEDGER, "D", LEDGER),
             )
         )
         assert (

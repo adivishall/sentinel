@@ -178,6 +178,7 @@ def test_case_policy_audit_replay_scenario(db, capsys, tmp_path):
                 "merchant_response": "none",
                 "auth_strength": "otp",
                 "claim_type": "non_receipt",
+                "facts_provenance": "VERIFIED_EXTERNAL",
             }
         )
     )

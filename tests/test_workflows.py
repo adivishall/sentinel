@@ -24,6 +24,7 @@ from sentinel.decision.workflows import (
 from sentinel.domain.entities import Account, LoginSession, Merchant, PaymentInstrument, Transaction
 from sentinel.domain.enums import (
     Capability,
+    FactKind,
     FactsSource,
     FinalAction,
     Severity,
@@ -35,6 +36,8 @@ from sentinel.risk import transaction as txn_risk
 from sentinel.risk.behavioral import BehavioralBaseline
 from sentinel.risk.graph import EntityGraph
 from sentinel.security.provenance import UntrustedContent
+from sentinel.trust.issuer import Issuer
+from sentinel.trust.keys import TrustStore
 
 T0 = datetime(2026, 9, 1, 10, 0)
 
@@ -280,9 +283,33 @@ def test_kyb_document_cannot_onboard_shell_merchant():
             facts_source=SOR,
         ),
     )
-    assert (
-        good.decision.executed and good.decision.executed_capability is Capability.APPROVE_MERCHANT
+    # onboarding decides on the acquirer's own statement: a stored copy goes to a human
+    assert good.decision.final_action is FinalAction.REQUIRE_HUMAN_REVIEW
+    assert not good.decision.executed
+    acquirer = Issuer.ephemeral("acquirer", scopes=("kyb_record",))
+    signed = run_kyb(
+        Runtime(trust=TrustStore.empty().with_key(acquirer.key)),
+        KYBRequest(
+            _u(
+                "We are a long-running bookstore applying to accept cards.",
+                TrustClass.MERCHANT_CONTROLLED,
+                "application",
+            ),
+            {},
+            "MER-BOOKS",
+            envelope=acquirer.sign(
+                FactKind.KYB_RECORD,
+                "MER-BOOKS",
+                {
+                    "registration_status": "verified",
+                    "domain_age_days": 900,
+                    "business_age_days": 1600,
+                    "prior_flags": 0,
+                },
+            ),
+        ),
     )
+    assert signed.decision.executed_capability is Capability.APPROVE_MERCHANT
     border = run_kyb(
         rt,
         KYBRequest(

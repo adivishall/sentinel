@@ -55,7 +55,7 @@ def test_active_and_historical_versions_are_explicit():
         versions = DEFAULT_REGISTRY.versions(pid)
         assert DEFAULT_REGISTRY.active(pid).version == versions[-1]
         assert DEFAULT_REGISTRY.historical(pid) == versions[:-1]
-    assert DEFAULT_REGISTRY.historical("dispute-refund") == [1, 2]
+    assert DEFAULT_REGISTRY.historical("dispute-refund") == [1, 2, 3]
     assert scoring.ACTIVE["transaction"].version == "txn-2.0"
     for surface, model in scoring.ACTIVE.items():
         assert scoring.surface_of(model) == surface
