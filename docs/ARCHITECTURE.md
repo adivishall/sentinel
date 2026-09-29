@@ -91,8 +91,10 @@ Everything composes nine typed, immutable primitives (`sentinel/domain` and the 
 ## Trust classes
 
 ```text
-TRUSTED_INTERNAL      our ledger / records / policies          may authorize
-VERIFIED_EXTERNAL     acquirer / network records we verified   may authorize
+TRUSTED_INTERNAL      a record read from our store; policies   may authorize
+VERIFIED_EXTERNAL     a record whose issuer's signature        may authorize
+                      verified against the trust store
+UNVERIFIED_RECORD     body facts; failed / stale signatures    never
 USER_CONTROLLED       cardholder text, chat turns, forms       never
 MERCHANT_CONTROLLED   applications, descriptors, site copy     never
 DOCUMENT_CONTROLLED   uploaded invoices, receipts, PDFs        never
@@ -103,6 +105,18 @@ UNKNOWN               unlabelled third-party content           never
 `TrustClass.is_trusted` is the only predicate the platform uses, and it is true
 for exactly the first two. `UntrustedContent`, `UntrustedText`, `Claim` and
 `AIRecommendation` all refuse to be constructed with a trusted class.
+
+A record's class comes from its fact provenance (`sentinel/trust/`,
+`docs/SECURITY_MODEL.md`). Each workflow computes it in `_resolve_facts`,
+before any `TrustedFacts` exists:
+
+- an issuer's signed envelope is verified against the runtime's trust store
+  and anti-rollback sequences;
+- a store read is `TRUSTED_LOCAL`;
+- a request body is `UNTRUSTED`.
+
+The decision, its snapshot and its audit event carry the result and the
+payload digest.
 
 ## The trust boundary as types (`security/trust_boundary.py`)
 
@@ -233,9 +247,10 @@ call it. The evaluation suites call the workflows directly with `persist=False`.
 ## Dependency direction
 
 ```text
-domain  ←  policy, audit, agents, security
+domain  ←  policy, audit, agents, security, trust
+trust  ←  (domain; pyca/cryptography for Ed25519, the only runtime dependency)
 security  ←  risk, evidence, cases
-decision  ←  (agents, audit, cases, evidence, policy, risk, security)
+decision  ←  (agents, audit, cases, evidence, policy, risk, security, trust)
 data  ←  (audit, risk)          replay  ←  (decision, policy, risk)
 app  ←  (audit, cases, data, decision, policy, replay, risk, security)
 api, cli, evaluation  ←  app and the layers below

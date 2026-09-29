@@ -30,8 +30,9 @@ block.
    claims no regulatory compliance, no sanctions screening, no filing
    capability and no production AML effectiveness.
 4. **KYB records are synthetic** (registration status, domain/business age,
-   prior flags, MCC tier). A real acquirer's records would be
-   `VERIFIED_EXTERNAL` evidence from an integration that does not exist here.
+   prior flags, MCC tier). In the demo they are signed by an ephemeral,
+   in-process issuer. A real acquirer would sign them with a key the operator
+   trusts, and no such integration exists here.
 5. **Documents are plain text.** Uploads are treated as untrusted text (which
    is the point); there is no PDF/OCR parser.
 
@@ -101,25 +102,42 @@ block.
     original from its snapshot, a deliberate engine change reports drift on
     every earlier decision until they are re-baselined -- which is the point,
     but it is noisy.
-16. **Sentinel does not verify the facts it adjudicates against.** The
-    "system of record" is a synthetic SQLite store, and `ledger`, `records`,
-    `transaction` and `session` objects in a request body are demo /
-    simulation input trusted by contract -- every decision says which it was
-    (`facts_source`) and the audit event records it, but nothing in the
-    protocol proves the caller is a system of record. A caller-supplied
-    transaction also chooses its own timestamp, i.e. the moment its risk is
-    computed as of. Auth is optional and the server warns when it starts open
-    on a non-loopback address. What-if
-    switches (controls, policy version, risk model, `as_of`) are refused on
-    the evaluate routes, and the engine never records a run that used one.
+16. **Sentinel verifies who stated a fact, not whether the fact is true.**
+    Record facts carry a provenance status (`docs/SECURITY_MODEL.md`).
+    - An issuer's signed statement is `VERIFIED_EXTERNAL` only when it
+      verifies against the operator's trust store.
+    - Record facts in a request body are `UNTRUSTED` and never execute a
+      capability.
+    - A record read from the store is `TRUSTED_LOCAL`: trusted for where it is
+      kept, so a DB-write attacker could change it unless signed facts are
+      required.
+
+    Two scope limits apply. The demo's issuer is an ephemeral in-process key,
+    and no real issuer is integrated. The risk context around a record
+    (history, graph, account status) is read from the store and is at most
+    `TRUSTED_LOCAL`; only the primary record is signed.
+
+    A caller-supplied transaction still chooses its own timestamp, which
+    moves its point-in-time risk context. Being `UNTRUSTED`, it cannot
+    execute.
+
+    Auth is optional, and the server warns when it starts open on a
+    non-loopback address. What-if switches (controls, policy version, risk
+    model, `as_of`) are refused on the evaluate routes, and the engine never
+    records a run that used one.
 17. **The audit chain's external anchor is the operator's job.** It is a
-    tamper-evident application audit chain -- not a blockchain, not an
+    tamper-evident application audit chain, not a blockchain and not an
     immutable ledger. Modification, deletion, insertion and reordering are
-    detected and the first bad record is named; a storage attacker who
-    rewrites the *entire* chain consistently from genesis is detected only
-    against a checkpoint (`sentinel audit checkpoint`, HMAC-signed with
-    `SENTINEL_AUDIT_KEY`) that must be stored outside the audit store and
-    whose key must be managed.
+    detected, and the first bad record is named, **when the rewriter cannot
+    recompute the chain**.
+
+    A storage attacker can recompute it. A consistent rewrite of every event
+    after the last checkpoint passes both `verify` and checkpoint
+    verification. Only the prefix up to a checkpoint the operator stores
+    outside the audit store is protected (`sentinel audit checkpoint`). That
+    checkpoint is HMAC-signed with `SENTINEL_AUDIT_KEY`, so anyone who can
+    verify it can also forge one. Asymmetric, externally anchored checkpoints
+    are roadmap issue #17.
 
 ## Known weaknesses (deliberately not tuned away)
 

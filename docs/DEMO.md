@@ -7,7 +7,7 @@ API key. Every number shown is computed at demo time by the engine.
 
 ```bash
 git clone https://github.com/adivishall/sentinel.git && cd sentinel
-make install         # dev tooling + the `sentinel` command; the core has no runtime deps
+make install         # dev tooling + the `sentinel` command (one runtime dependency: cryptography)
 make api             # API + console on http://localhost:8000 (in-memory demo dataset)
 ```
 

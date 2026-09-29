@@ -216,7 +216,8 @@ decision was made under with the hash the registry serves now and flags
 `original_drift` if the engine no longer reproduces the recorded outcome.
 
 **Why SQLite?**
-The core is standard-library only and runs from a clean checkout; SQLite gives
+The core is the standard library plus one dependency (pyca/cryptography, for signatures)
+and runs from a clean checkout; SQLite gives
 real tables, indexes, transactions and a file you can inspect. All SQL lives
 in one module behind repository adapters. Postgres is a driver change, not a
 redesign.

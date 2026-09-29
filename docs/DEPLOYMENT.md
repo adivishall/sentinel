@@ -45,10 +45,28 @@ SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models   # same corpus, real 
 | `SENTINEL_API_KEY` | unset | if set, the API requires this bearer token (`/health`, `/version` stay open) |
 | `SENTINEL_RATE_LIMIT` | `600` | requests per minute per client (0 = off) |
 | `SENTINEL_AUDIT_KEY` | unset | if set, `sentinel audit checkpoint` signs the exported checkpoint with HMAC-SHA256 and `audit verify --checkpoint` authenticates it; keep the key and the checkpoint outside the audit store |
+| `SENTINEL_TRUST_STORE` | unset (nothing trusted) | trust store JSON: the public keys of the issuers whose signed fact envelopes Sentinel accepts (`sentinel trust keygen`, `docs/SECURITY_MODEL.md`). Keep it outside any directory the data or policies live in |
+| `SENTINEL_REQUIRE_SIGNED_FACTS` | off (on for the in-memory demo) | every record read by id must come with its issuer's signed statement; a missing one is `INVALID` |
 | `SENTINEL_LOG` | `WARNING` | `INFO` for structured per-decision JSON logs |
 | `PORT` | `8000` | listen port |
 
 Secrets come from the environment only. `.env.example` documents them.
+
+### Issuer keys and the trust store
+
+```bash
+sentinel trust keygen --issuer core-ledger --scopes dispute_ledger \
+    --key-out /secure/core-ledger.pem --trust-out /etc/sentinel/trust.json
+sentinel trust sign --key /secure/core-ledger.pem --issuer core-ledger \
+    --kind dispute_ledger --id DSP-000123 --payload ledger.json --out envelope.json
+sentinel --trust-store /etc/sentinel/trust.json trust verify envelope.json --kind dispute_ledger
+sentinel --trust-store /etc/sentinel/trust.json trust revoke <key_id> --reason compromised
+```
+
+The private key belongs to the issuer (the system of record), never to the
+Sentinel host. The trust store holds public keys only. Revoking a key makes
+everything it signed `REVOKED`; retiring it (`not_after`) keeps earlier
+statements valid until they expire.
 
 ## Static console (GitHub Pages)
 

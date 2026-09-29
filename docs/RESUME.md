@@ -1,7 +1,7 @@
 # Résumé material
 
 **Sentinel — Financial Decision Security for AI-assisted finance**
-(Python, standard library only · SQLite · versioned HTTP API · CLI · web console)
+(Python standard library + pyca/cryptography · SQLite · versioned HTTP API · CLI · web console)
 
 Three bullets, rendered from `results/` by `make docs`: if a number changes,
 the bullet changes with it. Every number is measured on synthetic corpora and
@@ -11,7 +11,7 @@ transactions, fraud savings or regulatory compliance are claimed.
 
 <!-- gen:resume -->
 - **Financial decision-security architecture.** Designed and built Sentinel, a
-  standard-library Python system between LLM agents and consequential financial
+  Python system (standard library plus one cryptography dependency) between LLM agents and consequential financial
   actions (refunds, payment authorisation, merchant onboarding, account
   security): agents may recommend, but only trusted records, versioned
   fail-closed policy and a capability registry can authorize, and the

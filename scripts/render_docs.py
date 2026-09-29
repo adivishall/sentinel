@@ -965,6 +965,7 @@ and {i['n_legit']} deserved controls:
 | *Supporting ledger:* a capability executed without ledger support | **{pct(i['executed_without_ledger_support'])}** | — | structural |
 | *Supporting ledger:* attacker text changed the outcome vs a neutral message (selected the claim) | {pct(i['text_selected_claim_on_supporting_ledger'])} | — | by design |
 | *Supporting ledger:* attacker text was approved (a deserved refund, whatever the prose) | {pct(i['attack_text_approved_on_supporting_ledger'])} | — | by design |
+| *Supporting ledger sent **unsigned*** (a request body, `UNTRUSTED`): a capability executed | **{pct(i['unsigned_supporting_facts_executed'])}** | — | structural |
 
 The structural rows are expected to be 0 -- the attack ledgers do not support
 the claims -- and are kept as regression checks. The last two rows are the
@@ -1120,13 +1121,14 @@ def render_performance(p: dict[str, Any]) -> str:
         "gateway_inspect": f"same narrative, {n_sig} signals",
         "claim_classify": "same narrative",
         "evidence_reconcile": "ledger facts + claim",
+        "fact_verify": "Ed25519 fact envelope: canonical JSON, digest, signature, times",
         "risk_score_transaction": f"{w['baseline_transactions']}-txn baseline, {n_rules} rules",
         "graph_linked_accounts": f"{w['graph_nodes']:,}-node graph",
         "graph_neighborhood_d2": "depth-2 neighbourhood",
         "policy_evaluate": f"{w['policy_rules']} rules, {w['policy_context_fields']}-field context (the composer's real context)",
         "decision_compose": "full DecisionInputs",
         "audit_append": "in-memory chain",
-        "e2e_dispute_pipeline": "gateway → agent → evidence → policy → authorization",
+        "e2e_dispute_pipeline": "fact verification → gateway → agent → evidence → policy → authorization",
     }
     rows = tbl(
         ["Component", "Workload", "p50 ms", "p95 ms", "p99 ms", "ops/s"],
@@ -1203,8 +1205,9 @@ make docs
 # --------------------------------------------------------------------------- SECURITY MODEL
 
 TRUST_NOTES = {
-    "TRUSTED_INTERNAL": "our own ledger, records and policies",
-    "VERIFIED_EXTERNAL": "acquirer / network records the institution verified",
+    "TRUSTED_INTERNAL": "a record read by id from Sentinel's own record store (fact provenance `TRUSTED_LOCAL`); our own policies",
+    "VERIFIED_EXTERNAL": "a record whose issuer's signed statement verified against the operator's trust store (fact provenance `VERIFIED_EXTERNAL`)",
+    "UNVERIFIED_RECORD": "record fields Sentinel could not establish: sent in a request body, or carried by a signature that failed, expired, was revoked or was superseded -- claims about the records, never facts",
     "USER_CONTROLLED": "a cardholder narrative, chat turn or form field",
     "MERCHANT_CONTROLLED": "merchant application copy, descriptors, site text",
     "DOCUMENT_CONTROLLED": "an uploaded invoice, receipt or PDF (treated as text)",
@@ -1233,13 +1236,37 @@ CASE_RULES = [
 ]
 
 
+PROVENANCE_NOTES = {
+    "VERIFIED_EXTERNAL": "an issuer's signed fact envelope verified: known key, the issuer's own, scoped to the kind of fact, unrevoked, signed within the key's validity, about this record, unexpired, not older than a statement already acted on",
+    "TRUSTED_LOCAL": "read by id from Sentinel's record store, unsigned: trusted for where it is kept, not because anything proves it (a DB-write attacker could change it)",
+    "UNTRUSTED": "sent in the request body, unsigned: a claim about the records",
+    "EXPIRED": "a valid signature past its `expires_at`",
+    "SUPERSEDED": "a valid signature older than a statement about the same record that this deployment already acted on (a replayed statement)",
+    "REVOKED": "signed by a key the operator revoked; a compromised key can backdate, so its `issued_at` does not help",
+    "INVALID": "malformed, altered, unknown or wrong signer, out of scope, another record's statement, issued in the future, valid longer than the key allows, a stored row that differs from its signed statement, or a record-store read with no statement where the deployment requires one",
+}
+
+
 def render_security_model() -> str:
-    from sentinel.domain.enums import TrustClass
+    from sentinel.domain.enums import ProvenanceStatus, TrustClass
     from sentinel.security import capabilities, injection
     from sentinel.security.threats import TAXONOMY
 
     for tc in TrustClass:
         assert tc.value in TRUST_NOTES, f"undocumented trust class {tc}"
+    for ps in ProvenanceStatus:
+        assert ps.value in PROVENANCE_NOTES, f"undocumented provenance status {ps}"
+    prov_rows = tbl(
+        ["Provenance", "Meaning", "Can support an outcome"],
+        [
+            [
+                f"`{ps.value}`",
+                PROVENANCE_NOTES[ps.value],
+                "**yes**" if ps.trusted else "no -- stricter outcomes only",
+            ]
+            for ps in ProvenanceStatus
+        ],
+    )
     trust_rows = tbl(
         ["Trust class", "Source", "May reach the authoritative decision"],
         [
@@ -1394,7 +1421,7 @@ def render_security_model() -> str:
                     required_authorization(cap)
                     + (" to approve" if required_authorization(cap) != "NOBODY" else "")
                 ),
-                "decision event (action, capability, facts source, snapshot hash)",
+                "decision event (action, capability, facts provenance + payload digest, snapshot hash)",
             ]
         )
     assert {r[0].strip("`") for r in trace_rows} == set(reach)
@@ -1450,6 +1477,61 @@ refuses to be VERIFIED from an untrusted class; `UntrustedText`, `Claim` and
 `AIRecommendation` refuse a trusted class. Trust does not launder through a
 model call: the agent read the attacker's text, so its output is
 `MODEL_GENERATED`.
+
+A record's trust class is not a property of its Python type. It comes from the
+record's **fact provenance**, which the workflow computes from how the facts
+arrived.
+
+## Fact provenance (`sentinel/trust/`)
+
+Why may Sentinel trust the facts it decides on? Every decision carries one
+`FactProvenance` for its primary record (dispute ledger, acquirer record,
+transaction, login session): a status, the issuer and key, the digest of the
+exact signed statement, and the digest of the exact payload used. The workflow
+computes it (`workflows._resolve_facts`); no request field can set it.
+
+{prov_rows}
+
+- **Signed fact envelopes.** An issuer (the core ledger, the acquirer's KYB
+  registry, the authentication service) signs `sentinel.fact/1` envelopes with
+  Ed25519 (RFC 8032, via pyca/cryptography; Sentinel implements no
+  cryptographic primitive). The signature covers the domain prefix
+  `sentinel.fact/1\n` and the canonical JSON of the header. The header names
+  the issuer, key, kind, subject, sequence, issued / effective / expires times
+  and the payload's SHA-256.
+- **Canonical JSON.** Signing needs one byte string per value. Floats, NaN,
+  duplicate keys, out-of-range integers, lone surrogates and deep nesting are
+  refused, not normalised. The API rejects duplicate keys in every request
+  body.
+- **The trust store** is operator configuration (`SENTINEL_TRUST_STORE`,
+  `--trust-store`) and holds public keys only. Each key has one purpose, its
+  scopes, a validity window and a maximum statement lifetime. A key id is the
+  fingerprint of its public key, so an entry cannot claim another key's
+  identity. Rotation (`not_after`) keeps earlier statements valid until they
+  expire. Revocation invalidates everything the key ever signed.
+- **Anti-rollback.** The highest sequence acted on per issuer and subject is
+  stored. An older statement is `SUPERSEDED`, and a different statement with
+  the same sequence is `INVALID` (equivocation).
+- **Record-store tampering.** A record read by id is checked field by field
+  against its stored signed statement. With `require_signed_facts` (on
+  whenever the app signs its own records), a stored record whose statement is
+  missing is `INVALID`. Deleting a statement therefore cannot downgrade a
+  tampered row to `TRUSTED_LOCAL`.
+- **Asymmetry.** Unverified records can make an outcome stricter (a refunded
+  ledger still denies) but never support one. Reconciliation turns what they
+  would support into `INSUFFICIENT`, which goes to human review, so they never
+  execute a capability.
+
+**What `VERIFIED_EXTERNAL` proves.** The holder of a key the operator trusts
+for this issuer and this kind of fact signed exactly this payload about this
+record, within the key's validity. The statement has not expired and is not
+older than one already acted on.
+
+**What it does not prove.** That the issuer's record is *true*; that the
+issuer has not issued a newer statement Sentinel has not yet seen (expiry
+bounds that window); or anything about a key the operator should not have
+trusted. The demo's issuer is ephemeral and in-process: it shows the
+mechanism, not an external trust relationship.
 
 ## Capability security matrix
 
@@ -2482,8 +2564,10 @@ Rendered by `make docs` from `sentinel/domain/enums.py`,
 
 ## Evidence objects
 
-Every fact the decision sees is an `Evidence` object: an id, a kind, a
-source, a trust class, a field, a value, a status and a content hash. Two
+Every record field and claim a reconciliation weighs is an `Evidence` object:
+an id, a kind, a source, a trust class, a field, a value, a status and a
+content hash. (The policy additionally reads a flat context of named fields;
+`docs/POLICY_ENGINE.md`.) Two
 constructors exist and the type enforces the boundary: `Evidence.fact` is
 VERIFIED and accepts only {trusted}; `Evidence.claim` is CLAIMED and refuses a
 trusted class. A `MODEL_GENERATED` value can therefore never become VERIFIED
@@ -2520,8 +2604,26 @@ only chooses which field to read.
 `TrustedFacts` subclasses are built from records only (`from_ledger`,
 `from_records`), and each constructor reads its declared fields by name: any
 other key on the mapping (a `narrative`, `document` or `note`) is never
-copied (`tests/test_trust_boundary.py`). Every field renders itself as
-VERIFIED evidence.
+copied (`tests/test_trust_boundary.py`).
+
+How far a record can be trusted is its **fact provenance**
+(`docs/SECURITY_MODEL.md`, `sentinel/trust/`), not its type:
+
+- a record whose issuer's signed statement verified renders as VERIFIED
+  `VERIFIED_EXTERNAL` evidence;
+- a record read from Sentinel's store renders as VERIFIED `TRUSTED_INTERNAL`
+  evidence;
+- anything else (a request body, or a signature that failed, expired, was
+  revoked or superseded) renders as CLAIMED `UNVERIFIED_RECORD`.
+
+A claim that only an unverified record would support is `INSUFFICIENT`
+(`reconcile._gate`), so it goes to a human and never executes.
+
+A ledger flag stated as `null` is *unknown*. A claim that depends on an
+unknown flag is `INSUFFICIENT`, never decided on an assumed value. The record
+store holds no card-present or cancellation record, so a stored dispute's
+ledger states those flags as unknown. `policy_auto_limit` is a policy
+parameter and is never read from a ledger.
 
 {dfields}
 
@@ -3041,7 +3143,7 @@ review. None of it is claimed."""
         [
             "| | |",
             "|---|---|",
-            "| **What** | A standard-library Python engine, versioned HTTP API, CLI and web console "
+            "| **What** | A Python engine (standard library plus one cryptography dependency), versioned HTTP API, CLI and web console "
             "that sits between AI agents and the financial actions they might trigger: refunds, "
             "payment authorisation, merchant onboarding, account security, investigations. |",
             "| **Why** | Those decisions read attacker-controlled information through legitimate "
@@ -3095,7 +3197,7 @@ positives {cl['false_positives']} / {cl['false_positive_n']} (`docs/EVALUATION.m
     out[
         "resume"
     ] = f"""- **Financial decision-security architecture.** Designed and built Sentinel, a
-  standard-library Python system between LLM agents and consequential financial
+  Python system (standard library plus one cryptography dependency) between LLM agents and consequential financial
   actions (refunds, payment authorisation, merchant onboarding, account
   security): agents may recommend, but only trusted records, versioned
   fail-closed policy and a capability registry can authorize, and the

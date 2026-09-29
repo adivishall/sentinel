@@ -15,11 +15,12 @@ must be a function of trusted evidence, risk state, policy and authorization
 |---|---|---|
 | Malicious cardholder / fraudster | dispute narratives, chat turns, forms, "claims" about facts | the ledger, the policy, tool wiring |
 | Malicious merchant | applications, uploaded documents, descriptors, site copy | acquirer records |
+| API caller / compromised integration | request bodies: record facts, fact envelopes, timestamps, capability fields | a `VERIFIED_EXTERNAL` fact (that takes an issuer's private key); body facts are `UNTRUSTED` and never execute |
 | Third-party content | emails, pages, order-status text the agent reads | anything trusted |
 | Compromised / over-permissive AI agent | its own output: recommendations and tool calls | authorization |
 | Malicious model output | the same channel as above | evidence status |
 | Insider / operator error | policy misconfiguration | the field catalog / validation |
-| Storage attacker | records at rest | undetected edits to the audit chain |
+| Storage attacker | records at rest, including the audit chain | a record behind a signed statement (a changed row, or a deleted statement under `require_signed_facts`, is `INVALID`); audit events before the last checkpoint the operator holds outside the store |
 
 ## Trust boundary
 
@@ -28,6 +29,16 @@ Every piece of information that enters the decision system carries a
 `VERIFIED` evidence; the type system refuses the rest
 (`Evidence.__post_init__`). Model output is `MODEL_GENERATED` -- untrusted --
 even though it came from "our" AI.
+
+A record's trust class comes from its **fact provenance**
+(`docs/SECURITY_MODEL.md`), not from its type. The provenance is computed from
+how the record arrived:
+
+- read from the store: `TRUSTED_LOCAL`;
+- an issuer's signed statement that verifies against the operator's trust
+  store: `VERIFIED_EXTERNAL`;
+- a request body, or a signature that fails, expires, was revoked or was
+  superseded: never trusted.
 
 ## Threat taxonomy
 
@@ -99,8 +110,10 @@ closes them.
 
 ## Explicitly out of scope
 
-- **Ledger integrity.** Sentinel decides over records it is given; poisoning
-  the ledger is a different threat with different controls.
+- **Whether an issuer's record is true.** Sentinel verifies *who* stated a
+  record and that it was not altered, replayed or revoked. It does not verify
+  that the ledger itself is correct: poisoning the issuer is a different
+  threat, with different controls.
 - **Binary document parsing.** Uploads are treated as untrusted *text*.
 - **Real sanctions / AML providers, regulatory filing.** The monitoring layer
   is a labelled simulation.
@@ -123,19 +136,29 @@ closes them.
   and `sentinel eval run --suite models` exist to probe a real model. Its
   attack-success rate is a property of the simulator, which shares an author
   with the corpus.
-- The API's trusted inputs (`ledger`, `records`, `transaction`, `session`)
-  are trusted by contract, not by proof: the caller is assumed to be the
-  system of record. Auth is optional; the server warns when it starts open on
-  a non-loopback bind. What-if switches are refused on the evaluate routes.
+- Record facts in a request body (`ledger`, `records`, `transaction`,
+  `session`) are `UNTRUSTED`: they can make an outcome stricter but never
+  execute a capability.
+- `TRUSTED_LOCAL` records are trusted because of where they are stored, so a
+  DB-write attacker can change an unsigned record. Where the store is not a
+  sufficient boundary, require signed facts (`SENTINEL_REQUIRE_SIGNED_FACTS`,
+  plus a trust store).
+- The demo's issuer is an ephemeral in-process key. It demonstrates the
+  mechanism, not an external trust relationship.
+- Auth is optional, and the server only warns when it starts open on a
+  non-loopback bind. What-if switches are refused on the evaluate routes.
 - Shipped policy versions are pinned by digest, so an in-place edit fails
   closed; someone who can edit both the policy and the manifest can still
   change it -- production needs signed, immutable policy artefacts.
-- The audit chain detects modification, deletion, insertion and reordering.
-  A consistent rewrite of the whole chain from genesis is detected only
-  against a checkpoint (`sentinel audit checkpoint`, HMAC-signed with
-  `SENTINEL_AUDIT_KEY`) that the operator must store outside the audit store;
-  the chain is a tamper-evident application audit chain, not a blockchain and
-  not an immutable ledger.
+- The audit chain detects modification, deletion, insertion and reordering by
+  anyone who cannot recompute it. A storage attacker **can** recompute it: a
+  consistent rewrite of the events after the last checkpoint passes both
+  `verify` and checkpoint verification (verified in the 2.3 trust audit).
+  Only events up to a checkpoint the operator holds outside the store are
+  protected. The checkpoint is HMAC-signed (`SENTINEL_AUDIT_KEY`), so anyone
+  who can verify it can also forge one. Asymmetric, externally anchored
+  checkpoints are issue #17. The chain is a tamper-evident application audit
+  chain, not a blockchain and not an immutable ledger.
 - A clean merchant whose upload carries a HIGH or CRITICAL injection is held
   or blocked rather than approved (5 of the 12 such applications in the KYB
   suite); lower-severity text does not stop an approval the records support

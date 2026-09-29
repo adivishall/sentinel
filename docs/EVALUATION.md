@@ -29,7 +29,7 @@ hostile document.
 | **Financial risk** | synthetic benchmark (empirical) | precision / recall / FPR against the generator's scenario labels | seed 42: 3,183 transactions, 157 accounts; two held-out seeds of similar size | dev 42 (point values tuned on it); held-out 7, 2024 | transactions P 86.7% R 67.2% FPR 0.19%; accounts P 90.0% R 90.0% | [§G](#g-financial-risk-on-labelled-synthetic-data-resultsfinancialjson) |
 | **Temporal correctness** | synthetic invariant check (empirical; not a proof) | a record dated after T changing a decision at T | 192 transactions; 9 kinds of future record at 4 offsets; 3,648 checks | seeds 42, 7 | **0 observed leaks** (95% upper bound 0.082% per check, 1.55% per sampled transaction) | [§I](#i-temporal-correctness-resultstemporaljson) |
 | **Claim classifier** | synthetic, same author; defence in depth, not the foundation | legitimate claims read as their type; the rest held for a human | 117 phrasings; 21 held-out unusual phrasings | hand-authored | held-out: first (blind) run 7/21; 17/21 after the patterns were extended by an author who had seen the misses; FN 4/56, FP 0/28 | [§L](#l-claim-classifier-resultsclaimsjson) |
-| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.7608 ms | [PERFORMANCE.md](PERFORMANCE.md) |
+| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 1.1244 ms | [PERFORMANCE.md](PERFORMANCE.md) |
 | **Live LLM** | live-model evaluation | the same suites against a real model | -- | `claude-opus-5-5` | **NOT RUN** -- no live number is quoted anywhere | [§K](#k-model--provider-evaluation-resultsmodelsjson) |
 
 ## Three kinds of numbers
@@ -469,6 +469,7 @@ and 14 deserved controls:
 | *Supporting ledger:* a capability executed without ledger support | **0.0%** | — | structural |
 | *Supporting ledger:* attacker text changed the outcome vs a neutral message (selected the claim) | 44.1% | — | by design |
 | *Supporting ledger:* attacker text was approved (a deserved refund, whatever the prose) | 8.2% | — | by design |
+| *Supporting ledger sent **unsigned*** (a request body, `UNTRUSTED`): a capability executed | **0.0%** | — | structural |
 
 The structural rows are expected to be 0 -- the attack ledgers do not support
 the claims -- and are kept as regression checks. The last two rows are the
@@ -550,17 +551,18 @@ Sequential, single-threaded, persistence excluded; machine-dependent.
 
 | Component | p50 ms | p95 ms | p99 ms | ops/s |
 |---|---:|---:|---:|---:|
-| `normalize` | 0.0173 | 0.0177 | 0.021 | 57,382 |
-| `gateway_inspect` | 0.224 | 0.2313 | 0.2742 | 4,441 |
-| `claim_classify` | 0.2572 | 0.2652 | 0.2884 | 3,867 |
-| `evidence_reconcile` | 0.0345 | 0.036 | 0.0394 | 28,596 |
-| `risk_score_transaction` | 0.0146 | 0.015 | 0.0176 | 66,843 |
-| `graph_linked_accounts` | 0.0038 | 0.004 | 0.0049 | 251,051 |
-| `graph_neighborhood_d2` | 0.0529 | 0.0536 | 0.0572 | 18,572 |
-| `policy_evaluate` | 0.0144 | 0.0147 | 0.0175 | 65,475 |
-| `decision_compose` | 0.0387 | 0.0421 | 0.0568 | 25,264 |
-| `audit_append` | 0.0087 | 0.01 | 0.0132 | 112,277 |
-| `e2e_dispute_pipeline` | 0.7205 | 0.7608 | 0.7985 | 1,377 |
+| `normalize` | 0.0178 | 0.0187 | 0.0209 | 55,706 |
+| `gateway_inspect` | 0.233 | 0.2664 | 0.3281 | 4,181 |
+| `claim_classify` | 0.264 | 0.317 | 0.3919 | 3,672 |
+| `evidence_reconcile` | 0.0361 | 0.0413 | 0.1019 | 26,009 |
+| `fact_verify` | 0.177 | 0.2302 | 0.4146 | 5,277 |
+| `risk_score_transaction` | 0.0149 | 0.0174 | 0.0608 | 61,828 |
+| `graph_linked_accounts` | 0.004 | 0.0047 | 0.0069 | 234,666 |
+| `graph_neighborhood_d2` | 0.0578 | 0.0642 | 0.2271 | 16,499 |
+| `policy_evaluate` | 0.0149 | 0.0173 | 0.0377 | 63,593 |
+| `decision_compose` | 0.0398 | 0.0482 | 0.0883 | 23,885 |
+| `audit_append` | 0.009 | 0.0114 | 0.0288 | 102,580 |
+| `e2e_dispute_pipeline` | 0.9452 | 1.1244 | 1.2266 | 1,025 |
 
 A live LLM call (hundreds of milliseconds) dominates real latency by three
 orders of magnitude; Sentinel's own controls are not the bottleneck.
@@ -571,8 +573,8 @@ orders of magnitude; Sentinel's own controls are not the bottleneck.
 
 | Provider | Model | Date | Status | ASR no controls | ASR Sentinel | FP | Latency p95 ms | Tokens in / out | Note |
 |---|---|---|---|---|---|---|---|---|---|
-| offline | `offline-simulator` | 2026-09-26 | ok | 90.0% | 0.0% | 0.0% | 0.143 | — |  |
-| anthropic | `claude-opus-5-5` | 2026-09-26 | not_run | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
+| offline | `offline-simulator` | 2026-09-29 | ok | 90.0% | 0.0% | 0.0% | 0.163 | — |  |
+| anthropic | `claude-opus-5-5` | 2026-09-29 | not_run | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
 
 Each provider row records the model, the run date, per-class outcomes, agent
 latency and the provider's token totals where its SDK reports them
@@ -635,5 +637,5 @@ make eval                      # everything above (main + held-out + surfaces = 
 make docs                      # re-render this file and every generated block from results/ and the code
 sentinel eval run --suite security|heldout|surfaces|kyb|baselines|ablation|financial|integrity|temporal|claims|performance|models|charts
 sentinel eval run --suite financial --full     # larger dataset (400 customers / 12k transactions)
-make test                      # 640 tests, incl. tests/test_results_regression.py which recomputes the headline claims
+make test                      # 709 tests, incl. tests/test_results_regression.py which recomputes the headline claims
 ```

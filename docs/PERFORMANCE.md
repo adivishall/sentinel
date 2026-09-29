@@ -10,20 +10,21 @@ machine-dependent -- reproduce locally.
 
 | Component | Workload | p50 ms | p95 ms | p99 ms | ops/s |
 |---|---|---:|---:|---:|---:|
-| `normalize` | 310-char narrative | 0.0173 | 0.0177 | 0.021 | 57,382 |
-| `gateway_inspect` | same narrative, 13 signals | 0.224 | 0.2313 | 0.2742 | 4,441 |
-| `claim_classify` | same narrative | 0.2572 | 0.2652 | 0.2884 | 3,867 |
-| `evidence_reconcile` | ledger facts + claim | 0.0345 | 0.036 | 0.0394 | 28,596 |
-| `risk_score_transaction` | 40-txn baseline, 33 rules | 0.0146 | 0.015 | 0.0176 | 66,843 |
-| `graph_linked_accounts` | 8,403-node graph | 0.0038 | 0.004 | 0.0049 | 251,051 |
-| `graph_neighborhood_d2` | depth-2 neighbourhood | 0.0529 | 0.0536 | 0.0572 | 18,572 |
-| `policy_evaluate` | 14 rules, 26-field context (the composer's real context) | 0.0144 | 0.0147 | 0.0175 | 65,475 |
-| `decision_compose` | full DecisionInputs | 0.0387 | 0.0421 | 0.0568 | 25,264 |
-| `audit_append` | in-memory chain | 0.0087 | 0.01 | 0.0132 | 112,277 |
-| `e2e_dispute_pipeline` | gateway → agent → evidence → policy → authorization | 0.7205 | 0.7608 | 0.7985 | 1,377 |
+| `normalize` | 310-char narrative | 0.0178 | 0.0187 | 0.0209 | 55,706 |
+| `gateway_inspect` | same narrative, 13 signals | 0.233 | 0.2664 | 0.3281 | 4,181 |
+| `claim_classify` | same narrative | 0.264 | 0.317 | 0.3919 | 3,672 |
+| `evidence_reconcile` | ledger facts + claim | 0.0361 | 0.0413 | 0.1019 | 26,009 |
+| `fact_verify` | Ed25519 fact envelope: canonical JSON, digest, signature, times | 0.177 | 0.2302 | 0.4146 | 5,277 |
+| `risk_score_transaction` | 40-txn baseline, 33 rules | 0.0149 | 0.0174 | 0.0608 | 61,828 |
+| `graph_linked_accounts` | 8,403-node graph | 0.004 | 0.0047 | 0.0069 | 234,666 |
+| `graph_neighborhood_d2` | depth-2 neighbourhood | 0.0578 | 0.0642 | 0.2271 | 16,499 |
+| `policy_evaluate` | 14 rules, 26-field context (the composer's real context) | 0.0149 | 0.0173 | 0.0377 | 63,593 |
+| `decision_compose` | full DecisionInputs | 0.0398 | 0.0482 | 0.0883 | 23,885 |
+| `audit_append` | in-memory chain | 0.009 | 0.0114 | 0.0288 | 102,580 |
+| `e2e_dispute_pipeline` | fact verification → gateway → agent → evidence → policy → authorization | 0.9452 | 1.1244 | 1.2266 | 1,025 |
 
 Context: a real back-office LLM call is 300–2,000 ms. The full protected
-pipeline adds ≈0.7608 ms at p95 -- about three orders of magnitude
+pipeline adds ≈1.1244 ms at p95 -- about three orders of magnitude
 below the decision it protects. The per-decision SQLite writes (risk
 assessment, evidence, decision + snapshot, audit event) are not in this
 figure; the API's in-process metrics (`GET /v1/system`) report them live.
