@@ -416,6 +416,17 @@ untrusted information → AI Security Gateway → risk intelligence → AI recom
   phrasing ("called off the booking"); the general pattern was broadened.
 - v1 reports archived under `docs/archive/`.
 
+## v1 documentation on main — 2026-09-13 to 2026-09-17 (unversioned)
+Three documentation commits pushed to main after 1.0.1, merged into the 2.x
+history at 2.2.0:
+- The v1 README scoped its headline numbers (a simulated agent, small n,
+  Layer 3 carrying the result). The same scoping is in the 2.x documents.
+- A v1 interview guide and résumé bullets, superseded by the 2.x
+  `docs/INTERVIEW.md` and `docs/RESUME.md`.
+- Three v1 console screenshots, kept in `docs/images/`.
+- The same change removed `social/` and the `submission/` deck, build script
+  and charts. The 2.2.0 merge keeps them as historical hackathon assets.
+
 ## [1.0.1] — 2026-09-13
 Final-audit patch: audit redaction of matched-trigger snippets; test count
 corrections. See `docs/archive/`.

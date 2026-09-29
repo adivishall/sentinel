@@ -9,4 +9,5 @@ console shown here predate version 2 and are **not** the current system or its
 current results. For those, see the [root README](../README.md),
 [docs/EVALUATION.md](../docs/EVALUATION.md) and
 [docs/LIMITATIONS.md](../docs/LIMITATIONS.md); the v1 technical documents are in
-[docs/archive/](../docs/archive/).
+[docs/archive/](../docs/archive/) and screenshots of the v1 console are in
+[docs/images/](../docs/images/).
