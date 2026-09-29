@@ -25,6 +25,7 @@ from sentinel.domain.enums import (
     TrustClass,
     Workflow,
 )
+from sentinel.domain.provenance import FactProvenance
 
 
 @dataclass(frozen=True)
@@ -122,6 +123,9 @@ class Decision:
     authoritative: bool = False
     # Where the trusted facts came from (FactsSource): system_of_record, or demo input.
     facts_source: str = "caller_supplied"
+    # What establishes them (sentinel.trust): VERIFIED_EXTERNAL, TRUSTED_LOCAL, UNTRUSTED,
+    # or why a signature was refused. None for decisions with no primary record.
+    provenance: FactProvenance | None = None
 
     @property
     def executed(self) -> bool:

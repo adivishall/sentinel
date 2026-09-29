@@ -28,6 +28,7 @@ from sentinel.decision.workflows import (
     Runtime,
     run_dispute,
 )
+from sentinel.domain.enums import FactsSource
 from sentinel.policy import DEFAULT_REGISTRY
 from sentinel.policy.models import Rule
 from sentinel.risk import scoring
@@ -75,7 +76,9 @@ def test_a_persisting_runtime_refuses_to_record_a_downgraded_run(opts):
 def test_the_same_run_is_fine_when_nothing_is_persisted():
     b = run_dispute(
         Runtime(persist=False),
-        DisputeRequest(UntrustedContent(CLAIM), REFUNDED),
+        DisputeRequest(
+            UntrustedContent(CLAIM), REFUNDED, facts_source=FactsSource.SYSTEM_OF_RECORD
+        ),
         RunOptions(policy_version=1),
     )
     assert b.decision.executed and not b.decision.authoritative  # v1: the defect, as a what-if

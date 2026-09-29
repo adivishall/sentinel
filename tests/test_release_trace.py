@@ -44,6 +44,8 @@ from sentinel.domain.enums import (
     ActorKind,
     AuthorizationStatus,
     CaseStatus,
+    FactKind,
+    FactsSource,
     FinalAction,
     PolicyOutcome,
     Workflow,
@@ -122,7 +124,8 @@ def test_the_api_refuses_an_off_surface_capability_before_evaluating(app, api):
 def test_a_multi_turn_dispute_is_decided_and_audited_once(app):
     n_audit, n_dec = len(app.runtime.audit), app.store.count("decisions")
     b = app.evaluate_dispute_conversation(
-        ("Hello,", "about my order,", "it never arrived."), NOT_DELIVERED
+        ("Hello,", "about my order,", "it never arrived."),
+        envelope=app.issuer.sign(FactKind.DISPUTE_LEDGER, "DSP-MULTI", NOT_DELIVERED),
     )
     assert len(app.runtime.audit) == n_audit + 1
     assert app.store.count("decisions") == n_dec + 1
@@ -142,7 +145,7 @@ def test_the_multi_turn_attack_leaves_no_orphan_case_or_audit_event(app):
 
 def test_a_session_records_only_when_it_decides():
     rt = Runtime()
-    s = DisputeSession(rt, NOT_DELIVERED)
+    s = DisputeSession(rt, NOT_DELIVERED, facts_source=FactsSource.SYSTEM_OF_RECORD)
     interim = s.add("Hello,")
     s.add("my order never arrived.")
     assert len(rt.audit) == 0 and not interim.decision.authoritative

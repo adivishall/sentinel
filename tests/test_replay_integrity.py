@@ -14,7 +14,8 @@ import pytest
 from sentinel import __version__
 from sentinel.app import SentinelApp
 from sentinel.decision import composer
-from sentinel.domain.enums import FinalAction
+from sentinel.domain.enums import FactKind, FinalAction
+from sentinel.domain.ids import new_id
 from sentinel.replay import engine as replay_engine
 from sentinel.replay.engine import ReplayOverrides
 
@@ -31,6 +32,13 @@ SUPPORTED = {"amount": 12000, "delivery_status": "not_delivered", "policy_auto_l
 @pytest.fixture()
 def app():
     return SentinelApp.demo(seed=11, customers=30, merchants=6, transactions=300)
+
+
+def _decide(app, ledger):
+    """A decision on the ledger as its issuer (the demo app's) signs it: replay is about
+    decisions made on verified facts."""
+    env = app.issuer.sign(FactKind.DISPUTE_LEDGER, new_id("DSP"), ledger)
+    return app.evaluate_dispute(CLAIM, envelope=env)
 
 
 def _raw(app, did):
@@ -52,7 +60,7 @@ def _rewrite(app, did, *, payload=None, snapshot=None):
 
 
 def test_same_inputs_no_diff_and_every_version_named(app):
-    did = app.evaluate_dispute(CLAIM, SUPPORTED).decision.decision_id
+    did = _decide(app, SUPPORTED).decision.decision_id
     r = app.replay(did, ReplayOverrides())
     assert r.decision_id == did  # the recorded decision, not the re-derivation's fresh id
     assert app.store.replays(1)[0]["decision_id"] == did
@@ -65,7 +73,7 @@ def test_same_inputs_no_diff_and_every_version_named(app):
 
 
 def test_changed_policy_is_an_explicit_diff(app):
-    did = app.evaluate_dispute(CLAIM, REFUNDED).decision.decision_id  # v3: DENY
+    did = _decide(app, REFUNDED).decision.decision_id  # v3: DENY
     r = app.replay(did, ReplayOverrides(policy_version=1))
     diff = {d["field"]: (d["before"], d["after"]) for d in r.decision_diff}
     assert diff["policy"][1] == "dispute-refund@v1"
@@ -75,7 +83,7 @@ def test_changed_policy_is_an_explicit_diff(app):
 
 
 def test_changed_engine_is_an_explicit_diff_and_named(app, monkeypatch):
-    did = app.evaluate_dispute(CLAIM, SUPPORTED).decision.decision_id
+    did = _decide(app, SUPPORTED).decision.decision_id
     real = composer._final_action
 
     def changed_engine(*a, **k):
@@ -111,7 +119,7 @@ def test_later_changes_to_source_records_do_not_change_a_replay(app):
 
 
 def test_an_edited_snapshot_is_detected_not_replayed_as_truth(app):
-    did = app.evaluate_dispute(CLAIM, REFUNDED).decision.decision_id  # DENY
+    did = _decide(app, REFUNDED).decision.decision_id  # DENY
     _, snap = _raw(app, did)
     snap = json.loads(snap)
     snap["facts"]["refund_state"] = "none"  # rewrite history: 'it was never refunded'
@@ -125,7 +133,7 @@ def test_an_edited_snapshot_is_detected_not_replayed_as_truth(app):
 def test_a_consistent_rewrite_of_decision_and_snapshot_cannot_fake_equivalence(app):
     """Edit the stored decision AND its snapshot so they agree with each other: the replay
     still disagrees with the audit chain and says so."""
-    did = app.evaluate_dispute(CLAIM, SUPPORTED).decision.decision_id  # ALLOW, executed
+    did = _decide(app, SUPPORTED).decision.decision_id  # ALLOW, executed
     payload, snap = (json.loads(x) for x in _raw(app, did))
     snap["facts"]["delivery_status"] = "delivered"
     snap["reconciliation"]["verdict"] = "UNSUPPORTED"
@@ -138,14 +146,14 @@ def test_a_consistent_rewrite_of_decision_and_snapshot_cannot_fake_equivalence(a
 
 
 def test_no_audit_event_means_unverified(app, monkeypatch):
-    did = app.evaluate_dispute(CLAIM, SUPPORTED).decision.decision_id
+    did = _decide(app, SUPPORTED).decision.decision_id
     monkeypatch.setattr(app.runtime.audit, "get", lambda _id: None)
     r = app.replay(did, ReplayOverrides())
     assert not r.record_verified and "no audit event" in r.record_issues[0]
 
 
 def test_replay_never_overwrites_the_original(app):
-    did = app.evaluate_dispute(CLAIM, REFUNDED).decision.decision_id
+    did = _decide(app, REFUNDED).decision.decision_id
     before = _raw(app, did)
     n = app.store.count("decisions")
     for ov in (
@@ -166,7 +174,7 @@ def test_api_replay_exposes_versions_and_integrity(app):
 
     from sentinel.api.server import make_server
 
-    did = app.evaluate_dispute(CLAIM, REFUNDED).decision.decision_id
+    did = _decide(app, REFUNDED).decision.decision_id
     httpd = make_server(app, "127.0.0.1", 0)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     try:

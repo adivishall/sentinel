@@ -98,6 +98,9 @@ class ReplayResult:
     # Did the stored decision and snapshot agree with the decision's audit event?
     record_verified: bool = True
     record_issues: tuple[str, ...] = ()
+    # The recorded facts' provenance, and the signed statement verified again against the
+    # current trust store (a key revoked since the decision shows here).
+    facts: dict[str, Any] = field(default_factory=dict)
 
     @property
     def engine_drift(self) -> bool:
@@ -126,6 +129,7 @@ class ReplayResult:
             "versions": self.versions,
             "record_verified": self.record_verified,
             "record_issues": list(self.record_issues),
+            "facts": self.facts,
         }
 
 

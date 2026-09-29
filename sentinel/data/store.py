@@ -65,6 +65,8 @@ CREATE TABLE IF NOT EXISTS audit_events (sequence INTEGER PRIMARY KEY, event_id 
 CREATE INDEX IF NOT EXISTS ix_audit_decision ON audit_events(decision_id, sequence);
 CREATE TABLE IF NOT EXISTS replays (replay_id TEXT PRIMARY KEY, decision_id TEXT, changed INTEGER, created_at TEXT, payload TEXT);
 CREATE TABLE IF NOT EXISTS policy_versions (policy_id TEXT, version INTEGER, workflow TEXT, payload TEXT, PRIMARY KEY (policy_id, version));
+CREATE TABLE IF NOT EXISTS fact_envelopes (record_key TEXT PRIMARY KEY, subject TEXT, kind TEXT, issuer TEXT, sequence INTEGER, envelope TEXT);
+CREATE TABLE IF NOT EXISTS fact_sequences (issuer TEXT, subject TEXT, sequence INTEGER, envelope_digest TEXT, PRIMARY KEY (issuer, subject));
 """
 
 
@@ -801,6 +803,48 @@ class SentinelStore:
             (policy_id, version, workflow, json.dumps(payload)),
         )
 
+    # ---- signed fact envelopes (sentinel.trust) ---------------------------------------
+    def save_fact_envelopes(self, envelopes: list[tuple[str, dict[str, Any]]]) -> None:
+        """Keep one statement per record (``record_key``: ``dispute:<id>``,
+        ``application:<id>``, ...). Stored as received: verification happens every time one
+        is used, so a row edited here fails verification rather than changing a decision."""
+        self._many(
+            "INSERT OR REPLACE INTO fact_envelopes VALUES (?,?,?,?,?,?)",
+            [
+                (
+                    key,
+                    str(e["subject"]),
+                    str(e["kind"]),
+                    str(e["issuer"]),
+                    int(e["sequence"]),
+                    json.dumps(e),
+                )
+                for key, e in envelopes
+            ],
+        )
+
+    def fact_envelope(self, record_key: str) -> dict[str, Any] | None:
+        r = self._one("SELECT envelope FROM fact_envelopes WHERE record_key = ?", (record_key,))
+        return json.loads(r["envelope"]) if r else None
+
+    def fact_sequence(self, issuer: str, subject: str) -> tuple[int, str] | None:
+        r = self._one(
+            "SELECT sequence, envelope_digest FROM fact_sequences WHERE issuer = ? AND subject = ?",
+            (issuer, subject),
+        )
+        return (int(r["sequence"]), str(r["envelope_digest"])) if r else None
+
+    def advance_fact_sequence(
+        self, issuer: str, subject: str, sequence: int, envelope_digest: str
+    ) -> None:
+        """Record that a statement was acted on; the high-water mark only moves forward."""
+        self._exec(
+            "INSERT INTO fact_sequences VALUES (?,?,?,?) ON CONFLICT(issuer, subject) DO UPDATE "
+            "SET sequence = excluded.sequence, envelope_digest = excluded.envelope_digest "
+            "WHERE excluded.sequence > fact_sequences.sequence",
+            (issuer, subject, sequence, envelope_digest),
+        )
+
     def policy_payload(self, policy_id: str, version: int) -> dict[str, Any] | None:
         r = self._one(
             "SELECT payload FROM policy_versions WHERE policy_id = ? AND version = ?",
@@ -1080,3 +1124,17 @@ class SqliteCaseRepository:
                 "SELECT payload FROM cases ORDER BY created_at DESC LIMIT ?", (limit,)
             )
         return [self._from(json.loads(r["payload"])) for r in rows]
+
+
+class SqliteSequences:
+    """The anti-rollback high-water marks (``sentinel.trust.facts.SequenceLedger``), kept in
+    the store so they survive a restart."""
+
+    def __init__(self, store: SentinelStore) -> None:
+        self._store = store
+
+    def last(self, issuer: str, subject: str) -> tuple[int, str] | None:
+        return self._store.fact_sequence(issuer, subject)
+
+    def advance(self, issuer: str, subject: str, sequence: int, envelope_digest: str) -> None:
+        self._store.advance_fact_sequence(issuer, subject, sequence, envelope_digest)

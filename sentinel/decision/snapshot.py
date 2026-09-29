@@ -24,6 +24,7 @@ from sentinel.domain.enums import (
 )
 from sentinel.domain.evidence import Claim, Contradiction, Evidence, EvidenceSet, Reconciliation
 from sentinel.domain.ids import content_hash
+from sentinel.domain.provenance import FactProvenance
 from sentinel.domain.risk import RiskAssessment, RiskFactor
 from sentinel.domain.security import SecurityAssessment, SecurityFinding
 from sentinel.domain.serialization import to_dict
@@ -185,4 +186,6 @@ def restore(
         provider=d.get("provider", "offline"),
         model=d.get("model", "offline-simulator"),
         claim_type=d.get("claim_type"),
+        provenance=FactProvenance.from_dict(d["provenance"]) if d.get("provenance") else None,
+        fact_envelope=d.get("fact_envelope"),
     )

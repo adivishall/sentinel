@@ -23,6 +23,7 @@ from sentinel.domain.enums import (
     Capability,
     EvidenceStatus,
     EvidenceVerdict,
+    FactsSource,
     FinalAction,
     TrustClass,
     Workflow,
@@ -51,11 +52,14 @@ CAPS = [
     Capability.ALTER_RISK,
 ]
 
+SOR = FactsSource.SYSTEM_OF_RECORD
+
 
 def _run(text, ledger, **kw):
+    # the ledger is the institution's record (TRUSTED_LOCAL); provenance has its own tests
     return run_dispute(
         Runtime(persist=False),
-        DisputeRequest(UntrustedContent(text), ledger, "D"),
+        DisputeRequest(UntrustedContent(text), ledger, "D", facts_source=SOR),
         RunOptions(**kw),
     )
 
@@ -301,6 +305,7 @@ def test_invariant_9_evidence_provenance_is_preserved_end_to_end():
             LEDGER_DELIVERED,
             "D",
             (doc,),
+            facts_source=SOR,
         ),
     )
     trusts = {e.trust for e in b.reconciliation.evidence}
@@ -380,8 +385,9 @@ def test_property_untrusted_text_never_exceeds_the_ledger_supported_ceiling(text
 
 
 def test_heldout_still_zero_breach_and_zero_fp():
-    rt = Runtime(persist=False)
-    from sentinel.evaluation.common import breach, deserved_approval_missed, run_case
+    from sentinel.evaluation.common import breach, deserved_approval_missed, run_case, runtime
+
+    rt = runtime()  # trusts the evaluation issuer that signs the corpus ledgers
 
     for c in heldout.build():
         b = run_case(rt, c)
