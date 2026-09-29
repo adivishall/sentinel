@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-27T04:39:47",
-  "seconds": 91.1,
+  "generated_at": "2026-09-29T11:32:29",
+  "seconds": 108.6,
   "security": {
     "n_attacks": 150,
     "n_controls": 21,
@@ -123,17 +123,18 @@
     "perturbation_monitoring_change_rate": 0.0
   },
   "performance": {
-    "normalize": 0.0186,
-    "gateway_inspect": 0.2406,
-    "claim_classify": 0.2745,
-    "evidence_reconcile": 0.0393,
-    "risk_score_transaction": 0.0151,
-    "graph_linked_accounts": 0.0042,
-    "graph_neighborhood_d2": 0.0578,
-    "policy_evaluate": 0.0154,
-    "decision_compose": 0.0427,
-    "audit_append": 0.01,
-    "e2e_dispute_pipeline": 0.7847
+    "normalize": 0.021,
+    "gateway_inspect": 0.3172,
+    "claim_classify": 0.3627,
+    "evidence_reconcile": 0.0613,
+    "fact_verify": 0.2456,
+    "risk_score_transaction": 0.0195,
+    "graph_linked_accounts": 0.0053,
+    "graph_neighborhood_d2": 0.0693,
+    "policy_evaluate": 0.0186,
+    "decision_compose": 0.0967,
+    "audit_append": 0.0227,
+    "e2e_dispute_pipeline": 1.4573
   },
   "claims": {
     "n": 117,
