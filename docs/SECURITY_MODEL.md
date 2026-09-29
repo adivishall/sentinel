@@ -95,7 +95,8 @@ computes it (`workflows._resolve_facts`); no request field can set it.
   (equivocation).
 - **Stored records are evaluated by id.** A caller cannot send body facts or a
   statement for a dispute, application, transaction or session the store
-  holds; that is a 400. Its recorded submission, its account's context and its
+  holds, on any route (the multi-turn conversation route included); that is a
+  400. Its recorded submission, its account's context and its
   stored statement decide. A KYB statement names its application, so a
   statement about one of a merchant's applications cannot stand in for
   another. `sentinel trust ingest` verifies issuers' statements and stores

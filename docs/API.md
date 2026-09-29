@@ -124,6 +124,7 @@ A signed statement must state every field its kind requires, otherwise it is
 
 A record the store holds is evaluated **by id** only. Body facts or a
 statement for a stored dispute, application, transaction or session are a 400
+on every route, `messages` (multi-turn) included
 ("held by the record store; evaluate it by id"). Its recorded submission, its
 account's context and its stored statement decide.
 

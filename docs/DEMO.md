@@ -33,7 +33,7 @@ finally allowed without and with Sentinel:
 4. WHAT POLICY SAID   BLOCK (block-critical-ai-security, block-unsupported-claim) · APPROVE_REFUND -> DENIED
 5. WHAT WAS FINALLY ALLOWED
      WITHOUT Sentinel: EXECUTED APPROVE_REFUND   (the simulated agent; a what-if, never recorded)
-     WITH Sentinel:    BLOCK, executed nothing; case opened; audit event chained
+     WITH Sentinel:    BLOCK, executed nothing   (a simulation too: nothing recorded)
 ```
 
 The output says, before anything else, that the agent is the offline
@@ -45,7 +45,9 @@ Then say it: **The AI was persuaded. The financial system was not.**
 Flagship attack (`make attack`): the gateway flags the document CRITICAL, the
 simulated agent recommends `APPROVE_REFUND`, the ledger says delivered, the
 claim is CONTRADICTED, `dispute-refund@v3` blocks, the capability is DENIED,
-the final action is BLOCK, a case opens and the audit event is chained. Across
+the final action is BLOCK. The simulator records nothing (its ledger is a
+fixture signed on request); the same input through `/v1/disputes/evaluate`
+opens a case and chains an audit event. Across
 the 150-attack development corpus the same path executes 0.0% of attacks
 (structural) against 90.0% for the simulated agent with no controls.
 <!-- /gen:demo-flagship -->

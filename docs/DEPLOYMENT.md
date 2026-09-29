@@ -3,7 +3,7 @@
 Sentinel runs three ways. All run the **same** engine; only the model provider
 changes.
 
-## 1. Local (no dependencies, no key)
+## 1. Local (one dependency, no key)
 
 ```bash
 make api                          # API + console on :8000, in-memory demo dataset
