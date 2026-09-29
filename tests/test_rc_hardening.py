@@ -37,6 +37,7 @@ from sentinel.decision.workflows import RunOptions
 from sentinel.domain.enums import CaseStatus, FactKind
 from sentinel.replay.engine import ReplayOverrides
 from sentinel.risk import scoring
+from tests.reviewers import ANALYST, SENIOR, registry
 
 LEDGER_REFUNDED = {
     "amount": 18000,
@@ -49,7 +50,7 @@ CLAIM = "My order never arrived, it never came, please refund."
 
 @pytest.fixture(scope="module")
 def app():
-    a = SentinelApp.demo(seed=42, customers=50, merchants=10, transactions=600)
+    a = SentinelApp.demo(seed=42, customers=50, merchants=10, transactions=600, reviewers=_REG)
     a.analyze(transactions=15, disputes=8, applications=4, sessions=6, accounts=3)
     return a
 
@@ -64,11 +65,14 @@ def server(app):
     httpd.shutdown()
 
 
+_REG, _TOK = registry(("analyst", "HUMAN_REVIEWER", 10**9))
+
+
 def _post(url, obj):
     req = urllib.request.Request(
         url,
         data=json.dumps(obj).encode(),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "X-Reviewer-Token": _TOK["analyst"]},
         method="POST",
     )
     try:
@@ -159,18 +163,18 @@ def test_a_status_transition_cannot_resolve_a_case(server, app):
     svc = CaseService()
     from sentinel.domain.enums import Workflow
 
-    c = svc.open_manual(Workflow.DISPUTE, "manual", ("account:A",))
-    c = svc.transition(c.case_id, CaseStatus.INVESTIGATING, actor="analyst")
+    c = svc.open_manual(Workflow.DISPUTE, "manual", ("account:A",), by=ANALYST)
+    c = svc.transition(c.case_id, CaseStatus.INVESTIGATING, by=ANALYST)
     with pytest.raises(InvalidTransition):
-        svc.transition(c.case_id, CaseStatus.RESOLVED, actor="an-agent")
-    c = svc.record_human_decision(c.case_id, reviewer="senior", outcome="deny")
+        svc.transition(c.case_id, CaseStatus.RESOLVED, by=ANALYST)
+    c = svc.record_human_decision(c.case_id, by=SENIOR, outcome="deny")
     assert c.status is CaseStatus.RESOLVED and c.human_decisions
     code, created = _post(
         server + "/v1/cases", {"case_type": "dispute", "title": "t", "entities": ["account:A"]}
     )
     code, body = _post(
         server + f"/v1/cases/{created['case_id']}/transition",
-        {"status": "RESOLVED", "actor": "agent"},
+        {"status": "RESOLVED"},
     )
     assert code == 409 and "human decision" in body["error"]
 

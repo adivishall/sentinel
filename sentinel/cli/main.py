@@ -43,6 +43,11 @@ def _app(args: argparse.Namespace) -> Any:
     from sentinel.app import SentinelApp
 
     path = getattr(args, "db", None) or DEFAULT_DB
+    reviewers = None
+    if getattr(args, "reviewers_file", None):
+        from sentinel.cases.identity import ReviewerRegistry
+
+        reviewers = ReviewerRegistry.load(args.reviewers_file)
     trust = None
     if getattr(args, "trust_store", None):
         from sentinel.trust.keys import TrustStore
@@ -59,10 +64,11 @@ def _app(args: argparse.Namespace) -> Any:
             SentinelStore(":memory:"),
             trust=trust,
             issuer=Issuer.ephemeral(DEMO_ISSUER, label=DEMO_ISSUER_LABEL),
+            reviewers=reviewers,
         )
     else:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        app = SentinelApp.open(path, trust=trust)
+        app = SentinelApp.open(path, trust=trust, reviewers=reviewers)
     if app.store.count("transactions") == 0 and getattr(args, "command", "") not in ("data",):
         print(
             "[sentinel] empty store -> generating the default demo dataset (seed 42)",
@@ -540,21 +546,30 @@ def cmd_case(args: argparse.Namespace) -> int:
         )
         print(f"  {pk['principle']}")
     elif args.case_command in ("transition", "decide"):
+        # who acts comes from the reviewer registry: the credential is read from the
+        # environment (a flag would land in shell history and the process list)
+        by = app.reviewers.authenticate(os.environ.get("SENTINEL_REVIEWER_TOKEN"))
+        if by is None:
+            print(
+                "error: a case action needs an active reviewer credential in "
+                "SENTINEL_REVIEWER_TOKEN (and the registry in SENTINEL_REVIEWERS or --reviewers)",
+                file=sys.stderr,
+            )
+            return 1
         try:
             if args.case_command == "transition":
                 c = app.runtime.cases.transition(
-                    args.case_id, CaseStatus(args.status), actor=args.actor, note=args.note or ""
+                    args.case_id, CaseStatus(args.status), by=by, note=args.note or ""
                 )
-                print(f"{c.case_id} -> {c.status.value}")
+                print(f"{c.case_id} -> {c.status.value}  (by {by.reviewer_id}, {by.role})")
             else:
                 c = app.runtime.cases.record_human_decision(
-                    args.case_id,
-                    reviewer=args.actor,
-                    outcome=args.outcome,
-                    note=args.note or "",
-                    role=args.role,
+                    args.case_id, by=by, outcome=args.outcome, note=args.note or ""
                 )
-                print(f"{c.case_id} -> {c.status.value} ({c.resolution})")
+                print(
+                    f"{c.case_id} -> {c.status.value} ({c.resolution or 'pending'})  "
+                    f"(by {by.reviewer_id}, {by.role})"
+                )
         except (ValueError, KeyError) as e:  # InvalidTransition / ReviewerNotAuthorized
             print(f"error: {e}", file=sys.stderr)
             return 1
@@ -821,6 +836,57 @@ def cmd_ui(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reviewers(args: argparse.Namespace) -> int:
+    """Operator tooling for the reviewer registry (``sentinel.cases.identity``)."""
+    from sentinel.cases.identity import ReviewerRegistry
+
+    cmd = args.reviewers_command
+    if cmd == "add":
+        path = Path(args.registry)
+        reg = ReviewerRegistry.load(path) if path.exists() else ReviewerRegistry()
+        reg, token = reg.add(args.id, args.name, args.role, args.limit)
+        path.write_text(reg.dumps(), encoding="utf-8")
+        path.chmod(0o600)
+        print(f"added {args.id} ({args.role}, authority limit {args.limit:,}) -> {path}")
+        print("credential (shown once; only its SHA-256 is stored):")
+        print(token)
+        return 0
+    if cmd == "deactivate":
+        path = Path(args.registry)
+        path.write_text(ReviewerRegistry.load(path).deactivate(args.id).dumps(), encoding="utf-8")
+        print(f"deactivated {args.id}: their credential no longer authenticates")
+        return 0
+    from sentinel.app import configured_reviewers
+
+    reg = (
+        ReviewerRegistry.load(args.reviewers_file)
+        if getattr(args, "reviewers_file", None)
+        else configured_reviewers()
+    )
+    rows = [
+        {
+            "reviewer_id": r.reviewer_id,
+            "name": r.name,
+            "role": r.role,
+            "authority_limit": r.authority_limit,
+            "credential_id": r.credential_id,
+            "active": r.active,
+        }
+        for r in reg.reviewers()
+    ]
+    _out(
+        args,
+        {"origin": reg.origin, "reviewers": rows},
+        "\n".join(
+            f"{r['reviewer_id']:14} {r['role']:16} limit {r['authority_limit']:>12,}  "
+            f"{'active' if r['active'] else 'INACTIVE'}  {r['credential_id']}"
+            for r in rows
+        )
+        or f"(no reviewers; origin: {reg.origin})",
+    )
+    return 0
+
+
 def cmd_trust(args: argparse.Namespace) -> int:
     """Operator tooling for fact provenance (``sentinel.trust``): generate an issuer key
     and its trust-store entry, sign a record, verify an envelope, list or revoke keys.
@@ -950,6 +1016,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--json", action="store_true", help="machine-readable output")
     p.add_argument(
+        "--reviewers",
+        dest="reviewers_file",
+        default=None,
+        help="reviewer registry (who may act on cases); default $SENTINEL_REVIEWERS",
+    )
+    p.add_argument(
         "--trust-store",
         default=None,
         help="trust store (public keys of trusted issuers and policy signers); "
@@ -1075,19 +1147,27 @@ def build_parser() -> argparse.ArgumentParser:
     ct = c.add_parser("transition")
     ct.add_argument("case_id")
     ct.add_argument("status")
-    ct.add_argument("--actor", default="analyst")
     ct.add_argument("--note")
-    cd = c.add_parser("decide")
+    cd = c.add_parser(
+        "decide", help="a human decision, as the reviewer in $SENTINEL_REVIEWER_TOKEN"
+    )
     cd.add_argument("case_id")
     cd.add_argument("outcome", choices=["approve", "deny", "escalate"])
-    cd.add_argument("--actor", default="reviewer")
-    cd.add_argument(
-        "--role",
-        default="HUMAN_REVIEWER",
-        choices=["HUMAN_REVIEWER", "SENIOR_REVIEWER"],
-        help="the reviewer's declared level (no identity system; see LIMITATIONS)",
-    )
     cd.add_argument("--note")
+
+    rv = sub.add_parser(
+        "reviewers", help="the reviewer registry: who may act on cases, at what level"
+    ).add_subparsers(dest="reviewers_command", required=True)
+    ra = rv.add_parser("add", help="add a reviewer and print their credential once")
+    ra.add_argument("--registry", required=True, help="registry file to create or add to")
+    ra.add_argument("--id", required=True)
+    ra.add_argument("--name", required=True)
+    ra.add_argument("--role", required=True, choices=["HUMAN_REVIEWER", "SENIOR_REVIEWER"])
+    ra.add_argument("--limit", type=int, required=True, help="authority limit (INR)")
+    rv.add_parser("list", help="the reviewers (never their credentials)")
+    rd = rv.add_parser("deactivate", help="deactivate a reviewer's credential")
+    rd.add_argument("--registry", required=True)
+    rd.add_argument("--id", required=True)
 
     po = sub.add_parser("policy").add_subparsers(dest="policy_command", required=True)
     po.add_parser("list")
@@ -1221,9 +1301,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     vf.add_argument("--subject", help="e.g. dispute:DSP-000123 (default: as the envelope names)")
     tr.add_parser("list", help="the trusted keys")
-    rv = tr.add_parser("revoke", help="revoke a key in a trust-store file")
-    rv.add_argument("key_id")
-    rv.add_argument("--reason", default="compromised")
+    tv = tr.add_parser("revoke", help="revoke a key in a trust-store file")
+    tv.add_argument("key_id")
+    tv.add_argument("--reason", default="compromised")
 
     sub.add_parser("version")
     return p
@@ -1250,6 +1330,7 @@ COMMANDS = {
     "serve": cmd_serve,
     "ui": cmd_ui,
     "trust": cmd_trust,
+    "reviewers": cmd_reviewers,
     "version": cmd_version,
 }
 

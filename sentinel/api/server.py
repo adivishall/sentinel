@@ -29,6 +29,7 @@ import sys
 import threading
 import time
 from collections import deque
+from contextvars import ContextVar
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -102,6 +103,12 @@ class RateLimiter:
                 return False
             q.append(now)
             return True
+
+
+# The reviewer credential of the request being served. Set by the dispatcher from the
+# X-Reviewer-Token header only -- never from the URL or the body.
+REVIEWER_TOKEN: ContextVar[str | None] = ContextVar("reviewer_token", default=None)
+_IDENTITY_FIELDS = ("reviewer", "role", "actor", "reviewer_id")
 
 
 def _no_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -461,8 +468,26 @@ def build_routes(app: SentinelApp) -> Router:
     r.add("GET", "/v1/decisions/(?P<id>[^/]+)", lambda q, b, p: _decision_view(app, p["id"]))
 
     # ---- cases --------------------------------------------------------------------------------
+    def _reviewer(d: dict[str, Any]) -> Any:
+        """The authenticated reviewer for a case action. Identity comes from the reviewer
+        registry via the X-Reviewer-Token header; a body that names a reviewer or a role
+        is refused rather than ignored."""
+        named = [k for k in _IDENTITY_FIELDS if k in d]
+        if named:
+            raise S.ValidationError(
+                f"{named} cannot be sent: who acts, and at what level, comes from the "
+                "reviewer credential (X-Reviewer-Token), not from the request"
+            )
+        who = app.reviewers.authenticate(REVIEWER_TOKEN.get())
+        if who is None:
+            raise ApiError(
+                401, "a case action needs an active reviewer credential (X-Reviewer-Token)"
+            )
+        return who
+
     def case_create(q: Any, b: Any, p: Any) -> Any:
         d = S.obj(b)
+        by = _reviewer(d)
         try:
             wf = Workflow(S.req_str(d, "case_type", max_len=40))
             prio = CasePriority(S.opt_str(d, "priority", "P3", 4) or "P3")
@@ -473,22 +498,22 @@ def build_routes(app: SentinelApp) -> Router:
             S.req_str(d, "title", max_len=200),
             S.opt_str_list(d, "entities"),
             prio,
-            S.opt_str(d, "actor", "human", 60) or "human",
+            by=by,
         )
         return to_dict(c)
 
     def case_transition(q: Any, b: Any, p: Any) -> Any:
         d = S.obj(b)
+        by = _reviewer(d)
         try:
             to = CaseStatus(S.req_str(d, "status", max_len=30))
             return to_dict(
                 app.runtime.cases.transition(
-                    p["id"],
-                    to,
-                    actor=S.req_str(d, "actor", max_len=60),
-                    note=S.opt_str(d, "note", "", 500) or "",
+                    p["id"], to, by=by, note=S.opt_str(d, "note", "", 500) or ""
                 )
             )
+        except ReviewerNotAuthorized as e:
+            raise ApiError(403, str(e)) from None
         except ValueError as e:  # includes InvalidTransition
             raise ApiError(409 if isinstance(e, InvalidTransition) else 400, str(e)) from None
         except KeyError:
@@ -496,14 +521,14 @@ def build_routes(app: SentinelApp) -> Router:
 
     def case_decide(q: Any, b: Any, p: Any) -> Any:
         d = S.obj(b)
+        by = _reviewer(d)
         try:
             return to_dict(
                 app.runtime.cases.record_human_decision(
                     p["id"],
-                    reviewer=S.req_str(d, "reviewer", max_len=60),
+                    by=by,
                     outcome=S.req_str(d, "outcome", max_len=20),
                     note=S.opt_str(d, "note", "", 500) or "",
-                    role=S.opt_str(d, "role", "HUMAN_REVIEWER", 20) or "HUMAN_REVIEWER",
                 )
             )
         except ReviewerNotAuthorized as e:
@@ -861,6 +886,7 @@ class SentinelHandler(BaseHTTPRequestHandler):
         fn, params = route
         if path not in ("/health", "/version") and not _authorized(self.headers):
             return self._send(401, _error(401, "unauthorized", rid), rid)
+        REVIEWER_TOKEN.set(self.headers.get("X-Reviewer-Token"))
         body: Any = None
         if method == "POST":
             try:

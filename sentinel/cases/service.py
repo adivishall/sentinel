@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING, Protocol
 
+from sentinel.cases.identity import RESERVED_IDS, ROLE_RANK, Reviewer
 from sentinel.cases.rules import CaseTrigger, should_open_case
 from sentinel.domain.cases import Case, CaseEvent, HumanDecision
 from sentinel.domain.decisions import Decision
@@ -64,14 +65,11 @@ DECIDABLE_FROM: frozenset[CaseStatus] = frozenset(
     }
 )
 
-# Actor names that denote the system or a model. A human decision recorded under one of
-# them (or under the name of an agent that recommended on the case) is refused: neither
-# the pipeline nor a model has a path to RESOLVED.
-RESERVED_ACTORS = frozenset(
-    {"sentinel", "system", "automation", "auto", "agent", "ai", "model", "llm", "bot"}
-)
-_RESERVED_PREFIXES = ("agent:", "ai:", "model:", "llm:", "sentinel:", "system:")
-_ROLE_RANK = {"HUMAN_REVIEWER": 1, "SENIOR_REVIEWER": 2}
+# Identifiers that denote the system or a model: the reviewer registry refuses them, so no
+# authenticated reviewer can carry one and neither the pipeline nor a model has a path to
+# RESOLVED (sentinel.cases.identity).
+RESERVED_ACTORS = RESERVED_IDS
+_ROLE_RANK = ROLE_RANK
 
 
 def required_authorization(capability: Capability | None) -> str:
@@ -91,7 +89,8 @@ class InvalidTransition(ValueError):
 
 
 class ReviewerNotAuthorized(ValueError):
-    """The recorded reviewer is not a human actor, or lacks the level the case needs."""
+    """The authenticated reviewer may not take this action (level, authority limit,
+    four-eyes, an inactive credential)."""
 
 
 class CaseRepository(Protocol):
@@ -218,6 +217,12 @@ class CaseService:
             policy_outcome=d.policy.outcome.value,
             evidence_verdict=d.evidence_verdict.value,
             facts_provenance=d.provenance.status.value if d.provenance is not None else None,
+            amount=d.amount,
+            approvals_required=(
+                cap_spec(d.requested_capability).approvals_required(d.amount)
+                if d.requested_capability is not None
+                else 1
+            ),
         )
         # an automated case is chained by its decision's audit event (``link_audit``)
         self.repo.save(case)
@@ -229,8 +234,11 @@ class CaseService:
         title: str,
         entities: tuple[str, ...],
         priority: CasePriority = CasePriority.P3,
-        actor: str = "human",
+        *,
+        by: Reviewer,
     ) -> Case:
+        _require_active(by)
+        actor = by.reviewer_id
         now = now_iso()
         case_id = new_id("CASE")
         ev = CaseEvent(new_id("CEV"), case_id, "created", actor, {"rule": "manual"}, now)
@@ -261,13 +269,16 @@ class CaseService:
                 "rule": "manual",
                 "priority": priority.value,
                 "title_hash": content_hash(title),
+                **_who(by),
             },
         )
         self.repo.save(case)
         return case
 
     # ---- lifecycle ---------------------------------------------------------------------
-    def transition(self, case_id: str, to: CaseStatus, *, actor: str, note: str = "") -> Case:
+    def transition(self, case_id: str, to: CaseStatus, *, by: Reviewer, note: str = "") -> Case:
+        _require_active(by)
+        actor = by.reviewer_id
         case = self._require(case_id)
         if to is CaseStatus.RESOLVED:  # also absent from TRANSITIONS; the message says why
             raise InvalidTransition(
@@ -291,7 +302,12 @@ class CaseService:
             case,
             actor=actor,
             action=f"CASE_{to.value}",
-            detail={"from": prev.value, "to": to.value, "note_hash": content_hash(note)},
+            detail={
+                "from": prev.value,
+                "to": to.value,
+                "note_hash": content_hash(note),
+                **_who(by),
+            },
         )
         self.repo.save(case)
         return case
@@ -300,30 +316,20 @@ class CaseService:
         self,
         case_id: str,
         *,
-        reviewer: str,
+        by: Reviewer,
         outcome: str,
         note: str = "",
-        role: str = "HUMAN_REVIEWER",
     ) -> Case:
-        """A human's verdict: the only path to RESOLVED. The system and the models have no
-        path here -- a reserved actor name, or the name of an agent that recommended on this
-        case, is refused -- and approving needs the level the case's capability requires."""
+        """A human's verdict: the only path to RESOLVED. ``by`` is the reviewer the
+        registry authenticated -- the id, role and authority limit on the record are the
+        registry's, never the request's. Approving needs the level the case's capability
+        requires (a SENIOR_REVIEWER once escalated), an authority limit that covers the
+        amount, the registry's answer for a human actor, and -- where the registry asks for
+        four eyes -- a second approval by a different reviewer before the case resolves."""
         if outcome not in ("approve", "deny", "escalate"):
             raise ValueError("outcome must be approve | deny | escalate")
-        if role not in _ROLE_RANK:
-            raise ValueError(f"role must be one of {sorted(_ROLE_RANK)}")
+        _require_active(by)
         case = self._require(case_id)
-        who = reviewer.strip()
-        agents = {a.split(":", 1)[0].lower() for a in case.ai_recommendations}
-        if (
-            not who
-            or who.lower() in RESERVED_ACTORS
-            or who.lower() in agents
-            or who.lower().startswith(_RESERVED_PREFIXES)
-        ):
-            raise ReviewerNotAuthorized(
-                f"{reviewer!r} is not a human reviewer; only a human decision resolves a case"
-            )
         if case.status is CaseStatus.RESOLVED:
             raise InvalidTransition("the case is already resolved; a resolved case is final")
         if case.status not in DECIDABLE_FROM:
@@ -333,24 +339,39 @@ class CaseService:
             )
         if outcome == "escalate" and case.status is CaseStatus.ESCALATED:
             raise InvalidTransition("the case is already escalated")
-        if case.status is CaseStatus.ESCALATED and _ROLE_RANK[role] < _ROLE_RANK["SENIOR_REVIEWER"]:
+        if case.status is CaseStatus.ESCALATED and by.rank < _ROLE_RANK["SENIOR_REVIEWER"]:
             # escalating hands the case up; it is not advisory
             raise ReviewerNotAuthorized("an escalated case is decided by a SENIOR_REVIEWER")
+        pending = _pending_approvals(case)
+        final = True
         if outcome == "approve":
-            ok, why = self.approval(case, role)
+            ok, why = self.approval(case, by.role)
             if not ok:
                 raise ReviewerNotAuthorized(why)
+            if case.amount > by.authority_limit:
+                raise ReviewerNotAuthorized(
+                    f"{by.reviewer_id} may approve up to {by.authority_limit:,}; this case is "
+                    f"{case.amount:,}"
+                )
+            if by.reviewer_id in pending:
+                raise ReviewerNotAuthorized(
+                    f"four eyes: {by.reviewer_id} has already approved this case; a second, "
+                    "different reviewer must"
+                )
+            final = len(pending) + 1 >= case.approvals_required
         now = now_iso()
-        hd = HumanDecision(new_id("HDEC"), case_id, who, outcome, note, now, role)
-        ev = CaseEvent(
-            new_id("CEV"),
-            case_id,
-            "human_decision",
-            who,
-            {"outcome": outcome, "note": note, "role": role},
-            now,
+        hd = HumanDecision(
+            new_id("HDEC"), case_id, by.reviewer_id, outcome, note, now, by.role, by.credential_id
         )
-        to = CaseStatus.ESCALATED if outcome == "escalate" else CaseStatus.RESOLVED
+        detail: dict[str, object] = {"outcome": outcome, "role": by.role}
+        if outcome == "approve":
+            detail.update(approvals=len(pending) + 1, required=case.approvals_required)
+        ev = CaseEvent(new_id("CEV"), case_id, "human_decision", by.reviewer_id, detail, now)
+        to = (
+            CaseStatus.ESCALATED
+            if outcome == "escalate"
+            else CaseStatus.RESOLVED if final else case.status  # a first of two approvals
+        )
         prev = case.status
         case = replace(
             case,
@@ -358,15 +379,15 @@ class CaseService:
             human_decisions=case.human_decisions + (hd,),
             events=case.events + (ev,),
             updated_at=now,
-            resolution=None if to is CaseStatus.ESCALATED else outcome,
+            resolution=outcome if to is CaseStatus.RESOLVED else None,
         )
         case = self._record(
             case,
-            actor=who,
-            action=f"HUMAN_{outcome.upper()}",
+            actor=by.reviewer_id,
+            action=f"HUMAN_{outcome.upper()}" + ("" if final else "_PENDING"),
             detail={
-                "outcome": outcome,
-                "role": role,  # declared, not authenticated (see LIMITATIONS)
+                **detail,
+                **_who(by),
                 "required_authorization": case.required_authorization,
                 "from": prev.value,
                 "to": to.value,
@@ -393,3 +414,30 @@ class CaseService:
         if c is None:
             raise KeyError(f"unknown case {case_id}")
         return c
+
+
+def _require_active(by: Reviewer) -> None:
+    if not isinstance(by, Reviewer) or not by.active:
+        raise ReviewerNotAuthorized("a case action needs an active, authenticated reviewer")
+
+
+def _who(by: Reviewer) -> dict[str, object]:
+    """Who acted, as the registry resolved them (never the credential itself)."""
+    return {
+        "reviewer_id": by.reviewer_id,
+        "role": by.role,
+        "credential_id": by.credential_id,
+        "authority_limit": by.authority_limit,
+    }
+
+
+def _pending_approvals(case: Case) -> list[str]:
+    """Reviewers whose approvals count toward the case's current decision: approvals
+    since the last escalation (an escalated case is decided afresh at the higher level)."""
+    out: list[str] = []
+    for h in case.human_decisions:
+        if h.outcome == "escalate":
+            out = []
+        elif h.outcome == "approve":
+            out.append(h.reviewer)
+    return out

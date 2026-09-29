@@ -46,6 +46,7 @@ from sentinel.security.trust_boundary import DisputeFacts, UntrustedText
 from sentinel.trust import local, untrusted
 from sentinel.trust.issuer import Issuer
 from sentinel.trust.keys import TrustStore
+from tests.reviewers import ALICE, ANALYST
 
 CLAIM = "My order never arrived after three weeks."
 SUPPORTING = {"amount": 18000, "delivery_status": "not_delivered", "refund_state": "none"}
@@ -173,7 +174,7 @@ def _case_for(status):
     d = compose(_inputs(replace(local(FactKind.DISPUTE_LEDGER, "D-1", {}), status=status)))
     c = svc.open(CaseTrigger("test", CasePriority.P2, "t"), d)
     if c.status is not CaseStatus.WAITING_HUMAN:
-        c = svc.transition(c.case_id, CaseStatus.WAITING_HUMAN, actor="analyst")
+        c = svc.transition(c.case_id, CaseStatus.WAITING_HUMAN, by=ANALYST)
     return svc, c
 
 
@@ -187,7 +188,7 @@ def test_a_human_may_establish_unverified_facts_but_nobody_approves_failed_ones(
             ok, why = svc.approval(c, role)
             assert not ok and status.value in why
         with pytest.raises(ReviewerNotAuthorized):
-            svc.record_human_decision(c.case_id, reviewer="alice", outcome="approve")
+            svc.record_human_decision(c.case_id, by=ALICE, outcome="approve")
 
 
 # ---- regressions: the structured-channel bypasses ------------------------------------------

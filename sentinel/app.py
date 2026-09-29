@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from sentinel.audit.chain import AuditChain, ChainVerification
+from sentinel.cases.identity import ReviewerRegistry
 from sentinel.cases.service import CaseService
 from sentinel.data.generator import Dataset, generate
 from sentinel.data.store import (
@@ -72,6 +73,12 @@ DEMO_ISSUER_LABEL = (
     "ephemeral demo issuer: stands in for the institution's systems of record signing their "
     "records; its key is generated in this process and never written anywhere"
 )
+
+
+def configured_reviewers() -> ReviewerRegistry:
+    """The operator's reviewer registry (``SENTINEL_REVIEWERS``), or an empty one."""
+    path = os.environ.get("SENTINEL_REVIEWERS")
+    return ReviewerRegistry.load(path) if path else ReviewerRegistry()
 
 
 def configured_trust() -> TrustStore:
@@ -143,6 +150,7 @@ class SentinelApp:
         trust: TrustStore | None = None,
         issuer: Issuer | None = None,
         require_signed_facts: bool | None = None,
+        reviewers: ReviewerRegistry | None = None,
     ) -> None:
         """``trust``: the operator's trust store (default: ``SENTINEL_TRUST_STORE``, else
         empty -- nothing can be VERIFIED_EXTERNAL). ``issuer``: a signer for this app's own
@@ -152,6 +160,9 @@ class SentinelApp:
         makes a record-store read without its signed statement INVALID."""
         self.store = store or SentinelStore(":memory:")
         self.issuer = issuer
+        # who may act on cases (sentinel.cases.identity): operator configuration, apart from
+        # the case data. Empty = nobody can act on a case through the API or CLI.
+        self.reviewers = reviewers if reviewers is not None else configured_reviewers()
         trust = trust if trust is not None else configured_trust()
         if issuer is not None:
             trust = trust.with_key(issuer.key)

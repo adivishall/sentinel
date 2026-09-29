@@ -152,12 +152,57 @@ def test_case_policy_audit_replay_scenario(db, capsys, tmp_path):
     code, out = _run(capsys, "--db", db, "case", "list")
     assert code == 0 and "CASE-" in out
     case_id = out.split()[0]
+    # without a reviewer credential nothing happens
     code, out = _run(capsys, "--db", db, "case", "transition", case_id, "INVESTIGATING")
-    assert "INVESTIGATING" in out
+    assert code == 1
+    reg = tmp_path / "reviewers.json"
     code, out = _run(
-        capsys, "--db", db, "case", "decide", case_id, "deny", "--note", "not supported"
+        capsys,
+        "reviewers",
+        "add",
+        "--registry",
+        str(reg),
+        "--id",
+        "alice",
+        "--name",
+        "Alice",
+        "--role",
+        "HUMAN_REVIEWER",
+        "--limit",
+        "100000",
     )
-    assert "RESOLVED" in out
+    token = out.strip().splitlines()[-1]
+    assert code == 0 and token.startswith("srv_") and token not in reg.read_text()
+    os.environ["SENTINEL_REVIEWER_TOKEN"] = token
+    try:
+        code, out = _run(
+            capsys,
+            "--db",
+            db,
+            "--reviewers",
+            str(reg),
+            "case",
+            "transition",
+            case_id,
+            "INVESTIGATING",
+        )
+        assert "INVESTIGATING" in out and "by alice" in out
+        code, out = _run(
+            capsys,
+            "--db",
+            db,
+            "--reviewers",
+            str(reg),
+            "case",
+            "decide",
+            case_id,
+            "deny",
+            "--note",
+            "not supported",
+        )
+        assert "RESOLVED" in out
+    finally:
+        del os.environ["SENTINEL_REVIEWER_TOKEN"]
     code, out = _run(capsys, "--db", db, "policy", "list")
     assert "dispute-refund@v2" in out
     code, out = _run(capsys, "--db", db, "policy", "show", "dispute-refund", "--version", "1")

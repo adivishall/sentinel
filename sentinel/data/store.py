@@ -1108,6 +1108,8 @@ class SqliteCaseRepository:
             p.get("policy_outcome"),
             p.get("evidence_verdict"),
             p.get("facts_provenance"),
+            int(p.get("amount", 0)),
+            int(p.get("approvals_required", 1)),
         )
 
     def get(self, case_id: str) -> Case | None:

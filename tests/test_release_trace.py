@@ -53,13 +53,14 @@ from sentinel.domain.enums import (
 from sentinel.risk import scoring
 from sentinel.security.capabilities import CONSEQUENTIAL, WORKFLOW_CAPABILITIES, authorize
 from sentinel.security.provenance import UntrustedContent, wrap_untrusted
+from tests.reviewers import ALICE, ANALYST, BOB, SAM, registry
 
 NOT_DELIVERED = {"amount": 9_000, "delivery_status": "not_delivered", "policy_auto_limit": 50_000}
 
 
 @pytest.fixture(scope="module")
 def app():
-    a = SentinelApp.demo(seed=11, customers=40, merchants=8, transactions=500)
+    a = SentinelApp.demo(seed=11, customers=40, merchants=8, transactions=500, reviewers=_REG)
     a.analyze(transactions=5, disputes=3, applications=1, sessions=3, accounts=1)
     return a
 
@@ -72,9 +73,14 @@ def api(app):
     httpd.shutdown()
 
 
-def _post(url, body):
+_REG, _TOK = registry(("alice", "HUMAN_REVIEWER", 10**9), ("sam", "SENIOR_REVIEWER", 10**9))
+
+
+def _post(url, body, who="sam"):
     req = urllib.request.Request(
-        url, json.dumps(body).encode(), {"Content-Type": "application/json"}
+        url,
+        json.dumps(body).encode(),
+        {"Content-Type": "application/json", "X-Reviewer-Token": _TOK[who]},
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
@@ -164,13 +170,11 @@ def _blocked_case(app):
 
 
 def test_human_case_actions_are_audit_events(app):
-    c = app.runtime.cases.open_manual(Workflow.DISPUTE, "manual look", ("account:A",))
+    c = app.runtime.cases.open_manual(Workflow.DISPUTE, "manual look", ("account:A",), by=ANALYST)
     n = len(app.runtime.audit)
-    c = app.runtime.cases.transition(
-        c.case_id, CaseStatus.TRIAGE, actor="analyst", note="looks odd"
-    )
+    c = app.runtime.cases.transition(c.case_id, CaseStatus.TRIAGE, by=ANALYST, note="looks odd")
     c = app.runtime.cases.record_human_decision(
-        c.case_id, reviewer="alice", outcome="deny", note="customer's secret note"
+        c.case_id, by=ALICE, outcome="deny", note="customer's secret note"
     )
     evs = app.runtime.audit.events()[n:]
     assert [e.action for e in evs] == ["CASE_TRIAGE", "HUMAN_DENY"]
@@ -184,7 +188,7 @@ def test_human_case_actions_are_audit_events(app):
 
 def test_opening_a_case_by_hand_is_audited(app):
     n = len(app.runtime.audit)
-    c = app.runtime.cases.open_manual(Workflow.INVESTIGATION, "manual", ("account:B",))
+    c = app.runtime.cases.open_manual(Workflow.INVESTIGATION, "manual", ("account:B",), by=ANALYST)
     ev = app.runtime.audit.events()[n]
     assert ev.action == "CASE_OPENED" and ev.case_id == c.case_id and ev.kind == "case"
 
@@ -193,15 +197,13 @@ def test_opening_a_case_by_hand_is_audited(app):
 def test_a_blocked_contradicted_case_cannot_be_approved_by_anyone(app):
     c = _blocked_case(app)
     assert c.policy_outcome == "BLOCK" and c.evidence_verdict == "CONTRADICTED"
-    c = app.runtime.cases.transition(c.case_id, CaseStatus.INVESTIGATING, actor="analyst")
-    for role in ("HUMAN_REVIEWER", "SENIOR_REVIEWER"):
+    c = app.runtime.cases.transition(c.case_id, CaseStatus.INVESTIGATING, by=ANALYST)
+    for who in (ALICE, SAM):  # a human and a senior reviewer
         with pytest.raises(ReviewerNotAuthorized, match="registry denies"):
-            app.runtime.cases.record_human_decision(
-                c.case_id, reviewer="alice", outcome="approve", role=role
-            )
+            app.runtime.cases.record_human_decision(c.case_id, by=who, outcome="approve")
     pk = app.review_packet(c.case_id)
     assert pk["approval"]["SENIOR_REVIEWER"]["allowed"] is False
-    c = app.runtime.cases.record_human_decision(c.case_id, reviewer="alice", outcome="deny")
+    c = app.runtime.cases.record_human_decision(c.case_id, by=ALICE, outcome="deny")
     assert c.status is CaseStatus.RESOLVED and c.resolution == "deny"
 
 
@@ -214,9 +216,10 @@ def test_a_supported_over_limit_refund_and_an_unread_claim_can_be_approved(app):
         assert b.case is not None
         pk = app.review_packet(b.case.case_id)
         assert pk["approval"]["HUMAN_REVIEWER"]["allowed"], pk["approval"]
-        c = app.runtime.cases.record_human_decision(
-            b.case.case_id, reviewer="bob", outcome="approve"
-        )
+        c = app.runtime.cases.record_human_decision(b.case.case_id, by=BOB, outcome="approve")
+        if c.approvals_required == 2:  # 185,000 refund: four eyes
+            assert c.resolution is None
+            c = app.runtime.cases.record_human_decision(b.case.case_id, by=ALICE, outcome="approve")
         assert c.resolution == "approve"
 
 
@@ -224,7 +227,7 @@ def test_the_api_answers_a_forbidden_approval_with_403(app, api):
     c = _blocked_case(app)
     code, body = _post(
         api + f"/v1/cases/{c.case_id}/decision",
-        {"reviewer": "alice", "outcome": "approve", "role": "SENIOR_REVIEWER"},
+        {"outcome": "approve"},  # as sam, a SENIOR_REVIEWER (from the registry)
     )
     assert code == 403 and "registry" in body["error"]
 
