@@ -245,7 +245,9 @@ def test_inv_prov_1_no_mutation_of_a_signed_statement_verifies(field, value, pat
     else:
         env[field] = value
     p = _verify(env, subject=None)
-    if env == original:  # the "mutation" happened to be the identity
+    # identity is judged on the JSON, not Python equality: True == 1 in Python, but a
+    # boolean where the signer wrote the integer 1 is a different statement (and refused)
+    if json.dumps(env, sort_keys=True) == json.dumps(original, sort_keys=True):
         assert p.status is ProvenanceStatus.VERIFIED_EXTERNAL
     else:
         assert p.status is not ProvenanceStatus.VERIFIED_EXTERNAL, (field, value, p.reason)
