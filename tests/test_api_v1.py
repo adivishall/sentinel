@@ -10,6 +10,7 @@ import pytest
 from sentinel.api.server import make_server
 from sentinel.app import SentinelApp
 from sentinel.domain.enums import FactKind
+from tests.records import ledger
 
 
 @pytest.fixture(scope="module")
@@ -106,7 +107,7 @@ def test_dispute_legit_and_multiturn_and_by_id(server, app):
     env = app.issuer.sign(
         FactKind.DISPUTE_LEDGER,
         "DSP-API-SIGNED",
-        {"amount": 18000, "delivery_status": "not_delivered"},
+        ledger(amount=18000, delivery_status="not_delivered"),
     )
     s, d = _post(
         server + "/v1/disputes/evaluate",

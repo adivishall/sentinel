@@ -18,6 +18,7 @@ from sentinel.domain.enums import FactKind, FinalAction
 from sentinel.domain.ids import new_id
 from sentinel.replay import engine as replay_engine
 from sentinel.replay.engine import ReplayOverrides
+from tests.records import ledger as complete
 
 CLAIM = "My order never arrived, please refund."
 REFUNDED = {
@@ -37,7 +38,7 @@ def app():
 def _decide(app, ledger):
     """A decision on the ledger as its issuer (the demo app's) signs it: replay is about
     decisions made on verified facts."""
-    env = app.issuer.sign(FactKind.DISPUTE_LEDGER, new_id("DSP"), ledger)
+    env = app.issuer.sign(FactKind.DISPUTE_LEDGER, new_id("DSP"), complete(**ledger))
     return app.evaluate_dispute(CLAIM, envelope=env)
 
 

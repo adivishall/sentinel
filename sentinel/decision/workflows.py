@@ -61,8 +61,8 @@ from sentinel.risk.scoring import RiskModel
 from sentinel.security.gateway import GATEWAY, AISecurityGateway, Conversation
 from sentinel.security.normalize import InvalidSubmission, validate
 from sentinel.security.provenance import UntrustedContent, wrap_many
-from sentinel.security.trust_boundary import DisputeFacts, KYBFacts, UntrustedText
-from sentinel.trust import local, untrusted
+from sentinel.security.trust_boundary import MAX_AMOUNT, DisputeFacts, KYBFacts, UntrustedText
+from sentinel.trust import local, record_digest, untrusted
 from sentinel.trust.facts import MemorySequences, SequenceLedger, verify_fact
 from sentinel.trust.issuer import utc_now
 from sentinel.trust.keys import TrustStore
@@ -182,6 +182,61 @@ def _id_from_subject(kind: FactKind, subject: str) -> str | None:
     return rid if rid and rid != "?" else None
 
 
+# What a signed statement of each kind must state. An issuer that leaves a field out has
+# not said it; a default filled in here would be Sentinel's assumption presented as the
+# issuer's word (a missing refund_state read as "none" can pay a second refund).
+STATEMENT_FIELDS: dict[FactKind, frozenset[str]] = {
+    FactKind.DISPUTE_LEDGER: frozenset(
+        {
+            "amount",
+            "delivery_status",
+            "prior_disputes_90d",
+            "duplicate_confirmed",
+            "cancellation_confirmed",
+            "cardholder_present",
+            "refund_state",
+            "transaction_status",
+            "merchant_response",
+            "auth_strength",
+            "customer_tenure_days",
+        }
+    ),
+    FactKind.KYB_RECORD: frozenset(
+        {"registration_status", "domain_age_days", "business_age_days", "prior_flags", "mcc_risk"}
+    ),
+    FactKind.TRANSACTION: frozenset(
+        {
+            "transaction_id",
+            "account_id",
+            "merchant_id",
+            "instrument_id",
+            "device_id",
+            "amount",
+            "currency",
+            "timestamp",
+            "country",
+            "channel",
+            "auth_strength",
+            "delivery_status",
+            "counterparty_account_id",
+            "status",
+        }
+    ),
+    FactKind.LOGIN_SESSION: frozenset(
+        {
+            "session_id",
+            "account_id",
+            "device_id",
+            "ip",
+            "country",
+            "started_at",
+            "mfa_passed",
+            "events",
+        }
+    ),
+}
+
+
 def _resolve_facts(
     rt: Runtime,
     kind: FactKind,
@@ -191,16 +246,22 @@ def _resolve_facts(
     envelope: Mapping[str, object] | None,
     *,
     new_prefix: str,
+    uses_record: bool = False,
 ) -> tuple[FactProvenance, dict[str, object], str]:
     """Establish the facts a decision may use, and how far they can be trusted.
 
     - an envelope is verified against the runtime's trust store (``sentinel.trust``);
-      only one that verifies yields VERIFIED_EXTERNAL, and its payload -- the issuer's
-      statement, not a stored copy -- is what the decision uses. A stored row that
-      disagrees with the signed statement was changed after signing: INVALID.
-    - a record read by id from the record store is TRUSTED_LOCAL;
+      only one that verifies, states every field its kind requires, and (for a record
+      read from the store) matches the stored row yields VERIFIED_EXTERNAL, and then its
+      payload -- the issuer's statement, not a stored copy -- is what the decision uses.
+      A statement that does not verify is never decided on: the decision falls back to
+      the request's own record (empty for a bare envelope), which fails safe.
+    - a record read by id from the record store is TRUSTED_LOCAL (INVALID when the
+      deployment requires signed records and none is held);
     - anything else (a request body, a demo fixture nobody signed) is UNTRUSTED.
 
+    ``uses_record``: the workflow decides on ``record`` itself (a transaction or session
+    builds its risk context from it), so the provenance names that record's digest.
     Returns the provenance, the facts to use and the record id (taken from the envelope's
     subject when the request named none)."""
     if envelope is not None:
@@ -214,20 +275,32 @@ def _resolve_facts(
         )
         prov = v.provenance
         rid = record_id or _id_from_subject(kind, prov.subject) or new_id(new_prefix)
-        facts = dict(v.payload) if v.payload is not None else dict(record)
-        if v.verified and source is FactsSource.SYSTEM_OF_RECORD and record:
-            diff = sorted(
-                k
-                for k in set(facts) | set(record)
-                if facts.get(k, _MISSING) != record.get(k, _MISSING)
-            )
-            if diff:
+        if v.verified:
+            assert v.payload is not None
+            missing = sorted(STATEMENT_FIELDS[kind] - set(v.payload))
+            if missing:
                 prov = replace(
                     prov,
                     status=ProvenanceStatus.INVALID,
-                    reason=f"the stored record differs from the signed statement on {diff}",
+                    reason=f"the signed statement omits {missing}; an unstated field is not "
+                    "the issuer's word",
                 )
-        return prov, facts, rid
+            elif source is FactsSource.SYSTEM_OF_RECORD and record:
+                diff = sorted(
+                    k
+                    for k in set(v.payload) | set(record)
+                    if v.payload.get(k, _MISSING) != record.get(k, _MISSING)
+                )
+                if diff:
+                    prov = replace(
+                        prov,
+                        status=ProvenanceStatus.INVALID,
+                        reason=f"the stored record differs from the signed statement on {diff}",
+                    )
+        verified = prov.status is ProvenanceStatus.VERIFIED_EXTERNAL
+        facts = dict(v.payload) if verified and v.payload is not None else dict(record)
+        used = record if uses_record else facts
+        return replace(prov, payload_digest=record_digest(used)), facts, rid
     rid = record_id or new_id(new_prefix)
     if source is FactsSource.SYSTEM_OF_RECORD:
         prov = local(kind, rid, record)
@@ -412,7 +485,10 @@ def _fail_safe(
     facts_source: FactsSource = FactsSource.CALLER_SUPPLIED,
     provenance: FactProvenance | None = None,
 ) -> DecisionBundle:
-    """Unusable untrusted input never silently approves -- it goes to a human."""
+    """Unusable untrusted input never silently approves -- it goes to a human. An amount
+    outside what a record may state is recorded as 0: it was never a usable amount."""
+    if isinstance(amount, bool) or not isinstance(amount, int) or not 0 <= amount <= MAX_AMOUNT:
+        amount = 0
     from sentinel.domain.enums import EvidenceVerdict
     from sentinel.domain.evidence import EvidenceSet
 
@@ -615,8 +691,13 @@ def run_transaction(
         req.facts_source,
         req.envelope,
         new_prefix="TX",
+        uses_record=True,
     )
-    if isinstance(t.amount, bool) or not isinstance(t.amount, int) or t.amount <= 0:
+    if (
+        isinstance(t.amount, bool)
+        or not isinstance(t.amount, int)
+        or not 0 < t.amount <= MAX_AMOUNT
+    ):
         # a caller-supplied record with a zero, negative or non-integer amount is not a
         # payment to authorise; it goes to a human, never through the limit checks
         return _fail_safe(
@@ -627,7 +708,7 @@ def run_transaction(
             0,
             Capability.APPROVE_TRANSACTION,
             "transaction-authorization",
-            f"transaction amount {t.amount!r} is not a positive integer",
+            f"transaction amount {t.amount!r} is not a positive integer up to {MAX_AMOUNT:,}",
             opts,
             req.facts_source,
             prov,
@@ -863,6 +944,7 @@ def run_account_security(
         req.facts_source,
         req.envelope,
         new_prefix="SES",
+        uses_record=True,
     )
     risk = account_security.assess_login(
         s, req.context, scoring.model_for("login", opts.risk_model)

@@ -80,6 +80,15 @@ def configured_trust() -> TrustStore:
     return TrustStore.load(path) if path else TrustStore.empty()
 
 
+def _named(envelope: dict[str, Any] | None, kind: FactKind) -> str | None:
+    """The record id a caller-carried statement names (for the stored-record check)."""
+    subject = envelope.get("subject") if isinstance(envelope, dict) else None
+    prefix = kind.subject_prefix + ":"
+    if isinstance(subject, str) and subject.startswith(prefix):
+        return subject[len(prefix) :] or None
+    return None
+
+
 def _transaction_from_record(rec: dict[str, Any]) -> Transaction:
     """A transaction as its issuer stated it (an envelope payload)."""
     need = ("transaction_id", "account_id", "merchant_id", "instrument_id", "device_id")
@@ -278,7 +287,10 @@ class SentinelApp:
 
     @staticmethod
     def _kyb_record(k: KYBApplication) -> dict[str, object]:
+        """The acquirer's record for one application. It names the application, so a
+        statement about one of a merchant's applications cannot stand in for another."""
         return {
+            "application_id": k.application_id,
             "registration_status": k.registration_status,
             "domain_age_days": k.domain_age_days,
             "business_age_days": k.business_age_days,
@@ -509,6 +521,9 @@ class SentinelApp:
             if not isinstance(payload, dict):
                 raise ValueError("the envelope carries no transaction record")
             t = _transaction_from_record(payload)
+            for rid in (t.transaction_id, _named(envelope, FactKind.TRANSACTION)):
+                if rid and self.store.transaction(rid) is not None:
+                    raise ValueError(f"{rid} is held by the record store; evaluate it by id")
             src = FactsSource.CALLER_SUPPLIED
         else:
             if transaction is None:
@@ -521,9 +536,14 @@ class SentinelApp:
             t = found
             # A transaction read by id (or identical to the stored record) is system-of-record
             # input, checked against its issuer's statement when the store holds one.
-            if isinstance(transaction, str) or self.store.transaction(t.transaction_id) == t:
+            stored = self.store.transaction(t.transaction_id)
+            if isinstance(transaction, str) or stored == t:
                 src = FactsSource.SYSTEM_OF_RECORD
                 envelope = self.store.fact_envelope(FactKind.TRANSACTION.subject(t.transaction_id))
+            elif stored is not None:
+                raise ValueError(
+                    f"{t.transaction_id} is held by the record store; evaluate it by id"
+                )
             else:
                 src = FactsSource.CALLER_SUPPLIED
         ctx = self.transaction_context(t)
@@ -568,6 +588,11 @@ class SentinelApp:
         t0 = time.perf_counter()
         if ledger is not None and envelope is not None:
             raise ValueError("pass a ledger or a signed envelope, not both")
+        named = dispute_id or _named(envelope, FactKind.DISPUTE_LEDGER)
+        if (ledger is not None or envelope is not None) and named and self.store.dispute(named):
+            # a stored dispute is evaluated as stored: its recorded submission, its account's
+            # context and its statement checked against the stored row -- never re-pointed
+            raise ValueError(f"{named} is held by the record store; evaluate it by id")
         account_id = None
         account_risk = 0
         facts_source = FactsSource.CALLER_SUPPLIED
@@ -697,6 +722,10 @@ class SentinelApp:
         the caller; ``records`` are unsigned request facts (UNTRUSTED)."""
         if records is not None and envelope is not None:
             raise ValueError("pass records or a signed envelope, not both")
+        payload = envelope.get("payload") if isinstance(envelope, dict) else None
+        app_named = payload.get("application_id") if isinstance(payload, dict) else None
+        if isinstance(app_named, str) and self.store.kyb_application(app_named) is not None:
+            raise ValueError(f"{app_named} is held by the record store; evaluate it by id")
         facts_source = FactsSource.CALLER_SUPPLIED
         if application_id and records is None and envelope is None:
             facts_source = FactsSource.SYSTEM_OF_RECORD
@@ -755,6 +784,9 @@ class SentinelApp:
             if not isinstance(payload, dict):
                 raise ValueError("the envelope carries no session record")
             s = _session_from_record(payload)
+            for rid in (s.session_id, _named(envelope, FactKind.LOGIN_SESSION)):
+                if rid and self.store.session(rid) is not None:
+                    raise ValueError(f"{rid} is held by the record store; evaluate it by id")
             src = FactsSource.CALLER_SUPPLIED
         else:
             if session is None:
@@ -763,9 +795,12 @@ class SentinelApp:
             if found is None:
                 raise KeyError(f"unknown session {session}")
             s = found
-            if isinstance(session, str) or self.store.session(s.session_id) == s:
+            stored_session = self.store.session(s.session_id)
+            if isinstance(session, str) or stored_session == s:
                 src = FactsSource.SYSTEM_OF_RECORD
                 envelope = self.store.fact_envelope(FactKind.LOGIN_SESSION.subject(s.session_id))
+            elif stored_session is not None:
+                raise ValueError(f"{s.session_id} is held by the record store; evaluate it by id")
             else:
                 src = FactsSource.CALLER_SUPPLIED
         ctx = self.account_security_context(s)
@@ -1474,7 +1509,9 @@ class SentinelApp:
             audit=ev.to_dict() if ev else None,
             verify=True,
         )
-        r = replace(r, facts=self._reverify_facts(snap))
+        r = replace(
+            r, facts=self._reverify_facts(snap, ev.to_dict() if ev else None, r.record_verified)
+        )
         if self.runtime.persist:
             payload = r.to_dict()
             self.store.save_replay(r.replay_id, decision_id, r.changed, r.created_at, payload)
@@ -1493,38 +1530,48 @@ class SentinelApp:
                     "policy_drift": r.policy_drift,
                     "original_drift": r.original_drift,
                     "record_verified": r.record_verified,
-                    "facts_reverified": r.facts.get("reverified"),
+                    "facts_signature_now": r.facts.get("signature_now"),
                 },
             )
         return r
 
-    def _reverify_facts(self, snap: dict[str, Any]) -> dict[str, Any]:
-        """The decision's recorded fact provenance, and its signed statement verified again
-        now. Unsigned facts have nothing to re-verify; a statement whose key was revoked
-        since the decision reports REVOKED."""
-        prov = snap.get("provenance")
-        if not prov:
+    def _reverify_facts(
+        self, snap: dict[str, Any], audit: dict[str, Any] | None, record_verified: bool
+    ) -> dict[str, Any]:
+        """The decision's fact provenance as its audit event recorded it, and whether the
+        statement's signature still holds today (key, revocation, expiry). This is a
+        signature check only: it does not repeat the stored-row comparison or the rollback
+        state the decision was made with. Withheld when the stored snapshot disagrees with
+        the audit event."""
+        recorded = ((audit or {}).get("detail") or {}).get("facts") or snap.get("provenance")
+        if not recorded:
             return {}
         out: dict[str, Any] = {
-            "recorded": prov["status"],
-            "source": prov["source"],
-            "payload_digest": prov["payload_digest"],
+            "recorded": recorded["status"],
+            "source": recorded["source"],
+            "payload_digest": recorded["payload_digest"],
         }
+        if not record_verified:
+            return {
+                **out,
+                "signature_now": None,
+                "reason": "withheld: the stored snapshot disagrees with its audit event",
+            }
         env = snap.get("fact_envelope")
         if env is None:
-            return {**out, "reverified": None, "reason": "unsigned facts: nothing to verify again"}
+            return {**out, "signature_now": None, "reason": "unsigned facts: no signature to check"}
         v = verify_fact(
             env,
             trust=self.runtime.trust,
             now=self.runtime.clock(),
-            kind=FactKind(prov["kind"]),
-            subject=prov["subject"],
+            kind=FactKind(recorded["kind"]),
+            subject=recorded["subject"],
         )
         return {
             **out,
-            "reverified": v.provenance.status.value,
+            "signature_now": v.provenance.status.value,
             "reason": v.provenance.reason,
-            "same_payload": v.provenance.payload_digest == prov["payload_digest"],
+            "same_payload": v.provenance.payload_digest == recorded["payload_digest"],
         }
 
     def system_info(self) -> dict[str, Any]:

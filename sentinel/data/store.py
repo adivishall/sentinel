@@ -834,6 +834,21 @@ class SentinelStore:
         )
         return (int(r["sequence"]), str(r["envelope_digest"])) if r else None
 
+    def fact_sequence_from_audit(self, issuer: str, subject: str) -> tuple[int, str] | None:
+        """The highest statement a recorded decision acted on, read from the audit chain:
+        every decision event names the statement it used (``detail.facts``). A DB writer
+        who deletes ``fact_sequences`` rows must also rewrite the chain to roll back."""
+        r = self._one(
+            "SELECT json_extract(payload, '$.detail.facts.sequence') AS seq, "
+            "json_extract(payload, '$.detail.facts.envelope_digest') AS dig FROM audit_events "
+            "WHERE json_extract(payload, '$.detail.facts.status') = 'VERIFIED_EXTERNAL' "
+            "AND json_extract(payload, '$.detail.facts.source') = ? "
+            "AND json_extract(payload, '$.detail.facts.subject') = ? "
+            "ORDER BY seq DESC LIMIT 1",
+            (issuer, subject),
+        )
+        return (int(r["seq"]), str(r["dig"])) if r and r["seq"] is not None else None
+
     def advance_fact_sequence(
         self, issuer: str, subject: str, sequence: int, envelope_digest: str
     ) -> None:
@@ -1134,7 +1149,17 @@ class SqliteSequences:
         self._store = store
 
     def last(self, issuer: str, subject: str) -> tuple[int, str] | None:
-        return self._store.fact_sequence(issuer, subject)
+        """The higher of the table and the audit chain: the table is a fast index anyone
+        with DB write can delete; the chain is tamper-evident (``sentinel.audit``)."""
+        marks = [
+            m
+            for m in (
+                self._store.fact_sequence(issuer, subject),
+                self._store.fact_sequence_from_audit(issuer, subject),
+            )
+            if m is not None
+        ]
+        return max(marks, key=lambda m: m[0]) if marks else None
 
     def advance(self, issuer: str, subject: str, sequence: int, envelope_digest: str) -> None:
         self._store.advance_fact_sequence(issuer, subject, sequence, envelope_digest)

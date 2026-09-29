@@ -889,6 +889,8 @@ class SentinelHandler(BaseHTTPRequestHandler):
                 return self._send(400, _error(400, f"invalid JSON: {e.msg}", rid), rid)
             except S.ValidationError as e:
                 return self._send(400, _error(400, e.message, rid), rid)
+            except ValueError as e:  # e.g. an integer longer than Python's parse limit
+                return self._send(400, _error(400, f"invalid JSON: {e}", rid), rid)
         try:
             result = fn(query, body, params)
             status = 200
@@ -942,7 +944,8 @@ def serve(app: SentinelApp, host: str = "0.0.0.0", port: int = 8000) -> None:
     if not os.environ.get("SENTINEL_API_KEY") and host not in ("127.0.0.1", "localhost", "::1"):
         print(
             "WARNING: SENTINEL_API_KEY is unset and the API is bound to a non-loopback address. "
-            "Every caller can submit 'trusted' ledger/record facts and read every decision. "
+            "Every caller can request evaluations (unsigned facts are UNTRUSTED and never "
+            "execute) and read every decision. "
             "This is a lab configuration; set SENTINEL_API_KEY or bind to 127.0.0.1.",
             file=sys.stderr,
         )
