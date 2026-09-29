@@ -20,9 +20,11 @@ from sentinel.decision.workflows import (
     run_dispute,
     run_kyb,
 )
-from sentinel.domain.enums import TrustClass
+from sentinel.domain.enums import FactKind, TrustClass
 from sentinel.security import capabilities
 from sentinel.security.provenance import UntrustedContent
+from sentinel.trust.issuer import Issuer
+from sentinel.trust.keys import TrustStore
 
 CONFIGS: dict[str, tuple[frozenset[str], bool]] = {
     "no_controls": (NONE, False),
@@ -39,8 +41,30 @@ CONFIGS: dict[str, tuple[frozenset[str], bool]] = {
 }
 
 
-def runtime() -> Runtime:
-    return Runtime(persist=False)
+# The corpora's ledgers and acquirer records stand for the institution's own records. An
+# ephemeral evaluation issuer signs each one, as a system of record would, so every case
+# reaches the decision as VERIFIED_EXTERNAL facts through the real verifier; the suites then
+# measure what untrusted text and model output can do to decisions on trustworthy facts.
+# (What unsigned or forged facts can do is measured separately: integrity, adaptive.)
+EVAL_ISSUER = Issuer.ephemeral(
+    "evaluation-fixtures", label="ephemeral issuer that signs the evaluation corpora's records"
+)
+EVAL_TRUST = TrustStore.empty().with_key(EVAL_ISSUER.key)
+
+
+def runtime(**kw: Any) -> Runtime:
+    return Runtime(persist=False, trust=EVAL_TRUST, **kw)
+
+
+def signed_dispute(
+    narrative: UntrustedContent,
+    ledger: dict[str, Any],
+    dispute_id: str,
+    documents: tuple[UntrustedContent, ...] = (),
+) -> DisputeRequest:
+    """A dispute whose ledger arrives as the issuer's signed statement."""
+    env = EVAL_ISSUER.sign(FactKind.DISPUTE_LEDGER, dispute_id, dict(ledger))
+    return DisputeRequest(narrative, {}, dispute_id, documents, envelope=env)
 
 
 def dispute_request(case: dict[str, Any]) -> DisputeRequest:
@@ -48,7 +72,7 @@ def dispute_request(case: dict[str, Any]) -> DisputeRequest:
     if case.get("document"):
         trust = TrustClass(case.get("document_trust") or "DOCUMENT_CONTROLLED")
         docs = (UntrustedContent(case["document"], trust, "attachment", "document"),)
-    return DisputeRequest(UntrustedContent(case["submission"]), case["ledger"], case["id"], docs)
+    return signed_dispute(UntrustedContent(case["submission"]), case["ledger"], case["id"], docs)
 
 
 def run_case(
@@ -71,9 +95,10 @@ def run_kyb_case(
         rt,
         KYBRequest(
             UntrustedContent(case["application"], TrustClass.MERCHANT_CONTROLLED, "application"),
-            case["records"],
+            {},
             case["id"],
             docs,
+            envelope=EVAL_ISSUER.sign(FactKind.KYB_RECORD, case["id"], dict(case["records"])),
         ),
         RunOptions(controls=controls),
     )

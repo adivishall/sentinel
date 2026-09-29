@@ -16,8 +16,8 @@ from dataclasses import replace
 from typing import Any
 
 from sentinel.app import SentinelApp
-from sentinel.decision.workflows import FULL, NONE, DecisionBundle, RunOptions
-from sentinel.domain.enums import Capability, TrustClass
+from sentinel.decision.workflows import FULL, NONE, DecisionBundle, RunOptions, transaction_record
+from sentinel.domain.enums import Capability, FactKind, TrustClass
 from sentinel.evaluation.attacks import surfaces
 from sentinel.evaluation.common import pct, write_json
 from sentinel.evaluation.methodology import methodology
@@ -43,6 +43,15 @@ class _World:
             country="RO",
             auth_strength="none",
         )
+        # A payment being authorised is the payment switch's own record: the demo issuer
+        # signs it, so the suite measures what text does to a decision on verified facts
+        # (not what an unsigned body does -- that never executes, by construction).
+        assert self.app.issuer is not None
+        self.hostile_env = self.app.issuer.sign(
+            FactKind.TRANSACTION,
+            self.hostile_txn.transaction_id,
+            transaction_record(self.hostile_txn),
+        )
         # a normal payment the baseline allows
         self.normal_txn = next(
             t for t in store.transactions(limit=200) if t.label == "legit" and t.amount < 5000
@@ -62,12 +71,11 @@ class _World:
         )
         wf = case["workflow"]
         if wf == "transaction":
-            txn = (
-                self.normal_txn
-                if case["target_capability"] != "APPROVE_TRANSACTION"
-                else self.hostile_txn
-            )
-            return self.app.evaluate_transaction(txn, untrusted=text, options=opts)
+            if case["target_capability"] == "APPROVE_TRANSACTION":
+                return self.app.evaluate_transaction(
+                    envelope=self.hostile_env, untrusted=text, options=opts
+                )
+            return self.app.evaluate_transaction(self.normal_txn, untrusted=text, options=opts)
         if wf == "account_security":
             return self.app.evaluate_account(
                 self.session, message=case["text"] if with_text else None, options=opts

@@ -22,7 +22,7 @@ from sentinel.agents.providers import mode
 from sentinel.agents.providers.anthropic import DEFAULT_MODEL
 from sentinel.agents.providers.base import LLMProvider
 from sentinel.agents.providers.offline import OfflineProvider
-from sentinel.decision.workflows import FULL, NONE, Runtime
+from sentinel.decision.workflows import FULL, NONE
 from sentinel.domain.ids import now_iso
 from sentinel.evaluation.attacks import corpus
 from sentinel.evaluation.common import (
@@ -31,6 +31,7 @@ from sentinel.evaluation.common import (
     pct,
     percentiles,
     run_case,
+    runtime,
     write_json,
 )
 
@@ -61,7 +62,7 @@ def _usage(p: LLMProvider) -> dict[str, int | None]:
 def _run_with(
     p: LLMProvider, cases: list[dict[str, Any]]
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    rt = Runtime(persist=False, provider=p)
+    rt = runtime(provider=p)
     attacks = [c for c in cases if c["is_attack"]]
     deserved = [c for c in cases if not c["is_attack"] and c["ground_truth_outcome"] == "approve"]
     lat: list[float] = []
