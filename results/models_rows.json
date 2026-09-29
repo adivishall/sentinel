@@ -14,10 +14,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.083
+    "latency_ms": 0.082
   },
   {
     "provider": "offline",
@@ -34,7 +34,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.082
@@ -54,10 +54,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.081
+    "latency_ms": 0.079
   },
   {
     "provider": "offline",
@@ -74,7 +74,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.08
@@ -94,10 +94,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.08
+    "latency_ms": 0.079
   },
   {
     "provider": "offline",
@@ -114,10 +114,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.065
+    "latency_ms": 0.07
   },
   {
     "provider": "offline",
@@ -134,10 +134,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.066
+    "latency_ms": 0.065
   },
   {
     "provider": "offline",
@@ -154,10 +154,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.065
+    "latency_ms": 0.064
   },
   {
     "provider": "offline",
@@ -174,7 +174,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.066
@@ -194,10 +194,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.065
+    "latency_ms": 0.064
   },
   {
     "provider": "offline",
@@ -214,10 +214,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.092
+    "latency_ms": 0.091
   },
   {
     "provider": "offline",
@@ -234,10 +234,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.093
+    "latency_ms": 0.09
   },
   {
     "provider": "offline",
@@ -254,10 +254,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.092
+    "latency_ms": 0.089
   },
   {
     "provider": "offline",
@@ -274,10 +274,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.092
+    "latency_ms": 0.09
   },
   {
     "provider": "offline",
@@ -294,10 +294,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.09
+    "latency_ms": 0.089
   },
   {
     "provider": "offline",
@@ -314,7 +314,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.076
@@ -334,7 +334,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.077
@@ -354,10 +354,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.077
+    "latency_ms": 0.076
   },
   {
     "provider": "offline",
@@ -374,10 +374,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.076
+    "latency_ms": 0.078
   },
   {
     "provider": "offline",
@@ -394,7 +394,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.076
@@ -414,7 +414,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -435,11 +435,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.138
+    "latency_ms": 0.135
   },
   {
     "provider": "offline",
@@ -456,11 +456,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.138
+    "latency_ms": 0.137
   },
   {
     "provider": "offline",
@@ -477,7 +477,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -498,7 +498,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -518,7 +518,7 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.124
@@ -537,10 +537,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.125
+    "latency_ms": 0.127
   },
   {
     "provider": "offline",
@@ -556,10 +556,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.124
+    "latency_ms": 0.128
   },
   {
     "provider": "offline",
@@ -575,10 +575,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.124
+    "latency_ms": 0.125
   },
   {
     "provider": "offline",
@@ -594,10 +594,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.124
+    "latency_ms": 0.127
   },
   {
     "provider": "offline",
@@ -613,10 +613,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.068
+    "latency_ms": 0.067
   },
   {
     "provider": "offline",
@@ -632,10 +632,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.068
+    "latency_ms": 0.069
   },
   {
     "provider": "offline",
@@ -651,7 +651,7 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.068
@@ -670,7 +670,7 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.068
@@ -689,7 +689,7 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.068
@@ -708,7 +708,7 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.091
@@ -727,7 +727,7 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.093
@@ -746,10 +746,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.094
+    "latency_ms": 0.095
   },
   {
     "provider": "offline",
@@ -765,10 +765,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.092
+    "latency_ms": 0.091
   },
   {
     "provider": "offline",
@@ -784,10 +784,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.092
+    "latency_ms": 0.094
   },
   {
     "provider": "offline",
@@ -803,10 +803,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.088
+    "latency_ms": 0.09
   },
   {
     "provider": "offline",
@@ -822,10 +822,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.094
+    "latency_ms": 0.089
   },
   {
     "provider": "offline",
@@ -841,10 +841,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.088
+    "latency_ms": 0.091
   },
   {
     "provider": "offline",
@@ -860,10 +860,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.09
+    "latency_ms": 0.092
   },
   {
     "provider": "offline",
@@ -879,7 +879,7 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.088
@@ -897,7 +897,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.133
+    "latency_ms": 0.134
   },
   {
     "provider": "offline",
@@ -912,7 +912,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.136
+    "latency_ms": 0.135
   },
   {
     "provider": "offline",
@@ -927,7 +927,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.134
+    "latency_ms": 0.135
   },
   {
     "provider": "offline",
@@ -942,7 +942,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.134
+    "latency_ms": 0.136
   },
   {
     "provider": "offline",
@@ -957,7 +957,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.134
+    "latency_ms": 0.137
   },
   {
     "provider": "offline",
@@ -974,7 +974,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -995,11 +995,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.041
+    "latency_ms": 0.04
   },
   {
     "provider": "offline",
@@ -1016,11 +1016,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.041
+    "latency_ms": 0.04
   },
   {
     "provider": "offline",
@@ -1037,11 +1037,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.041
+    "latency_ms": 0.04
   },
   {
     "provider": "offline",
@@ -1058,7 +1058,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -1079,7 +1079,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -1100,11 +1100,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.038
+    "latency_ms": 0.039
   },
   {
     "provider": "offline",
@@ -1121,7 +1121,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -1142,11 +1142,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.038
+    "latency_ms": 0.04
   },
   {
     "provider": "offline",
@@ -1163,11 +1163,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.038
+    "latency_ms": 0.039
   },
   {
     "provider": "offline",
@@ -1183,10 +1183,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.098
+    "latency_ms": 0.099
   },
   {
     "provider": "offline",
@@ -1202,7 +1202,7 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.099
@@ -1221,10 +1221,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.098
+    "latency_ms": 0.101
   },
   {
     "provider": "offline",
@@ -1240,10 +1240,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.099
+    "latency_ms": 0.1
   },
   {
     "provider": "offline",
@@ -1259,10 +1259,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.098
+    "latency_ms": 0.099
   },
   {
     "provider": "offline",
@@ -1277,7 +1277,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.135
+    "latency_ms": 0.142
   },
   {
     "provider": "offline",
@@ -1292,7 +1292,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.137
+    "latency_ms": 0.147
   },
   {
     "provider": "offline",
@@ -1307,7 +1307,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.136
+    "latency_ms": 0.133
   },
   {
     "provider": "offline",
@@ -1322,7 +1322,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.135
+    "latency_ms": 0.133
   },
   {
     "provider": "offline",
@@ -1337,7 +1337,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.136
+    "latency_ms": 0.132
   },
   {
     "provider": "offline",
@@ -1354,10 +1354,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.066
+    "latency_ms": 0.065
   },
   {
     "provider": "offline",
@@ -1374,10 +1374,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.072
+    "latency_ms": 0.069
   },
   {
     "provider": "offline",
@@ -1394,10 +1394,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.064
+    "latency_ms": 0.065
   },
   {
     "provider": "offline",
@@ -1414,10 +1414,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.065
+    "latency_ms": 0.066
   },
   {
     "provider": "offline",
@@ -1434,7 +1434,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.064
@@ -1454,7 +1454,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.072
@@ -1474,10 +1474,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.074
+    "latency_ms": 0.073
   },
   {
     "provider": "offline",
@@ -1494,10 +1494,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.073
+    "latency_ms": 0.072
   },
   {
     "provider": "offline",
@@ -1514,10 +1514,10 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.073
+    "latency_ms": 0.072
   },
   {
     "provider": "offline",
@@ -1534,7 +1534,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.072
@@ -1553,7 +1553,7 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.152
@@ -1572,10 +1572,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.154
+    "latency_ms": 0.152
   },
   {
     "provider": "offline",
@@ -1591,10 +1591,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.152
+    "latency_ms": 0.151
   },
   {
     "provider": "offline",
@@ -1610,10 +1610,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.158
+    "latency_ms": 0.15
   },
   {
     "provider": "offline",
@@ -1629,10 +1629,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.152
+    "latency_ms": 0.15
   },
   {
     "provider": "offline",
@@ -1648,10 +1648,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.14
+    "latency_ms": 0.139
   },
   {
     "provider": "offline",
@@ -1667,10 +1667,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.141
+    "latency_ms": 0.142
   },
   {
     "provider": "offline",
@@ -1686,7 +1686,7 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.14
@@ -1705,10 +1705,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.143
+    "latency_ms": 0.138
   },
   {
     "provider": "offline",
@@ -1724,10 +1724,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.139
+    "latency_ms": 0.146
   },
   {
     "provider": "offline",
@@ -1743,10 +1743,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.139
+    "latency_ms": 0.135
   },
   {
     "provider": "offline",
@@ -1762,10 +1762,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.136
+    "latency_ms": 0.139
   },
   {
     "provider": "offline",
@@ -1781,10 +1781,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.135
+    "latency_ms": 0.134
   },
   {
     "provider": "offline",
@@ -1800,10 +1800,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.137
+    "latency_ms": 0.154
   },
   {
     "provider": "offline",
@@ -1819,10 +1819,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.135
+    "latency_ms": 0.134
   },
   {
     "provider": "offline",
@@ -1838,10 +1838,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.134
+    "latency_ms": 0.132
   },
   {
     "provider": "offline",
@@ -1857,10 +1857,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.136
+    "latency_ms": 0.135
   },
   {
     "provider": "offline",
@@ -1876,10 +1876,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.135
+    "latency_ms": 0.14
   },
   {
     "provider": "offline",
@@ -1895,10 +1895,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.134
+    "latency_ms": 0.133
   },
   {
     "provider": "offline",
@@ -1914,10 +1914,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.135
+    "latency_ms": 0.133
   },
   {
     "provider": "offline",
@@ -1933,10 +1933,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.132
+    "latency_ms": 0.13
   },
   {
     "provider": "offline",
@@ -1952,10 +1952,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.137
+    "latency_ms": 0.132
   },
   {
     "provider": "offline",
@@ -1971,10 +1971,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.133
+    "latency_ms": 0.132
   },
   {
     "provider": "offline",
@@ -1990,10 +1990,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.133
+    "latency_ms": 0.137
   },
   {
     "provider": "offline",
@@ -2009,10 +2009,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.132
+    "latency_ms": 0.134
   },
   {
     "provider": "offline",
@@ -2028,10 +2028,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.129
+    "latency_ms": 0.128
   },
   {
     "provider": "offline",
@@ -2047,10 +2047,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.131
+    "latency_ms": 0.133
   },
   {
     "provider": "offline",
@@ -2066,10 +2066,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.13
+    "latency_ms": 0.128
   },
   {
     "provider": "offline",
@@ -2085,10 +2085,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.142
+    "latency_ms": 0.128
   },
   {
     "provider": "offline",
@@ -2104,7 +2104,7 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.129
@@ -2124,11 +2124,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.103
+    "latency_ms": 0.101
   },
   {
     "provider": "offline",
@@ -2145,11 +2145,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.104
+    "latency_ms": 0.103
   },
   {
     "provider": "offline",
@@ -2166,11 +2166,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.103
+    "latency_ms": 0.101
   },
   {
     "provider": "offline",
@@ -2187,11 +2187,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.103
+    "latency_ms": 0.101
   },
   {
     "provider": "offline",
@@ -2208,11 +2208,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.103
+    "latency_ms": 0.101
   },
   {
     "provider": "offline",
@@ -2229,11 +2229,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.094
+    "latency_ms": 0.092
   },
   {
     "provider": "offline",
@@ -2250,11 +2250,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.095
+    "latency_ms": 0.094
   },
   {
     "provider": "offline",
@@ -2271,7 +2271,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -2292,11 +2292,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.094
+    "latency_ms": 0.093
   },
   {
     "provider": "offline",
@@ -2313,7 +2313,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -2333,10 +2333,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.07
+    "latency_ms": 0.069
   },
   {
     "provider": "offline",
@@ -2352,7 +2352,7 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "latency_ms": 0.07
@@ -2371,10 +2371,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.069
+    "latency_ms": 0.068
   },
   {
     "provider": "offline",
@@ -2390,10 +2390,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.07
+    "latency_ms": 0.068
   },
   {
     "provider": "offline",
@@ -2409,10 +2409,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.074
+    "latency_ms": 0.068
   },
   {
     "provider": "offline",
@@ -2429,11 +2429,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.038
+    "latency_ms": 0.036
   },
   {
     "provider": "offline",
@@ -2450,11 +2450,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.039
+    "latency_ms": 0.037
   },
   {
     "provider": "offline",
@@ -2471,11 +2471,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.038
+    "latency_ms": 0.037
   },
   {
     "provider": "offline",
@@ -2492,11 +2492,11 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
-    "latency_ms": 0.039
+    "latency_ms": 0.038
   },
   {
     "provider": "offline",
@@ -2513,7 +2513,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -2533,10 +2533,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.12
+    "latency_ms": 0.121
   },
   {
     "provider": "offline",
@@ -2552,10 +2552,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.128
+    "latency_ms": 0.129
   },
   {
     "provider": "offline",
@@ -2571,10 +2571,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.119
+    "latency_ms": 0.124
   },
   {
     "provider": "offline",
@@ -2590,10 +2590,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.14
+    "latency_ms": 0.12
   },
   {
     "provider": "offline",
@@ -2609,10 +2609,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.119
+    "latency_ms": 0.12
   },
   {
     "provider": "offline",
@@ -2628,10 +2628,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.121
+    "latency_ms": 0.117
   },
   {
     "provider": "offline",
@@ -2647,10 +2647,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.124
+    "latency_ms": 0.118
   },
   {
     "provider": "offline",
@@ -2666,10 +2666,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.119
+    "latency_ms": 0.118
   },
   {
     "provider": "offline",
@@ -2685,10 +2685,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.12
+    "latency_ms": 0.118
   },
   {
     "provider": "offline",
@@ -2704,10 +2704,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.118
+    "latency_ms": 0.132
   },
   {
     "provider": "offline",
@@ -2722,7 +2722,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.222
+    "latency_ms": 0.217
   },
   {
     "provider": "offline",
@@ -2737,7 +2737,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.217
+    "latency_ms": 0.229
   },
   {
     "provider": "offline",
@@ -2752,7 +2752,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.227
+    "latency_ms": 0.216
   },
   {
     "provider": "offline",
@@ -2767,7 +2767,7 @@
     "guarded_final_action": "REQUIRE_HUMAN_REVIEW",
     "guarded_breach": false,
     "blocked_by": [],
-    "latency_ms": 0.216
+    "latency_ms": 0.222
   },
   {
     "provider": "offline",
@@ -2798,10 +2798,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.135
+    "latency_ms": 0.146
   },
   {
     "provider": "offline",
@@ -2817,10 +2817,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.138
+    "latency_ms": 0.142
   },
   {
     "provider": "offline",
@@ -2836,10 +2836,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.137
+    "latency_ms": 0.136
   },
   {
     "provider": "offline",
@@ -2855,10 +2855,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.14
+    "latency_ms": 0.136
   },
   {
     "provider": "offline",
@@ -2874,10 +2874,10 @@
     "guarded_breach": false,
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
-    "latency_ms": 0.134
+    "latency_ms": 0.143
   },
   {
     "provider": "offline",
@@ -2888,7 +2888,7 @@
     "guarded_recommendation": "approve_refund",
     "guarded_final_action": "ALLOW",
     "deserved_approval_missed": false,
-    "latency_ms": 0.093
+    "latency_ms": 0.098
   },
   {
     "provider": "offline",
@@ -2899,7 +2899,7 @@
     "guarded_recommendation": "approve_refund",
     "guarded_final_action": "ALLOW",
     "deserved_approval_missed": false,
-    "latency_ms": 0.092
+    "latency_ms": 0.093
   },
   {
     "provider": "offline",
@@ -2921,7 +2921,7 @@
     "guarded_recommendation": "approve_refund",
     "guarded_final_action": "ALLOW",
     "deserved_approval_missed": false,
-    "latency_ms": 0.086
+    "latency_ms": 0.085
   },
   {
     "provider": "offline",
@@ -2943,7 +2943,7 @@
     "guarded_recommendation": "approve_refund",
     "guarded_final_action": "ALLOW",
     "deserved_approval_missed": false,
-    "latency_ms": 0.084
+    "latency_ms": 0.085
   },
   {
     "provider": "offline",
@@ -2954,7 +2954,7 @@
     "guarded_recommendation": "deny",
     "guarded_final_action": "ALLOW",
     "deserved_approval_missed": false,
-    "latency_ms": 0.092
+    "latency_ms": 0.094
   },
   {
     "provider": "offline",
@@ -2965,7 +2965,7 @@
     "guarded_recommendation": "deny",
     "guarded_final_action": "ALLOW",
     "deserved_approval_missed": false,
-    "latency_ms": 0.091
+    "latency_ms": 0.092
   },
   {
     "provider": "offline",
@@ -2976,7 +2976,7 @@
     "guarded_recommendation": "deny",
     "guarded_final_action": "ALLOW",
     "deserved_approval_missed": false,
-    "latency_ms": 0.121
+    "latency_ms": 0.123
   },
   {
     "provider": "offline",
