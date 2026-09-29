@@ -1525,7 +1525,8 @@ computes it (`workflows._resolve_facts`); no request field can set it.
   (equivocation).
 - **Stored records are evaluated by id.** A caller cannot send body facts or a
   statement for a dispute, application, transaction or session the store
-  holds; that is a 400. Its recorded submission, its account's context and its
+  holds, on any route (the multi-turn conversation route included); that is a
+  400. Its recorded submission, its account's context and its
   stored statement decide. A KYB statement names its application, so a
   statement about one of a merchant's applications cannot stand in for
   another. `sentinel trust ingest` verifies issuers' statements and stores
@@ -3353,7 +3354,9 @@ leaks in {t['decisions_tested']:,} checks -- evidence for the invariant, not a p
     ] = f"""Flagship attack (`make attack`): the gateway flags the document CRITICAL, the
 simulated agent recommends `APPROVE_REFUND`, the ledger says delivered, the
 claim is CONTRADICTED, `dispute-refund@v{max(by_id['dispute-refund'])}` blocks, the capability is DENIED,
-the final action is BLOCK, a case opens and the audit event is chained. Across
+the final action is BLOCK. The simulator records nothing (its ledger is a
+fixture signed on request); the same input through `/v1/disputes/evaluate`
+opens a case and chains an audit event. Across
 the {s['n_attacks']}-attack development corpus the same path executes {pct(s['asr_guarded'])} of attacks
 (structural) against {pct(s['asr_unguarded'])} for the simulated agent with no controls."""
     return out

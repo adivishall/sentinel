@@ -50,6 +50,8 @@ from sentinel.domain.enums import (
     PolicyOutcome,
     Workflow,
 )
+from sentinel.domain.ids import new_id
+from sentinel.presets import ATTACKS
 from sentinel.risk import scoring
 from sentinel.security.capabilities import CONSEQUENTIAL, WORKFLOW_CAPABILITIES, authorize
 from sentinel.security.provenance import UntrustedContent, wrap_untrusted
@@ -135,10 +137,10 @@ def test_a_multi_turn_dispute_is_decided_and_audited_once(app):
 
 
 def test_the_multi_turn_attack_leaves_no_orphan_case_or_audit_event(app):
-    n = len(app.runtime.audit)
+    n, cases = len(app.runtime.audit), len(app.cases(limit=10_000))
     sb = app.simulate_attack("multi_turn")
-    new = app.runtime.audit.events()[n:]
-    assert [e.decision_id for e in new if e.kind == "decision"] == [sb["decision"]["decision_id"]]
+    assert not sb["decision"]["authoritative"]  # a simulation: nothing is recorded
+    assert len(app.runtime.audit) == n and len(app.cases(limit=10_000)) == cases
     for c in app.cases(limit=500):
         for did in c.decision_ids:
             assert app.store.decision(did) is not None, (c.case_id, did)
@@ -160,8 +162,17 @@ def test_a_session_records_only_when_it_decides():
 
 # ---- D3: every human case action is chained -------------------------------------------------
 def _blocked_case(app):
-    sb = app.simulate_attack("document_injection")
-    return app.case(sb["case"]["case_id"])
+    """The flagship attack, recorded: an issuer-signed ledger (delivered) and a document that
+    tells the agent compliance approved the refund, through the real evaluate path."""
+    p = ATTACKS["document_injection"]
+    did = new_id("DSP")
+    b = app.evaluate_dispute(
+        p.narrative,
+        envelope=app.issuer.sign(FactKind.DISPUTE_LEDGER, did, ledger(**p.ledger)),
+        documents=(p.document,),
+    )
+    assert b.decision.authoritative and b.case is not None
+    return app.case(b.case.case_id)
 
 
 def test_human_case_actions_are_audit_events(app):

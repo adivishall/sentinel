@@ -72,6 +72,16 @@ can be trusted (roadmap issues #11–#20).
     `signature_now`, withheld when the snapshot disagrees with its audit event;
   - a 4,300-digit JSON integer dropped the connection.
 
+  The review of #12 found two more on this branch, both fixed with regression tests:
+  - **the conversation route re-pointed a stored dispute.** A caller sent a stored
+    dispute's own signed statement with new text; the refund executed, with the
+    account's risk dropped, where the dispute by id went to review (seeds 2, 3 and 8).
+    The route now refuses it, as the dispute route does;
+  - **the attack simulator minted executed refunds.** It signed its preset ledger on
+    request and recorded the WITH side as authoritative, so every legitimate-control run
+    executed a refund on a dispute that does not exist. Every simulator run is now a
+    what-if: never recorded, never executed.
+
   Scope correction: the `facts_source` argument is gone from the *public* `SentinelApp`
   methods. The internal `run_*` workflow layer trusts its caller's transport label, as
   it always did.

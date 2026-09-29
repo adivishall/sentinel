@@ -406,6 +406,12 @@ the operator controls is that thing. A request body, a label and a stored row ar
   in-process issuer, labelled as such.
 - A signature proves who stated a record, not that the record is true, and the risk
   context around the record is still read from the store (`TRUSTED_LOCAL` at best).
+- The attack simulator no longer records anything. Its preset ledger is signed on
+  request, so a simulator decision proves nothing about a real payment. While D25
+  recorded the simulator's WITH side, every legitimate-control run executed a refund on
+  a dispute that does not exist (found by the review of #12). Both sides are now
+  what-ifs. The demo's "a case opens and the event is chained" is shown by the evaluate
+  routes, not the simulator.
 
 ## D32 — Policy states the provenance it needs; the registry holds a floor no policy can lower
 

@@ -9,8 +9,8 @@
 [![CI](https://github.com/adivishall/sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/adivishall/sentinel/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 ![Runs offline](https://img.shields.io/badge/runs_offline-no_API_key-2e8b57)
-![Zero runtime deps](https://img.shields.io/badge/runtime_deps-0_(stdlib)-2e6da4)
-![Tests](https://img.shields.io/badge/tests-751_passing-2e8b57)
+![Runtime deps](https://img.shields.io/badge/runtime_deps-1_(cryptography)-2e6da4)
+![Tests](https://img.shields.io/badge/tests-752_passing-2e8b57)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
 [Console (static snapshot)](https://adivishall.github.io/sentinel/) · [Screenshots](#screenshots) · [Evaluation](docs/EVALUATION.md) · [Security model](docs/SECURITY_MODEL.md) · [Limitations](docs/LIMITATIONS.md) · [Interview guide](docs/INTERVIEW.md)
@@ -96,7 +96,7 @@ make attack-compare
      authorization: APPROVE_REFUND -> DENIED
 5. WHAT WAS FINALLY ALLOWED
      WITHOUT Sentinel (the simulated agent's tool call runs): EXECUTED APPROVE_REFUND
-     WITH Sentinel: BLOCK, executed nothing; case opened; audit event chained
+     WITH Sentinel: BLOCK, executed nothing   (a simulation too: nothing recorded)
 
 The AI was persuaded. The financial system was not.
 ```
@@ -145,7 +145,7 @@ monitoring cycle finder is bounded to 30 days ([details](docs/EVALUATION.md#g-fi
 | **Trusted evidence** | claims ("never received") are checked against records ("delivered"); contradictions are first-class; every decision says where its facts came from (`system_of_record` -- here a synthetic SQLite store -- or demo / simulation input) | [EVIDENCE_MODEL](docs/EVIDENCE_MODEL.md) · [input classes](docs/API.md#input-classes-system-of-record-vs-demo--simulation) |
 | **Policy-as-code** | versioned, fail-closed (every field a rule reads must be present and typed), shipped versions pinned by SHA-256; only the active version decides | [POLICY_ENGINE](docs/POLICY_ENGINE.md) |
 | **Capability registry** | per capability: risk, reversibility, allowed actors, review level and the workflows that may execute it; no AI actor may execute a consequential capability, and a login decision can never approve a refund | [capability matrix](docs/SECURITY_MODEL.md#capability-security-matrix) |
-| **Evaluation authority** | only a run with every control, the active policy and the active risk model is recorded; what-ifs (replay, the simulator's no-controls side) never persist | [authority](docs/SECURITY_MODEL.md#evaluation-authority-sentineldecisionauthoritypy) |
+| **Evaluation authority** | only a run with every control, the active policy and the active risk model is recorded; what-ifs (replay, the attack simulator) never persist | [authority](docs/SECURITY_MODEL.md#evaluation-authority-sentineldecisionauthoritypy) |
 | **Human review** | only a human decision resolves a case, checked against the registry (a policy BLOCK is final for everyone); every human action is chained into the audit log | [case lifecycle](docs/SECURITY_MODEL.md#case-lifecycle-sentinelcasesservicepy) |
 | **Audit and replay** | a **tamper-evident application audit chain** (not a blockchain, not an immutable ledger): SHA-256-chained events that store hashes, never prose, with an HMAC-signed checkpoint; replay re-runs any decision under another policy or risk model and shows ORIGINAL vs RECOMPUTED with drift | [AUDIT_MODEL](docs/AUDIT_MODEL.md) |
 
@@ -258,8 +258,8 @@ engine output over the synthetic demo dataset, nothing drawn by hand.
 
 ```bash
 git clone https://github.com/adivishall/sentinel.git && cd sentinel
-make install          # dev tooling + the `sentinel` command; the core has zero runtime dependencies
-make test             # 751 tests, offline
+make install          # dev tooling + the `sentinel` command; the one runtime dependency is pyca/cryptography
+make test             # 752 tests, offline
 make attack-compare   # the flagship demo, no key needed
 make api              # API + console at http://localhost:8000 (in-memory demo dataset)
 ```
