@@ -145,14 +145,24 @@ authenticated service calls with freshness checks, and record per fact the
 source system and record version.
 
 **12. How would reviewer authentication work?**
-**IMPLEMENTED:** the registry defines the level each capability needs; the case
-service refuses system and model names, checks the declared level and the
-registry's answer for a human actor, requires a senior once a case is
-escalated, and chains every human action with the declared role. **NOT
-IMPLEMENTED:** identity. Production would take the reviewer from an
-authenticated session (SSO / OIDC), roles from the identity provider rather
-than the request body, four-eyes approval (two distinct reviewers) above a
-threshold, and record the authenticated principal in the audit event.
+**IMPLEMENTED:**
+- A reviewer registry (operator configuration) holds id, role, authority
+  limit and an active flag. Its bearer credentials are stored only as SHA-256
+  and matched in constant time.
+- Every case action resolves who acts from the credential. A body naming a
+  reviewer or role is refused.
+- Approvals check the capability registry's level, the reviewer's authority
+  limit and, where the registry asks, four eyes: two distinct reviewers
+  before a case resolves.
+- Every human action is chained with the resolved reviewer id and credential
+  id.
+
+**NOT IMPLEMENTED:**
+- SSO / OIDC: the credential is a bearer token Sentinel issues, not a
+  session from the institution's identity provider.
+- Credential expiry and rotation schedules, and TLS termination (issue #20).
+- Binding a reviewer to the subjects they may not review, such as their own
+  account.
 
 **13. Why not just use a fraud model?**
 A fraud model answers "does this payment look like fraud?", not "is this

@@ -222,15 +222,16 @@ block.
     world several point-bearing factors fire far more often on legitimate
     transactions than on fraud (`docs/EVALUATION.md` §G lists every one);
     they were left as they are rather than re-weighted to look better.
-27. **The human path has structure but no identity.** Only a human decision
-    resolves a case, reserved system / model names are refused, approving needs
-    the level the case's capability requires and the registry's answer for a
-    human actor, an escalated case needs a senior, and every human action is
-    chained into the audit log -- but the reviewer's name and level are
-    declared by the caller (status changes and manual cases accept any declared
-    actor name). Without per-user authentication and four-eyes enforcement, "a
-    senior reviewer approved it" means "someone who called the API said so",
-    recorded tamper-evidently.
+27. **Reviewer identity is a Sentinel-issued bearer credential, not the
+    institution's identity provider.** Who acts, their role and their
+    authority limit come from an operator-configured reviewer registry, and
+    four eyes is enforced where the capability registry asks. But:
+    - the credential is a static bearer token with no expiry, sent in a
+      header, so production needs TLS and SSO / OIDC (issue #20);
+    - anyone who can write the registry file can mint a reviewer, so keep it
+      outside the data directory;
+    - Sentinel does not know which subjects a reviewer is conflicted on (for
+      example their own account).
 28. **The claim classifier's held-out score is optimistic after the change.**
     The held-out set scored 7/21 on the first run; the patterns were then
     extended against a separate development set by an author who had seen the

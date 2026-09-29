@@ -286,7 +286,7 @@ second decision, no reopen).
 | `ESCALATED` | `INVESTIGATING` | yes |
 
 A human decision recorded under a reserved system or model actor name
-(`agent`, `ai`, `auto`, `automation`, `bot`, `llm`, `model`, `sentinel`, `system`, any `agent:` / `ai:` / `model:` prefix) or under the name
+(`agent`, `ai`, `auto`, `automation`, `bot`, `human`, `llm`, `model`, `sentinel`, `system`, any `agent:` / `ai:` / `model:` prefix) or under the name
 of an agent that recommended on the case is refused. Approving needs the
 level the case's capability requires, read from the registry when the case
 opens: `APPROVE_REFUND` → HUMAN_REVIEWER, `APPROVE_TRANSACTION` → HUMAN_REVIEWER, `APPROVE_MERCHANT` → HUMAN_REVIEWER, `FREEZE_ACCOUNT` → HUMAN_REVIEWER, `UNFREEZE_ACCOUNT` → HUMAN_REVIEWER, `CHANGE_PAYOUT` → HUMAN_REVIEWER, `RELEASE_FUNDS` → SENIOR_REVIEWER, `CLOSE_CASE` → HUMAN_REVIEWER, `ALTER_RISK` → SENIOR_REVIEWER, `SKIP_REVIEW` → NOBODY; and the registry must allow the approval for that
@@ -297,8 +297,24 @@ any human; once escalated, the case is decided by a SENIOR_REVIEWER. Every
 human action -- a manual case, a status change, a decision -- is appended to
 the audit chain before the case is saved (notes and titles hashed), so a
 resolution cannot be written into the case table without a chained record.
-The reviewer's name and level are *declared* -- there is no identity system
-(`docs/LIMITATIONS.md`).
+**Who acts is authenticated, not declared** (`sentinel/cases/identity.py`).
+
+- **The registry.** A reviewer registry is operator configuration
+  (`SENTINEL_REVIEWERS`), apart from the case data. It holds each reviewer's
+  id, role, authority limit, active flag and one random 256-bit credential,
+  stored only as its SHA-256.
+- **Resolving the reviewer.** A case action presents the credential
+  (`X-Reviewer-Token`, or `SENTINEL_REVIEWER_TOKEN` for the CLI). The id,
+  role and limit on the record come from the registry. A request body that
+  names a reviewer, role or actor is refused.
+- **Approving** also needs:
+  - an authority limit that covers the case amount;
+  - four eyes where the capability registry asks for it (`dual_approval_at`):
+    two distinct reviewers must approve before the case resolves. One
+    identity cannot supply both, a deny resolves, and an escalation restarts
+    the count.
+- **Executing.** A human approval executes the case's capability, so it
+  claims the same once-per-subject key a decision would.
 
 ## Threat taxonomy (15 classes)
 

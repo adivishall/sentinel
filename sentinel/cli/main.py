@@ -815,6 +815,22 @@ def cmd_bench(args: argparse.Namespace) -> int:
 
 def cmd_serve(args: argparse.Namespace) -> int:
     app = _app(args)
+    if not app.reviewers.reviewers() and app.store.path == ":memory:":
+        # the in-memory demo gets two demo reviewers; their credentials exist only in this
+        # process and are printed once, for the console's case-review form
+        from sentinel.cases.identity import ReviewerRegistry
+
+        reg, alice = ReviewerRegistry(origin="demo (in memory)").add(
+            "alice", "Alice (demo reviewer)", "HUMAN_REVIEWER", 200_000
+        )
+        reg, sam = reg.add("sam", "Sam (demo senior reviewer)", "SENIOR_REVIEWER", 10_000_000)
+        app.reviewers = reg
+        print(
+            "[sentinel] demo reviewer credentials (this process only):\n"
+            f"  alice  HUMAN_REVIEWER   limit 200,000     {alice}\n"
+            f"  sam    SENIOR_REVIEWER  limit 10,000,000  {sam}",
+            file=sys.stderr,
+        )
     if args.analyze and app.store.count("decisions") == 0:
         print(
             "[sentinel] analyzing a slice of the dataset so the console has data...",

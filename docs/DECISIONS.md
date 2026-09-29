@@ -441,3 +441,29 @@ misconfigured policy from undoing it.
   cost of not being able to prove where facts came from.
 - A legitimate customer "freeze my card" request also goes to a human until the
   authentication service records it.
+
+## D33 — Who acts on a case is resolved from a credential, and four eyes is the registry's call
+
+**Decision.**
+- **The registry.** Human case actions take a `Reviewer` that an
+  operator-configured registry authenticated from a bearer credential. The
+  credential is random, 256-bit, stored only as SHA-256 and matched in
+  constant time. The registry refuses system and model names as ids.
+- **The request.** A body that names a reviewer or role is refused, not
+  ignored.
+- **Approving** also checks the reviewer's authority limit against the case
+  amount.
+- **Four eyes.** The capability registry declares `dual_approval_at`: always
+  for payout changes, fund releases and risk overrides; from ₹100,000 for
+  refunds; from ₹500,000 for payments. Two distinct reviewers must approve
+  before the case resolves.
+
+**Why.** The trust audit reproduced one caller escalating a case as
+`HUMAN_REVIEWER` and approving it as a self-declared `SENIOR_REVIEWER`. The
+name blacklist let `claude` and a Cyrillic `ѕentinel` through. "A senior
+approved it" meant "someone said so".
+
+**Trade-off.** A Sentinel-issued token is not the institution's SSO. It has
+no expiry, and anyone who can write the registry file can mint a reviewer.
+The demo prints two in-memory credentials so the console can act. The
+thresholds are demo values.

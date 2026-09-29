@@ -81,6 +81,26 @@ can be trusted (roadmap issues #11–#20).
   instants. An unsigned caller transaction or session is assessed as of the system's
   time, so backdating past a freeze changes nothing.
 
+### Security — reviewer identity, authority limits, four eyes (#13)
+- **Fixed: a caller could self-declare `SENIOR_REVIEWER`**, and one caller escalated and
+  then approved the same case. The reserved-name list let `claude` and `ѕentinel` (Cyrillic)
+  through, and any caller could write `sentinel`-attributed case events.
+- **Reviewer registry** (`sentinel/cases/identity.py`, `SENTINEL_REVIEWERS`):
+  - id, role, authority limit, active flag, and one bearer credential stored only as its
+    SHA-256, matched in constant time;
+  - every case action resolves who acts from `X-Reviewer-Token` (CLI:
+    `SENTINEL_REVIEWER_TOKEN`), and a body naming a reviewer or role is a 400;
+  - `sentinel reviewers add | list | deactivate`.
+- **Authority limits and four eyes.** Approvals check the reviewer's limit against the case
+  amount. `dual_approval_at` in the capability registry requires two distinct reviewers:
+  always for payout changes, fund releases and risk overrides, and above a threshold for
+  refunds and payments. A deny resolves, and an escalation restarts the count.
+- **Execution.** A human approval claims the same once-per-subject key a decision does.
+- **Audit.** Human-action events record the resolved reviewer id, role, credential id and
+  limit, never the credential.
+- **Console.** The case-review form takes a reviewer credential (kept for the tab only), and
+  the in-memory demo prints two demo credentials at start.
+
 ### Evaluation
 - The corpora's ledgers and acquirer records are signed by an ephemeral evaluation
   issuer and verified in every case, so the suites measure text and model influence on
