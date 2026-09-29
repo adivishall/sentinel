@@ -14,3 +14,4 @@ results/_eval_run.log
 build/
 dist/
 audit-checkpoint.json
+.venv/
