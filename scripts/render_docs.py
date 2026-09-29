@@ -1286,6 +1286,7 @@ def render_security_model() -> str:
             "Allowed actors",
             "Required authorization",
             "Human-review threshold (₹)",
+            "Least fact provenance",
             "Executable from",
             "Policy gates",
         ],
@@ -1304,6 +1305,7 @@ def render_security_model() -> str:
                     if r["human_review_threshold"] is not None
                     else "—"
                 ),
+                f"`{r['min_fact_provenance']}`" if r["min_fact_provenance"] else "—",
                 ", ".join(r["workflows"])
                 or ("no workflow (a human, via the case service)" if r["consequential"] else "—"),
                 ", ".join(f"`{g}`" for g in r["policy_gates"]) or "—",
@@ -1384,10 +1386,10 @@ def render_security_model() -> str:
         "APPROVE_REFUND": "dispute workflow -- fixed candidate",
         "APPROVE_TRANSACTION": "transaction workflow -- fixed candidate",
         "APPROVE_MERCHANT": "merchant-onboarding workflow -- fixed candidate",
-        "CHANGE_PAYOUT": "account-security workflow -- the caller's structured `requested_capability`, or a `payout_change` event in the trusted session record",
-        "FREEZE_ACCOUNT": "account-security workflow -- the caller's structured `requested_capability`",
-        "UNFREEZE_ACCOUNT": "account-security workflow -- the caller's structured `requested_capability`",
-        "RELEASE_FUNDS": "account-security workflow -- the caller's structured `requested_capability`",
+        "CHANGE_PAYOUT": "account-security workflow -- a `payout_change` event in the session record (a caller's `requested_capability` the record does not show is held for a human)",
+        "FREEZE_ACCOUNT": "account-security workflow -- the caller's `requested_capability`, supported only when the session record shows a `freeze_request`; otherwise INSUFFICIENT (human review)",
+        "UNFREEZE_ACCOUNT": "account-security workflow -- the caller's `requested_capability`, supported only when the session record shows an `unfreeze_request`",
+        "RELEASE_FUNDS": "account-security workflow -- the caller's `requested_capability`, supported only when the session record shows a `release_request`",
         "CLOSE_CASE": "account-security `requested_capability` only; the investigation workflow never has a candidate. Closing a *case* is `record_human_decision`, never a capability execution",
         "ALTER_RISK": "account-security workflow -- the caller's structured `requested_capability`",
         "SKIP_REVIEW": "account-security workflow -- the caller's structured `requested_capability` (no actor may be granted it)",
@@ -1562,17 +1564,37 @@ model asked for, and with the workflow itself. In order:
    the API and a DENY from the engine;
 4. the actor is not in the capability's allowed actors → DENIED;
 5. policy outcome BLOCK → DENIED;
-6. a consequential capability whose verified evidence does not support the
+6. **the fact-provenance floor** (`min_fact_provenance`, `TRUSTED_LOCAL` for
+   every consequential capability). Facts whose verification failed
+   (`INVALID`, `REVOKED`), or with no recorded provenance at all → DENIED for
+   every actor. For SYSTEM, facts below the floor (`UNTRUSTED`, `EXPIRED`,
+   `SUPERSEDED`) → PENDING_HUMAN. This holds under every policy version: a
+   policy may demand more, never less;
+7. a consequential capability whose verified evidence does not support the
    request → DENIED;
-7. policy outcome REQUIRE_HUMAN_REVIEW or TEMPORARY_HOLD → PENDING_HUMAN;
-8. the automated path (SYSTEM) on a capability that requires a human or
+8. policy outcome REQUIRE_HUMAN_REVIEW or TEMPORARY_HOLD → PENDING_HUMAN;
+9. the automated path (SYSTEM) on a capability that requires a human or
    senior reviewer → PENDING_HUMAN;
-9. SYSTEM above the capability's human-review amount threshold → PENDING_HUMAN;
-10. otherwise GRANTED.
+10. SYSTEM above the capability's human-review amount threshold → PENDING_HUMAN;
+11. otherwise GRANTED.
 
 A human approval of a case gets the same answer for the reviewer's actor kind
-(`CaseService.approval`): a policy BLOCK is final for every actor and records
-that contradict the claim cannot be approved.
+(`CaseService.approval`):
+
+- a policy BLOCK is final for every actor;
+- records that contradict the claim cannot be approved;
+- nobody approves facts whose verification failed.
+
+A human may approve on unverified facts, because establishing them is what the
+human review is for.
+
+The policy states finer requirements declaratively on the `facts_provenance`
+context field (`docs/POLICY_ENGINE.md`):
+
+- a failed or revoked signature → BLOCK;
+- unverified facts → human review;
+- a refund above ₹25,000, a payment above ₹100,000, or any merchant onboarding
+  on an unsigned stored record → human review.
 
 ### Final action (`composer._final_action`)
 

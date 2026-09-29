@@ -44,7 +44,7 @@ Then say it: **The AI was persuaded. The financial system was not.**
 <!-- gen:demo-flagship -->
 Flagship attack (`make attack`): the gateway flags the document CRITICAL, the
 simulated agent recommends `APPROVE_REFUND`, the ledger says delivered, the
-claim is CONTRADICTED, `dispute-refund@v3` blocks, the capability is DENIED,
+claim is CONTRADICTED, `dispute-refund@v4` blocks, the capability is DENIED,
 the final action is BLOCK, a case opens and the audit event is chained. Across
 the 150-attack development corpus the same path executes 0.0% of attacks
 (structural) against 90.0% for the simulated agent with no controls.

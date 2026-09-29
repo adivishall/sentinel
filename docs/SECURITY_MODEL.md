@@ -116,25 +116,25 @@ recommendations. `SKIP_REVIEW` has no allowed
 actor at all. These are Sentinel's own values, documented as such; they are
 not industry standards.
 
-| Capability | Risk | Irreversible | Money | Consequential | AI agent may execute | Allowed actors | Required authorization | Human-review threshold (₹) | Executable from | Policy gates |
-|---|---|---|---|---|---|---|---|---|---|---|
-| `READ_TRANSACTION` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — |
-| `READ_ACCOUNT` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — |
-| `READ_MERCHANT` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — |
-| `CREATE_CASE` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — |
-| `CREATE_ALERT` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — |
-| `RECOMMEND_REFUND` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — |
-| `RECOMMEND_ACTION` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — |
-| `APPROVE_REFUND` | HIGH | yes | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | SYSTEM_POLICY | 50,000 | dispute | — |
-| `APPROVE_TRANSACTION` | HIGH | yes | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | SYSTEM_POLICY | 150,000 | transaction | — |
-| `APPROVE_MERCHANT` | HIGH | yes | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | SYSTEM_POLICY | — | merchant_onboarding | — |
-| `FREEZE_ACCOUNT` | MEDIUM | no | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | SYSTEM_POLICY | — | account_security | — |
-| `UNFREEZE_ACCOUNT` | HIGH | no | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER | HUMAN_REVIEWER | — | account_security | `account-security@v1:review-sensitive-capability` |
-| `CHANGE_PAYOUT` | CRITICAL | yes | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER | HUMAN_REVIEWER | 0 | account_security | `account-security@v1:review-sensitive-capability` |
-| `RELEASE_FUNDS` | CRITICAL | yes | yes | yes | **no** | SENIOR_REVIEWER | SENIOR_REVIEWER | 0 | account_security | — |
-| `CLOSE_CASE` | MEDIUM | no | no | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER | HUMAN_REVIEWER | — | no workflow (a human, via the case service) | — |
-| `ALTER_RISK` | HIGH | no | no | yes | **no** | SENIOR_REVIEWER | SENIOR_REVIEWER | — | no workflow (a human, via the case service) | — |
-| `SKIP_REVIEW` | CRITICAL | yes | yes | yes | **no** | nobody | SENIOR_REVIEWER | — | no workflow (a human, via the case service) | — |
+| Capability | Risk | Irreversible | Money | Consequential | AI agent may execute | Allowed actors | Required authorization | Human-review threshold (₹) | Least fact provenance | Executable from | Policy gates |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `READ_TRANSACTION` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — | — |
+| `READ_ACCOUNT` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — | — |
+| `READ_MERCHANT` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — | — |
+| `CREATE_CASE` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — | — |
+| `CREATE_ALERT` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — | — |
+| `RECOMMEND_REFUND` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — | — |
+| `RECOMMEND_ACTION` | LOW | no | no | no | yes | AI_AGENT, HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | NONE | — | — | — | — |
+| `APPROVE_REFUND` | HIGH | yes | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | SYSTEM_POLICY | 50,000 | `TRUSTED_LOCAL` | dispute | — |
+| `APPROVE_TRANSACTION` | HIGH | yes | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | SYSTEM_POLICY | 150,000 | `TRUSTED_LOCAL` | transaction | — |
+| `APPROVE_MERCHANT` | HIGH | yes | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | SYSTEM_POLICY | — | `TRUSTED_LOCAL` | merchant_onboarding | — |
+| `FREEZE_ACCOUNT` | MEDIUM | no | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER, SYSTEM | SYSTEM_POLICY | — | `TRUSTED_LOCAL` | account_security | — |
+| `UNFREEZE_ACCOUNT` | HIGH | no | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER | HUMAN_REVIEWER | — | `TRUSTED_LOCAL` | account_security | `account-security@v1:review-sensitive-capability`, `account-security@v2:review-sensitive-capability` |
+| `CHANGE_PAYOUT` | CRITICAL | yes | yes | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER | HUMAN_REVIEWER | 0 | `TRUSTED_LOCAL` | account_security | `account-security@v1:review-sensitive-capability`, `account-security@v2:review-sensitive-capability` |
+| `RELEASE_FUNDS` | CRITICAL | yes | yes | yes | **no** | SENIOR_REVIEWER | SENIOR_REVIEWER | 0 | `TRUSTED_LOCAL` | account_security | — |
+| `CLOSE_CASE` | MEDIUM | no | no | yes | **no** | HUMAN_REVIEWER, SENIOR_REVIEWER | HUMAN_REVIEWER | — | `TRUSTED_LOCAL` | no workflow (a human, via the case service) | — |
+| `ALTER_RISK` | HIGH | no | no | yes | **no** | SENIOR_REVIEWER | SENIOR_REVIEWER | — | `TRUSTED_LOCAL` | no workflow (a human, via the case service) | — |
+| `SKIP_REVIEW` | CRITICAL | yes | yes | yes | **no** | nobody | SENIOR_REVIEWER | — | `TRUSTED_LOCAL` | no workflow (a human, via the case service) | — |
 
 "Policy gates" lists the shipped policy rules whose conditions name the
 capability (`docs/POLICY_ENGINE.md`); the registry applies regardless of
@@ -153,17 +153,37 @@ model asked for, and with the workflow itself. In order:
    the API and a DENY from the engine;
 4. the actor is not in the capability's allowed actors → DENIED;
 5. policy outcome BLOCK → DENIED;
-6. a consequential capability whose verified evidence does not support the
+6. **the fact-provenance floor** (`min_fact_provenance`, `TRUSTED_LOCAL` for
+   every consequential capability). Facts whose verification failed
+   (`INVALID`, `REVOKED`), or with no recorded provenance at all → DENIED for
+   every actor. For SYSTEM, facts below the floor (`UNTRUSTED`, `EXPIRED`,
+   `SUPERSEDED`) → PENDING_HUMAN. This holds under every policy version: a
+   policy may demand more, never less;
+7. a consequential capability whose verified evidence does not support the
    request → DENIED;
-7. policy outcome REQUIRE_HUMAN_REVIEW or TEMPORARY_HOLD → PENDING_HUMAN;
-8. the automated path (SYSTEM) on a capability that requires a human or
+8. policy outcome REQUIRE_HUMAN_REVIEW or TEMPORARY_HOLD → PENDING_HUMAN;
+9. the automated path (SYSTEM) on a capability that requires a human or
    senior reviewer → PENDING_HUMAN;
-9. SYSTEM above the capability's human-review amount threshold → PENDING_HUMAN;
-10. otherwise GRANTED.
+10. SYSTEM above the capability's human-review amount threshold → PENDING_HUMAN;
+11. otherwise GRANTED.
 
 A human approval of a case gets the same answer for the reviewer's actor kind
-(`CaseService.approval`): a policy BLOCK is final for every actor and records
-that contradict the claim cannot be approved.
+(`CaseService.approval`):
+
+- a policy BLOCK is final for every actor;
+- records that contradict the claim cannot be approved;
+- nobody approves facts whose verification failed.
+
+A human may approve on unverified facts, because establishing them is what the
+human review is for.
+
+The policy states finer requirements declaratively on the `facts_provenance`
+context field (`docs/POLICY_ENGINE.md`):
+
+- a failed or revoked signature → BLOCK;
+- unverified facts → human review;
+- a refund above ₹25,000, a payment above ₹100,000, or any merchant onboarding
+  on an unsigned stored record → human review.
 
 ### Final action (`composer._final_action`)
 
@@ -209,10 +229,10 @@ audit.
 | `APPROVE_REFUND` | dispute workflow -- fixed candidate | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | SYSTEM may execute up to ₹50,000 | HUMAN_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
 | `APPROVE_TRANSACTION` | transaction workflow -- fixed candidate | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | SYSTEM may execute up to ₹150,000 | HUMAN_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
 | `APPROVE_MERCHANT` | merchant-onboarding workflow -- fixed candidate | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | SYSTEM may execute | HUMAN_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
-| `FREEZE_ACCOUNT` | account-security workflow -- the caller's structured `requested_capability` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | SYSTEM may execute | HUMAN_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
-| `UNFREEZE_ACCOUNT` | account-security workflow -- the caller's structured `requested_capability` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | HUMAN_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
-| `CHANGE_PAYOUT` | account-security workflow -- the caller's structured `requested_capability`, or a `payout_change` event in the trusted session record | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | HUMAN_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
-| `RELEASE_FUNDS` | account-security workflow -- the caller's structured `requested_capability` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | SENIOR_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
+| `FREEZE_ACCOUNT` | account-security workflow -- the caller's `requested_capability`, supported only when the session record shows a `freeze_request`; otherwise INSUFFICIENT (human review) | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | SYSTEM may execute | HUMAN_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
+| `UNFREEZE_ACCOUNT` | account-security workflow -- the caller's `requested_capability`, supported only when the session record shows an `unfreeze_request` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | HUMAN_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
+| `CHANGE_PAYOUT` | account-security workflow -- a `payout_change` event in the session record (a caller's `requested_capability` the record does not show is held for a human) | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | HUMAN_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
+| `RELEASE_FUNDS` | account-security workflow -- the caller's `requested_capability`, supported only when the session record shows a `release_request` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | SENIOR_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
 | `CLOSE_CASE` | account-security `requested_capability` only; the investigation workflow never has a candidate. Closing a *case* is `record_human_decision`, never a capability execution | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | HUMAN_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
 | `ALTER_RISK` | account-security workflow -- the caller's structured `requested_capability` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | SENIOR_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
 | `SKIP_REVIEW` | account-security workflow -- the caller's structured `requested_capability` (no actor may be granted it) | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | nobody | NOBODY | decision event (action, capability, facts provenance + payload digest, snapshot hash) |

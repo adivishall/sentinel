@@ -55,6 +55,32 @@ can be trusted (roadmap issues #11–#20).
 - `sentinel trust keygen | sign | verify | list | revoke`, a `--trust-store` option and
   `SENTINEL_TRUST_STORE`.
 
+### Security — provenance-aware policy and the structured-channel bypasses (#12)
+- **Policy.** `facts_provenance` is a policy context field on every decision. New
+  versions `dispute-refund@v4`, `transaction-authorization@v3`, `merchant-onboarding@v2`
+  and `account-security@v2` state what each outcome requires:
+  - a failed or revoked signature → BLOCK;
+  - unverified facts → human review;
+  - high-value money movement (refund > ₹25,000, payment > ₹100,000) or any onboarding on
+    an unsigned stored record → human review.
+- **Registry floor.** `CapabilitySpec.min_fact_provenance` is `TRUSTED_LOCAL` for every
+  consequential capability, and `authorize()` enforces it under every policy version.
+  Failed or missing provenance is denied for every actor; for the system, facts below the
+  floor go to a human. Nobody approves a case whose facts failed verification; a human
+  may establish unverified ones.
+- **Fixed: a caller-chosen `FREEZE_ACCOUNT` executed on stored sessions** (17 of 20 in the
+  audit). A requested account capability must be evidenced by the session record
+  (`payout_change`, `freeze_request`, ...); otherwise INSUFFICIENT, human review.
+- **Fixed: an out-of-vocabulary value disabled a BLOCK rule.** `refund_state: "REFUNDED"`
+  paid a second refund. Record fields are validated against one set of vocabularies
+  (`sentinel.domain.vocab`), and the policy engine fails closed on any context value
+  outside a field's vocabulary. An unknown account's status, which no rule named, now
+  fails safe as well.
+- **Fixed: caller-controlled time.** `Account.status_at` compared ISO strings, so
+  `"2026-08-15 10:00:00"` sorted before a freeze that started that day; it now compares
+  instants. An unsigned caller transaction or session is assessed as of the system's
+  time, so backdating past a freeze changes nothing.
+
 ### Evaluation
 - The corpora's ledgers and acquirer records are signed by an ephemeral evaluation
   issuer and verified in every case, so the suites measure text and model influence on

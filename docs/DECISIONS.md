@@ -406,3 +406,38 @@ the operator controls is that thing. A request body, a label and a stored row ar
   in-process issuer, labelled as such.
 - A signature proves who stated a record, not that the record is true, and the risk
   context around the record is still read from the store (`TRUSTED_LOCAL` at best).
+
+## D32 — Policy states the provenance it needs; the registry holds a floor no policy can lower
+
+**Decision.**
+- **Policy field.** Every policy context carries `facts_provenance`. The v4 / v3 / v2
+  policies state their requirements declaratively:
+  - a failed or revoked signature → BLOCK;
+  - unverified facts → human review;
+  - a refund above ₹25,000, a payment above ₹100,000, or any merchant onboarding on an
+    unsigned stored record → human review.
+- **Registry floor.** The capability registry gives every consequential capability a
+  `min_fact_provenance` (`TRUSTED_LOCAL`) that `authorize()` enforces under every policy
+  version. Facts whose verification failed, or with no recorded provenance, are denied
+  for every actor. For the system, facts below the floor are held for a human.
+- **Vocabularies.** Record-field vocabularies are one source (`sentinel.domain.vocab`) for
+  record validation and for the engine, which fails closed on an out-of-vocabulary
+  context value.
+- **Session evidence.** A requested account capability must be evidenced by the session
+  record.
+
+**Why.** The trust audit found three authoritative bypasses through structured fields:
+- `FREEZE_ACCOUNT` requested on stored sessions executed (17 of 20);
+- `refund_state: "REFUNDED"` made every rule on the field false, so the BLOCK became an
+  ALLOW and a double refund executed;
+- a backdated transaction slipped past an account freeze.
+
+Provenance also needed to reach a place where it decides. The floor keeps an old or
+misconfigured policy from undoing it.
+
+**Trade-off.**
+- The tiers are Sentinel's demo values.
+- A deployment without signing issuers sends more to human review. That is the honest
+  cost of not being able to prove where facts came from.
+- A legitimate customer "freeze my card" request also goes to a human until the
+  authentication service records it.

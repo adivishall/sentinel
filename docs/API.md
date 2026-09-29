@@ -120,6 +120,20 @@ event records both, together with the payload digest.
 `facts_envelope` is accepted on the dispute, merchant, transaction and account
 evaluate routes. Sending it together with the body facts it replaces is a 400.
 
+Account security: a `requested_capability` is a claim about what the session
+asked for, and the session record is the evidence. A request the record does
+not show is `INSUFFICIENT` and goes to human review, never execution.
+
+| Capability | Evidenced by |
+|---|---|
+| `CHANGE_PAYOUT` | `payout_change` |
+| `FREEZE_ACCOUNT` | `freeze_request` |
+| `UNFREEZE_ACCOUNT` | `unfreeze_request` |
+| `RELEASE_FUNDS` | `release_request` |
+
+An unsigned `transaction` or `session` body is assessed as of the system's
+time, not its own timestamp.
+
 A stored dispute or application is evaluated on its **recorded** submission.
 A different `narrative` or `application` sent with a record id is a 400: new
 text is a new submission, not a way to re-point a stored one. Duplicate keys

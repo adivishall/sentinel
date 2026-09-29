@@ -117,9 +117,11 @@ block.
     (history, graph, account status) is read from the store and is at most
     `TRUSTED_LOCAL`; only the primary record is signed.
 
-    A caller-supplied transaction still chooses its own timestamp, which
-    moves its point-in-time risk context. Being `UNTRUSTED`, it cannot
-    execute.
+    A caller-supplied (unsigned) transaction or session no longer chooses the
+    moment it is assessed as of. It is evaluated at the system's time, so
+    backdating it past a freeze or before a burst changes nothing. Being
+    `UNTRUSTED`, it cannot execute either way. A signed statement's timestamp
+    is the issuer's and is used as stated.
 
     Auth is optional, and the server warns when it starts open on a
     non-loopback address. What-if switches (controls, policy version, risk
