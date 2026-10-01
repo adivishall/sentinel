@@ -46,6 +46,7 @@ def snapshot(inputs: DecisionInputs) -> dict[str, Any]:
         "digest": rel.digest if rel is not None else None,
         "release_status": rel.status.value if rel is not None else None,
         "release_key_id": rel.key_id if rel is not None else None,
+        "release_signer": rel.signer if rel is not None else None,
         "activation_sequence": rel.activation_sequence if rel is not None else None,
     }
     d["engine_version"] = __version__
