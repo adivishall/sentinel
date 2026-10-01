@@ -4,99 +4,99 @@
   "components": {
     "normalize": {
       "n": 1000,
-      "mean_ms": 0.018,
-      "p50_ms": 0.0178,
-      "p95_ms": 0.0187,
-      "p99_ms": 0.0209,
-      "throughput_per_sec": 55706
+      "mean_ms": 0.0177,
+      "p50_ms": 0.0176,
+      "p95_ms": 0.0183,
+      "p99_ms": 0.0202,
+      "throughput_per_sec": 56436
     },
     "gateway_inspect": {
       "n": 1000,
-      "mean_ms": 0.2392,
-      "p50_ms": 0.233,
-      "p95_ms": 0.2664,
-      "p99_ms": 0.3281,
-      "throughput_per_sec": 4181
+      "mean_ms": 0.2262,
+      "p50_ms": 0.2255,
+      "p95_ms": 0.235,
+      "p99_ms": 0.2459,
+      "throughput_per_sec": 4421
     },
     "claim_classify": {
       "n": 1000,
-      "mean_ms": 0.2724,
-      "p50_ms": 0.264,
-      "p95_ms": 0.317,
-      "p99_ms": 0.3919,
-      "throughput_per_sec": 3672
+      "mean_ms": 0.2619,
+      "p50_ms": 0.2608,
+      "p95_ms": 0.2713,
+      "p99_ms": 0.2802,
+      "throughput_per_sec": 3818
     },
     "evidence_reconcile": {
       "n": 1000,
-      "mean_ms": 0.0384,
-      "p50_ms": 0.0361,
-      "p95_ms": 0.0413,
-      "p99_ms": 0.1019,
-      "throughput_per_sec": 26009
+      "mean_ms": 0.0357,
+      "p50_ms": 0.0352,
+      "p95_ms": 0.0377,
+      "p99_ms": 0.041,
+      "throughput_per_sec": 28000
     },
     "fact_verify": {
       "n": 1000,
-      "mean_ms": 0.1895,
-      "p50_ms": 0.177,
-      "p95_ms": 0.2302,
-      "p99_ms": 0.4146,
-      "throughput_per_sec": 5277
+      "mean_ms": 0.1777,
+      "p50_ms": 0.1753,
+      "p95_ms": 0.1834,
+      "p99_ms": 0.1914,
+      "throughput_per_sec": 5629
     },
     "risk_score_transaction": {
       "n": 1000,
-      "mean_ms": 0.0162,
-      "p50_ms": 0.0149,
-      "p95_ms": 0.0174,
-      "p99_ms": 0.0608,
-      "throughput_per_sec": 61828
+      "mean_ms": 0.015,
+      "p50_ms": 0.0147,
+      "p95_ms": 0.0154,
+      "p99_ms": 0.0201,
+      "throughput_per_sec": 66621
     },
     "graph_linked_accounts": {
       "n": 1000,
-      "mean_ms": 0.0043,
-      "p50_ms": 0.004,
-      "p95_ms": 0.0047,
-      "p99_ms": 0.0069,
-      "throughput_per_sec": 234666
+      "mean_ms": 0.004,
+      "p50_ms": 0.0039,
+      "p95_ms": 0.0041,
+      "p99_ms": 0.0049,
+      "throughput_per_sec": 250431
     },
     "graph_neighborhood_d2": {
       "n": 200,
-      "mean_ms": 0.0606,
-      "p50_ms": 0.0578,
-      "p95_ms": 0.0642,
-      "p99_ms": 0.2271,
-      "throughput_per_sec": 16499
+      "mean_ms": 0.0547,
+      "p50_ms": 0.0538,
+      "p95_ms": 0.0568,
+      "p99_ms": 0.0608,
+      "throughput_per_sec": 18290
     },
     "policy_evaluate": {
       "n": 1000,
-      "mean_ms": 0.0157,
-      "p50_ms": 0.0149,
-      "p95_ms": 0.0173,
-      "p99_ms": 0.0377,
-      "throughput_per_sec": 63593
+      "mean_ms": 0.0171,
+      "p50_ms": 0.0168,
+      "p95_ms": 0.0178,
+      "p99_ms": 0.0217,
+      "throughput_per_sec": 58472
     },
     "decision_compose": {
       "n": 1000,
-      "mean_ms": 0.0419,
-      "p50_ms": 0.0398,
-      "p95_ms": 0.0482,
-      "p99_ms": 0.0883,
-      "throughput_per_sec": 23885
+      "mean_ms": 0.0424,
+      "p50_ms": 0.0418,
+      "p95_ms": 0.0448,
+      "p99_ms": 0.0494,
+      "throughput_per_sec": 23600
     },
     "audit_append": {
       "n": 1000,
-      "mean_ms": 0.0097,
-      "p50_ms": 0.009,
-      "p95_ms": 0.0114,
-      "p99_ms": 0.0288,
-      "throughput_per_sec": 102580
+      "mean_ms": 0.0091,
+      "p50_ms": 0.0088,
+      "p95_ms": 0.0102,
+      "p99_ms": 0.0143,
+      "throughput_per_sec": 109714
     },
     "e2e_dispute_pipeline": {
       "n": 500,
-      "mean_ms": 0.9758,
-      "p50_ms": 0.9452,
-      "p95_ms": 1.1244,
-      "p99_ms": 1.2266,
-      "throughput_per_sec": 1025
+      "mean_ms": 0.2303,
+      "p50_ms": 0.228,
+      "p95_ms": 0.2396,
+      "p99_ms": 0.2892,
+      "throughput_per_sec": 4343
     }
   },
   "workloads": {
@@ -104,8 +104,8 @@
     "baseline_transactions": 40,
     "graph_nodes": 8403,
     "graph_edges": 14638,
-    "policy_rules": 14,
-    "policy_context_fields": 26,
+    "policy_rules": 17,
+    "policy_context_fields": 27,
     "e2e_iterations": 500,
     "note": "offline agent; a live LLM call (hundreds of ms) dominates real latency"
   },
@@ -119,8 +119,8 @@
       "baseline_transactions": 40,
       "graph_nodes": 8403,
       "graph_edges": 14638,
-      "policy_rules": 14,
-      "policy_context_fields": 26,
+      "policy_rules": 17,
+      "policy_context_fields": 27,
       "e2e_iterations": 500
     }
   }

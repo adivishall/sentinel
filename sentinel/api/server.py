@@ -215,7 +215,7 @@ def build_routes(app: SentinelApp) -> Router:
         if "transaction" in d:
             t = S.transaction(d)
             return to_dict(app.evaluate_transaction(t, untrusted=untrusted, options=opts).decision)
-        tid = S.req_str(d, "transaction_id", max_len=64)
+        tid = S.req_id(d, "transaction_id")
         return to_dict(app.evaluate_transaction(tid, untrusted=untrusted, options=opts).decision)
 
     def dispute_eval(q: Any, b: Any, p: Any) -> Any:
@@ -239,7 +239,7 @@ def build_routes(app: SentinelApp) -> Router:
             b = app.evaluate_dispute(
                 S.req_str(d, "narrative", alt="submission"),
                 envelope=env,
-                dispute_id=S.opt_str(d, "dispute_id", "", max_len=64) or None,
+                dispute_id=S.opt_id(d, "dispute_id"),
                 documents=docs,
                 source=S.opt_str(d, "source", "cardholder", max_len=64) or "cardholder",
                 options=opts,
@@ -249,7 +249,7 @@ def build_routes(app: SentinelApp) -> Router:
             return to_dict(
                 app.evaluate_dispute(
                     S.opt_str(d, "narrative", "") or "",
-                    dispute_id=S.req_str(d, "dispute_id", max_len=64),
+                    dispute_id=S.req_id(d, "dispute_id"),
                     documents=docs,
                     options=opts,
                 ).decision
@@ -277,7 +277,7 @@ def build_routes(app: SentinelApp) -> Router:
                 app.evaluate_merchant(
                     S.req_str(d, "application"),
                     envelope=env,
-                    merchant_id=S.opt_str(d, "merchant_id", "", 64) or "",
+                    merchant_id=S.opt_id(d, "merchant_id") or "",
                     documents=docs,
                     options=opts,
                 ).decision
@@ -286,7 +286,7 @@ def build_routes(app: SentinelApp) -> Router:
             return to_dict(
                 app.evaluate_merchant(
                     S.opt_str(d, "application", "") or "",
-                    application_id=S.req_str(d, "application_id", max_len=64),
+                    application_id=S.req_id(d, "application_id"),
                     documents=docs,
                     options=opts,
                 ).decision
@@ -295,7 +295,7 @@ def build_routes(app: SentinelApp) -> Router:
             app.evaluate_merchant(
                 S.req_str(d, "application"),
                 S.req_obj(d, "records"),
-                merchant_id=S.opt_str(d, "merchant_id", "", 64) or "",
+                merchant_id=S.opt_id(d, "merchant_id") or "",
                 documents=docs,
                 options=opts,
             ).decision
@@ -321,7 +321,7 @@ def build_routes(app: SentinelApp) -> Router:
             )
         return to_dict(
             app.evaluate_account(
-                S.req_str(d, "session_id", max_len=64),
+                S.req_id(d, "session_id"),
                 message=msg,
                 requested_capability=cap,
                 options=opts,
@@ -921,6 +921,8 @@ class SentinelHandler(BaseHTTPRequestHandler):
                 return self._send(400, _error(400, f"invalid JSON: {e.msg}", rid), rid)
             except S.ValidationError as e:
                 return self._send(400, _error(400, e.message, rid), rid)
+            except ValueError as e:  # e.g. an integer longer than Python's parse limit
+                return self._send(400, _error(400, f"invalid JSON: {e}", rid), rid)
         try:
             result = fn(query, body, params)
             status = 200
@@ -974,7 +976,8 @@ def serve(app: SentinelApp, host: str = "0.0.0.0", port: int = 8000) -> None:
     if not os.environ.get("SENTINEL_API_KEY") and host not in ("127.0.0.1", "localhost", "::1"):
         print(
             "WARNING: SENTINEL_API_KEY is unset and the API is bound to a non-loopback address. "
-            "Every caller can submit 'trusted' ledger/record facts and read every decision. "
+            "Every caller can request evaluations (unsigned facts are UNTRUSTED and never "
+            "execute) and read every decision. "
             "This is a lab configuration; set SENTINEL_API_KEY or bind to 127.0.0.1.",
             file=sys.stderr,
         )

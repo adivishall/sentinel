@@ -148,7 +148,7 @@
     "ai_security_gateway": 60,
     "capability_authorization": 135,
     "capability_registry": 30,
-    "policy:dispute-refund@v3": 135,
+    "policy:dispute-refund@v4": 135,
     "trusted_evidence": 135
   },
   "seconds": 0.29,

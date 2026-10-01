@@ -120,8 +120,19 @@ block.
     A caller-supplied (unsigned) transaction or session no longer chooses the
     moment it is assessed as of. It is evaluated at the system's time, so
     backdating it past a freeze or before a burst changes nothing. Being
-    `UNTRUSTED`, it cannot execute either way. A signed statement's timestamp
+    `UNTRUSTED`, the system never executes on it; only an authenticated
+    reviewer's recorded approval can (item 27). A signed statement's timestamp
     is the issuer's and is used as stated.
+
+    Rollback protection is as strong as the audit chain. A database writer
+    who also rewrites the chain after the last checkpoint (item 17) could
+    replay an older, unexpired statement. Statement expiry
+    (`max_validity_days`) bounds that window, as it does for a statement older
+    than the issuer's latest that this deployment never acted on.
+
+    The workflow functions (`run_*`) are internal: whoever calls them is
+    inside the boundary and states how the facts arrived. The public
+    `SentinelApp`, API and CLI derive that themselves.
 
     Auth is optional, and the server warns when it starts open on a
     non-loopback address. What-if switches (controls, policy version, risk

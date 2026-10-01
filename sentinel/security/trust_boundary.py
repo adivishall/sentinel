@@ -30,6 +30,10 @@ from sentinel.domain.ids import content_hash
 from sentinel.domain.vocab import RECORD_VALUES
 from sentinel.security.claims import ClaimClassification, classify
 
+# The largest amount or count a record may state: the range every JSON reader holds
+# exactly, and SQLite's INTEGER (a larger value is malformed, not a very large refund).
+MAX_AMOUNT = 2**53 - 1
+
 
 def parse_int(value: object) -> int | None:
     """A ledger number as int, or ``None`` when it is not a finite number.
@@ -82,7 +86,7 @@ def record_problems(
     out += [  # a value the rules were not written for would make them silently false
         f"{k}={record[k]!r} is not one of {sorted(RECORD_VALUES[k])}"
         for k in vocab
-        if k in record and record[k] not in RECORD_VALUES[k]
+        if k in record and (not isinstance(record[k], str) or record[k] not in RECORD_VALUES[k])
     ]
     for k in numeric:
         if k in record:
@@ -91,6 +95,8 @@ def record_problems(
                 out.append(f"{k}={record[k]!r} is not a number")
             elif v < 0:
                 out.append(f"{k}={v} is negative")
+            elif v > MAX_AMOUNT:
+                out.append(f"{k}={v} is out of range")
     return out
 
 

@@ -52,8 +52,39 @@ can be trusted (roadmap issues #11–#20).
 - The audit event of every decision records the fact provenance: status, issuer, key,
   envelope digest, payload digest and sequence. Replay verifies the recorded statement
   again and reports a key revoked since.
-- `sentinel trust keygen | sign | verify | list | revoke`, a `--trust-store` option and
-  `SENTINEL_TRUST_STORE`.
+- `sentinel trust keygen | sign | verify | list | revoke | ingest`, a `--trust-store`
+  option and `SENTINEL_TRUST_STORE`.
+- **Adversarial review of the first draft.** Nothing reached `VERIFIED_EXTERNAL` without
+  an issuer key, and unverified facts never executed. The review found these weaknesses,
+  all fixed with regression tests:
+  - a stored dispute's own statement sent in the body skipped the recorded-submission
+    binding and the account's risk; stored records are now evaluated by id only;
+  - a database writer could delete the anti-rollback marks and act on an older
+    statement; the marks are now also derived from the audit chain;
+  - one application's KYB statement could stand in for another's; statements now name
+    their application;
+  - a statement that failed verification was still decided on, and an oversized integer
+    caused a 500 with an orphan audit event; it now fails safe, and numbers are bounded;
+  - transaction and session audits could name a payload other than the record used;
+  - an incomplete signed statement was completed with permissive defaults; it is now
+    `INVALID`;
+  - replay's re-verification could read as more than a signature check; it is now
+    `signature_now`, withheld when the snapshot disagrees with its audit event;
+  - a 4,300-digit JSON integer dropped the connection.
+
+  The review of #12 found two more on this branch, both fixed with regression tests:
+  - **the conversation route re-pointed a stored dispute.** A caller sent a stored
+    dispute's own signed statement with new text; the refund executed, with the
+    account's risk dropped, where the dispute by id went to review (seeds 2, 3 and 8).
+    The route now refuses it, as the dispute route does;
+  - **the attack simulator minted executed refunds.** It signed its preset ledger on
+    request and recorded the WITH side as authoritative, so every legitimate-control run
+    executed a refund on a dispute that does not exist. Every simulator run is now a
+    what-if: never recorded, never executed.
+
+  Scope correction: the `facts_source` argument is gone from the *public* `SentinelApp`
+  methods. The internal `run_*` workflow layer trusts its caller's transport label, as
+  it always did.
 
 ### Security — provenance-aware policy and the structured-channel bypasses (#12)
 - **Policy.** `facts_provenance` is a policy context field on every decision. New
@@ -80,6 +111,32 @@ can be trusted (roadmap issues #11–#20).
   `"2026-08-15 10:00:00"` sorted before a freeze that started that day; it now compares
   instants. An unsigned caller transaction or session is assessed as of the system's
   time, so backdating past a freeze changes nothing.
+- **Execution is idempotent.** A consequential capability executes once per workflow,
+  subject and capability (an execution ledger: `executions` table, in memory for a bare
+  runtime). The system claims the key when it executes; a human approval claims it when a
+  case resolves; a repeat evaluation is `DENY` "already executed". The snapshot records
+  `prior_execution`; replay restores it.
+- **Adversarial review of this branch** (the registry floor, SESSION_EVIDENCE, the
+  execution ledger under concurrency and what-if isolation held). Found and fixed, each
+  with a regression test:
+  - the conversation route re-pointed a stored dispute, and the attack simulator
+    recorded executed refunds on fabricated disputes (fixed on #11, 12325a5);
+  - `closed` accounts and `unknown` merchant categories were in the vocabularies but
+    named by no rule, so they were allowed: `block-closed-account` and
+    `review-unknown-mcc`, and a test that every vocabulary value an active policy reads
+    is named by a rule or explicitly accepted with a reason;
+  - a list- or dict-valued vocabulary field was a 500 (unhashable) on three routes;
+  - replay re-derived ALLOW for a decision that was DENY "already executed", because
+    `prior_execution` was not restored and the lost race was snapshotted without it;
+  - a signed statement that failed verification went to a fail-safe review nobody could
+    approve (a dead case). The engine now lets a decisive BLOCK outrank a context error:
+    `block-failed-fact-provenance` fires although the facts cannot be evaluated → DENY,
+    no case;
+  - `tx-000123`, `TX‑000123` (U+2011) and `ＴＸ-000123` were new subjects for a stored
+    payment, one execution key each. Caller-named ids are in one grammar, and an
+    ASCII-case variant of a stored id is refused like the stored id.
+  The four policy versions on this branch (unreleased) were edited in place and re-pinned;
+  `NONE` provenance is now named by their review rule.
 
 ### Security — reviewer identity, authority limits, four eyes (#13)
 - **Fixed: a caller could self-declare `SENIOR_REVIEWER`**, and one caller escalated and

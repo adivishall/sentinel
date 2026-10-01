@@ -358,8 +358,19 @@ def test_r5_account_capabilities_are_bounded_by_role_and_four_eyes_not_amount():
 
 @pytest.mark.parametrize(
     "rid",
-    ["claude", "gpt-4o", "gemini", "copilot", "sentinel-bot", "sentinel.system", "system-admin",
-     "ai-reviewer", "model.risk", "auto-approver", "dispute-triage-agent"],
+    [
+        "claude",
+        "gpt-4o",
+        "gemini",
+        "copilot",
+        "sentinel-bot",
+        "sentinel.system",
+        "system-admin",
+        "ai-reviewer",
+        "model.risk",
+        "auto-approver",
+        "dispute-triage-agent",
+    ],
 )
 def test_r6_ids_that_name_the_system_or_a_model_are_refused(rid):
     with pytest.raises(ReviewerRegistryError, match="neither"):

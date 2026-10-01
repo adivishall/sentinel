@@ -119,6 +119,24 @@ event records both, together with the payload digest.
 
 `facts_envelope` is accepted on the dispute, merchant, transaction and account
 evaluate routes. Sending it together with the body facts it replaces is a 400.
+A signed statement must state every field its kind requires, otherwise it is
+`INVALID`: Sentinel does not fill in an issuer's silence with defaults.
+
+A record the store holds is evaluated **by id** only. Body facts or a
+statement for a stored dispute, application, transaction or session are a 400
+on every route, `messages` (multi-turn) included
+("held by the record store; evaluate it by id"); so is an ASCII-case variant
+of a stored id. Every caller-named record id (`transaction_id`, `dispute_id`,
+`application_id`, `session_id`, `merchant_id`, and the ids inside a
+`transaction` or `session` object) must match `[A-Za-z0-9][A-Za-z0-9._-]{0,63}`
+or it is a 400. Its recorded submission, its account's context and its stored
+statement decide.
+
+A consequential capability executes **once** per workflow, subject and
+capability. A second evaluation of a subject whose capability already executed
+(by the system, or by a human approval) is `DENY` with the reason "already
+executed" and the earlier decision id; the snapshot records it as
+`prior_execution` and replay restores it.
 
 Account security: a `requested_capability` is a claim about what the session
 asked for, and the session record is the evidence. A request the record does

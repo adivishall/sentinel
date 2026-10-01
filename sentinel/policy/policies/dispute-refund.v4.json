@@ -42,12 +42,13 @@
           "value": [
             "UNTRUSTED",
             "EXPIRED",
-            "SUPERSEDED"
+            "SUPERSEDED",
+            "NONE"
           ]
         }
       ],
       "outcome": "REQUIRE_HUMAN_REVIEW",
-      "reason": "Nothing establishes these facts (request-body, expired or superseded): a human must, before anything executes."
+      "reason": "Nothing establishes these facts (request-body, expired or superseded, or none recorded): a human must, before anything executes."
     },
     {
       "id": "review-high-value-unsigned-facts",
@@ -150,7 +151,7 @@
         }
       ],
       "outcome": "REQUIRE_HUMAN_REVIEW",
-      "reason": "Refund exceeds the \u20b950,000 auto-approval limit."
+      "reason": "Refund exceeds the ₹50,000 auto-approval limit."
     },
     {
       "id": "review-critical-risk",

@@ -6,6 +6,7 @@ import os
 import pytest
 
 from sentinel.cli.main import main
+from tests.records import ledger as complete
 
 
 @pytest.fixture(scope="module")
@@ -263,7 +264,7 @@ def test_case_policy_audit_replay_scenario(db, capsys, tmp_path):
     assert exp.exists() and "exported" in out
     code, out = _run(capsys, "--db", db, "audit", "list", "--limit", "3")
     assert "#" in out
-    ledger = {"amount": 18000, "delivery_status": "not_delivered"}
+    ledger = complete(amount=18000, delivery_status="not_delivered")
     claim = "My order never arrived after three weeks."
     unsigned = tmp_path / "unsigned.json"
     unsigned.write_text(json.dumps({"narrative": claim, "ledger": ledger}))

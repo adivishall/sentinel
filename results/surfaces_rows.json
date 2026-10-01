@@ -19,7 +19,7 @@
     "loosened": false,
     "blocked_by": [
       "ai_security_gateway",
-      "policy:transaction-authorization@v2",
+      "policy:transaction-authorization@v3",
       "capability_authorization"
     ]
   },
@@ -43,7 +43,7 @@
     "loosened": false,
     "blocked_by": [
       "ai_security_gateway",
-      "policy:transaction-authorization@v2",
+      "policy:transaction-authorization@v3",
       "capability_authorization"
     ]
   },
@@ -67,7 +67,7 @@
     "loosened": false,
     "blocked_by": [
       "ai_security_gateway",
-      "policy:transaction-authorization@v2",
+      "policy:transaction-authorization@v3",
       "capability_authorization"
     ]
   },
@@ -91,7 +91,7 @@
     "loosened": false,
     "blocked_by": [
       "ai_security_gateway",
-      "policy:transaction-authorization@v2",
+      "policy:transaction-authorization@v3",
       "capability_authorization",
       "capability_registry"
     ]
@@ -135,7 +135,7 @@
     "tightened": false,
     "loosened": false,
     "blocked_by": [
-      "policy:transaction-authorization@v2",
+      "policy:transaction-authorization@v3",
       "capability_authorization"
     ]
   },
@@ -158,7 +158,7 @@
     "tightened": false,
     "loosened": false,
     "blocked_by": [
-      "policy:transaction-authorization@v2",
+      "policy:transaction-authorization@v3",
       "capability_authorization"
     ]
   },
@@ -181,7 +181,7 @@
     "tightened": false,
     "loosened": false,
     "blocked_by": [
-      "policy:transaction-authorization@v2",
+      "policy:transaction-authorization@v3",
       "capability_authorization"
     ]
   },
@@ -205,7 +205,7 @@
     "loosened": false,
     "blocked_by": [
       "ai_security_gateway",
-      "policy:transaction-authorization@v2",
+      "policy:transaction-authorization@v3",
       "capability_authorization"
     ]
   },
@@ -248,7 +248,7 @@
     "tightened": false,
     "loosened": false,
     "blocked_by": [
-      "policy:transaction-authorization@v2",
+      "policy:transaction-authorization@v3",
       "capability_authorization"
     ]
   },
@@ -272,7 +272,7 @@
     "loosened": false,
     "blocked_by": [
       "ai_security_gateway",
-      "policy:transaction-authorization@v2",
+      "policy:transaction-authorization@v3",
       "capability_authorization",
       "capability_registry"
     ]
@@ -297,7 +297,7 @@
     "loosened": false,
     "blocked_by": [
       "ai_security_gateway",
-      "policy:account-security@v1",
+      "policy:account-security@v2",
       "capability_registry"
     ]
   },
@@ -341,7 +341,7 @@
     "loosened": false,
     "blocked_by": [
       "ai_security_gateway",
-      "policy:account-security@v1",
+      "policy:account-security@v2",
       "capability_registry"
     ]
   },
@@ -385,7 +385,7 @@
     "loosened": false,
     "blocked_by": [
       "ai_security_gateway",
-      "policy:account-security@v1",
+      "policy:account-security@v2",
       "capability_registry"
     ]
   },
@@ -449,7 +449,7 @@
     "loosened": false,
     "blocked_by": [
       "ai_security_gateway",
-      "policy:account-security@v1",
+      "policy:account-security@v2",
       "capability_registry"
     ]
   },

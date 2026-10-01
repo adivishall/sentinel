@@ -27,7 +27,7 @@ from sentinel.domain.entities import (
     PaymentInstrument,
     Transaction,
 )
-from sentinel.domain.enums import CasePriority, CaseStatus, Workflow
+from sentinel.domain.enums import CasePriority, CaseStatus, FactKind, Workflow
 from sentinel.domain.risk import RiskAssessment
 from sentinel.domain.security import SecurityEvent
 from sentinel.domain.serialization import to_dict
@@ -66,12 +66,22 @@ CREATE INDEX IF NOT EXISTS ix_audit_decision ON audit_events(decision_id, sequen
 CREATE TABLE IF NOT EXISTS replays (replay_id TEXT PRIMARY KEY, decision_id TEXT, changed INTEGER, created_at TEXT, payload TEXT);
 CREATE TABLE IF NOT EXISTS policy_versions (policy_id TEXT, version INTEGER, workflow TEXT, payload TEXT, PRIMARY KEY (policy_id, version));
 CREATE TABLE IF NOT EXISTS fact_envelopes (record_key TEXT PRIMARY KEY, subject TEXT, kind TEXT, issuer TEXT, sequence INTEGER, envelope TEXT);
+CREATE TABLE IF NOT EXISTS executions (key TEXT PRIMARY KEY, holder TEXT);
 CREATE TABLE IF NOT EXISTS fact_sequences (issuer TEXT, subject TEXT, sequence INTEGER, envelope_digest TEXT, PRIMARY KEY (issuer, subject));
 """
 
 
 def _j(obj: object) -> str:
     return json.dumps(to_dict(obj), sort_keys=True, default=str)
+
+
+# where each kind of record is kept (code constants, never caller input)
+_RECORD_TABLES: dict[FactKind, tuple[str, str]] = {
+    FactKind.DISPUTE_LEDGER: ("disputes", "dispute_id"),
+    FactKind.KYB_RECORD: ("kyb_applications", "application_id"),
+    FactKind.TRANSACTION: ("transactions", "transaction_id"),
+    FactKind.LOGIN_SESSION: ("login_sessions", "session_id"),
+}
 
 
 class SentinelStore:
@@ -408,6 +418,13 @@ class SentinelStore:
             r["label"],
             r["status"] or "settled",
         )
+
+    def held_id(self, kind: FactKind, rid: str) -> str | None:
+        """The stored record id equal to ``rid`` ignoring ASCII case, if the store holds
+        one: ``tx-000123`` names ``TX-000123`` and is refused as a new subject."""
+        table, column = _RECORD_TABLES[kind]
+        r = self._one(f"SELECT {column} FROM {table} WHERE {column} = ? COLLATE NOCASE", (rid,))
+        return str(r[0]) if r else None
 
     def transaction(self, tid: str) -> Transaction | None:
         r = self._one("SELECT * FROM transactions WHERE transaction_id = ?", (tid,))
@@ -834,6 +851,21 @@ class SentinelStore:
         )
         return (int(r["sequence"]), str(r["envelope_digest"])) if r else None
 
+    def fact_sequence_from_audit(self, issuer: str, subject: str) -> tuple[int, str] | None:
+        """The highest statement a recorded decision acted on, read from the audit chain:
+        every decision event names the statement it used (``detail.facts``). A DB writer
+        who deletes ``fact_sequences`` rows must also rewrite the chain to roll back."""
+        r = self._one(
+            "SELECT json_extract(payload, '$.detail.facts.sequence') AS seq, "
+            "json_extract(payload, '$.detail.facts.envelope_digest') AS dig FROM audit_events "
+            "WHERE json_extract(payload, '$.detail.facts.status') = 'VERIFIED_EXTERNAL' "
+            "AND json_extract(payload, '$.detail.facts.source') = ? "
+            "AND json_extract(payload, '$.detail.facts.subject') = ? "
+            "ORDER BY seq DESC LIMIT 1",
+            (issuer, subject),
+        )
+        return (int(r["seq"]), str(r["dig"])) if r and r["seq"] is not None else None
+
     def advance_fact_sequence(
         self, issuer: str, subject: str, sequence: int, envelope_digest: str
     ) -> None:
@@ -1125,6 +1157,7 @@ class SqliteCaseRepository:
             p.get("policy_outcome"),
             p.get("evidence_verdict"),
             p.get("facts_provenance"),
+            p.get("subject_id"),
             self._amount(p),
             # never below the capability registry's count (sentinel.cases.service)
             int(p.get("approvals_required", 1)),
@@ -1155,7 +1188,40 @@ class SqliteSequences:
         self._store = store
 
     def last(self, issuer: str, subject: str) -> tuple[int, str] | None:
-        return self._store.fact_sequence(issuer, subject)
+        """The higher of the table and the audit chain: the table is a fast index anyone
+        with DB write can delete; the chain is tamper-evident (``sentinel.audit``)."""
+        marks = [
+            m
+            for m in (
+                self._store.fact_sequence(issuer, subject),
+                self._store.fact_sequence_from_audit(issuer, subject),
+            )
+            if m is not None
+        ]
+        return max(marks, key=lambda m: m[0]) if marks else None
 
     def advance(self, issuer: str, subject: str, sequence: int, envelope_digest: str) -> None:
         self._store.advance_fact_sequence(issuer, subject, sequence, envelope_digest)
+
+
+class SqliteExecutions:
+    """One execution per subject and capability (``workflows.ExecutionLedger``), in the
+    store so a restart does not forget what already paid. Claiming is a single
+    INSERT OR IGNORE under the store's lock: of two concurrent requests, one wins."""
+
+    def __init__(self, store: SentinelStore) -> None:
+        self._store = store
+
+    def holder(self, key: str) -> str | None:
+        r = self._store._one("SELECT holder FROM executions WHERE key = ?", (key,))
+        return str(r["holder"]) if r else None
+
+    def claim(self, key: str, by: str) -> str | None:
+        with self._store._lock:
+            cur = self._store._conn.execute(
+                "INSERT OR IGNORE INTO executions VALUES (?, ?)", (key, by)
+            )
+            self._store._conn.commit()
+            if cur.rowcount == 1:
+                return None
+        return self.holder(key)

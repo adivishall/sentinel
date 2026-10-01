@@ -298,6 +298,11 @@ WORKFLOW_CAPABILITIES: dict[Workflow, frozenset[Capability]] = {
 }
 
 
+def execution_key(workflow: str, subject_id: str, capability: str) -> str:
+    """What runs once: one capability on one subject of one workflow."""
+    return f"{workflow}:{subject_id}:{capability}"
+
+
 def spec(capability: Capability) -> CapabilitySpec:
     return REGISTRY[capability]
 
@@ -358,6 +363,7 @@ def authorize(
     evidence_supported: bool,
     workflow: Workflow | None = None,
     facts_provenance: ProvenanceStatus | None = None,
+    already_executed: str | None = None,
 ) -> Authorization:
     """Deterministic authorization for one requested capability.
 
@@ -391,6 +397,14 @@ def authorize(
         )
     if policy_outcome is PolicyOutcome.BLOCK:
         return Authorization(AuthorizationStatus.DENIED, capability, actor, "policy outcome BLOCK")
+    if already_executed is not None and s.consequential:
+        # idempotency: re-evaluating a record that already paid must not pay again
+        return Authorization(
+            AuthorizationStatus.DENIED,
+            capability,
+            actor,
+            f"{capability.value} already executed on this subject ({already_executed})",
+        )
     floor = s.min_fact_provenance
     if floor is not None:
         # Structural: whatever the policy says, facts below the floor never execute.

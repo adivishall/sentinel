@@ -38,12 +38,13 @@
           "value": [
             "UNTRUSTED",
             "EXPIRED",
-            "SUPERSEDED"
+            "SUPERSEDED",
+            "NONE"
           ]
         }
       ],
       "outcome": "REQUIRE_HUMAN_REVIEW",
-      "reason": "Nothing establishes these facts (request-body, expired or superseded): a human must, before anything executes."
+      "reason": "Nothing establishes these facts (request-body, expired or superseded, or none recorded): a human must, before anything executes."
     },
     {
       "id": "review-high-value-unsigned-facts",
@@ -98,6 +99,18 @@
       "reason": "Account is frozen."
     },
     {
+      "id": "block-closed-account",
+      "when": [
+        {
+          "field": "account_status",
+          "op": "==",
+          "value": "closed"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "The account is closed: nothing is authorised on it."
+    },
+    {
       "id": "review-over-auto-limit",
       "when": [
         {
@@ -107,7 +120,7 @@
         }
       ],
       "outcome": "REQUIRE_HUMAN_REVIEW",
-      "reason": "Amount exceeds the \u20b91,50,000 auto-approval limit."
+      "reason": "Amount exceeds the ₹1,50,000 auto-approval limit."
     },
     {
       "id": "review-critical-merchant",

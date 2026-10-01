@@ -1498,7 +1498,7 @@ computes it (`workflows._resolve_facts`); no request field can set it.
   registry, the authentication service) signs `sentinel.fact/1` envelopes with
   Ed25519 (RFC 8032, via pyca/cryptography; Sentinel implements no
   cryptographic primitive). The signature covers the domain prefix
-  `sentinel.fact/1\n` and the canonical JSON of the header. The header names
+  `sentinel.fact/1\\n` and the canonical JSON of the header. The header names
   the issuer, key, kind, subject, sequence, issued / effective / expires times
   and the payload's SHA-256.
 - **Canonical JSON.** Signing needs one byte string per value. Floats, NaN,
@@ -1511,9 +1511,28 @@ computes it (`workflows._resolve_facts`); no request field can set it.
   fingerprint of its public key, so an entry cannot claim another key's
   identity. Rotation (`not_after`) keeps earlier statements valid until they
   expire. Revocation invalidates everything the key ever signed.
+- **Complete statements.** A signed statement must state every field its kind
+  requires (`workflows.STATEMENT_FIELDS`). An omitted field is not the
+  issuer's word, and Sentinel does not fill it in with a default: an
+  incomplete statement is `INVALID`. A statement that does not verify is never
+  decided on. The decision falls back to the request's own record, which fails
+  safe.
 - **Anti-rollback.** The highest sequence acted on per issuer and subject is
-  stored. An older statement is `SUPERSEDED`, and a different statement with
-  the same sequence is `INVALID` (equivocation).
+  the higher of an index table and the tamper-evident audit chain (every
+  decision event names the statement it used). A database writer who deletes
+  the table's rows must also rewrite the chain. An older statement is
+  `SUPERSEDED`, and a different statement with the same sequence is `INVALID`
+  (equivocation).
+- **Stored records are evaluated by id.** A caller cannot send body facts or a
+  statement for a dispute, application, transaction or session the store
+  holds -- under its exact id or an ASCII-case variant of it -- on any route
+  (the multi-turn conversation route included); that is a 400. A caller-named
+  id must be in the one record-id grammar (ASCII letters, digits, `. _ -`), so
+  a Unicode look-alike cannot be a second subject. Its recorded submission,
+  its account's context and its stored statement decide. A KYB statement names its application, so a
+  statement about one of a merchant's applications cannot stand in for
+  another. `sentinel trust ingest` verifies issuers' statements and stores
+  them beside the records.
 - **Record-store tampering.** A record read by id is checked field by field
   against its stored signed statement. With `require_signed_facts` (on
   whenever the app signs its own records), a stored record whose statement is
@@ -1521,8 +1540,18 @@ computes it (`workflows._resolve_facts`); no request field can set it.
   tampered row to `TRUSTED_LOCAL`.
 - **Asymmetry.** Unverified records can make an outcome stricter (a refunded
   ledger still denies) but never support one. Reconciliation turns what they
-  would support into `INSUFFICIENT`, which goes to human review, so they never
-  execute a capability.
+  would support into `INSUFFICIENT`, which goes to human review, so the system
+  never executes a capability on them; only an authenticated reviewer's
+  recorded decision can act on what they claim.
+- **A failed statement is decisive.** A statement whose signature, key or
+  binding failed (`INVALID`, `REVOKED`) is a tamper signal: the policy's BLOCK
+  on it outranks the fact that the facts it carried cannot be evaluated
+  (DENY, no case), rather than a fail-safe review nobody may ever approve.
+- **Execution is idempotent.** A consequential capability executes once per
+  (workflow, subject, capability): the system claims the key when it executes,
+  a human approval claims it when it resolves a case, and a repeat evaluation
+  of an executed subject is `DENY` ("already executed"). The claim is recorded
+  in the decision's input snapshot (`prior_execution`) and restored by replay.
 
 **What `VERIFIED_EXTERNAL` proves.** The holder of a key the operator trusts
 for this issuer and this kind of fact signed exactly this payload about this
@@ -2417,6 +2446,18 @@ string where a number is expected raises, it is not "false".
   turns that into a fail-safe `REQUIRE_HUMAN_REVIEW`. A missing input can
   therefore never silently switch a BLOCK rule off (v2.0.0 had that fail-open
   behaviour; the review found it).
+- **A decisive BLOCK outranks a context error.** When the context is missing,
+  mistyped or outside a vocabulary, a BLOCK rule whose own fields are all
+  present and valid, and which matches, still decides: the policy said BLOCK,
+  and nothing the context lacks could have said anything stronger. The
+  decision carries a `[fail-closed]` explanation naming the problem. (A
+  statement that failed verification is blocked even though the facts it
+  carried cannot be evaluated.)
+- **Every vocabulary value a policy reads is named.** A test
+  (`tests/test_policy_provenance.py`) fails when an active policy reads a
+  closed-vocabulary field and some value of it is named by no rule and not
+  explicitly accepted with a reason: `closed` accounts and `unknown` merchant
+  categories were such values.
 - **Content hash.** Every policy carries a SHA-256 over its full document,
   computed at construction. Decisions and input snapshots pin it; replay
   reports `policy_drift` when the served version no longer has the content the
@@ -3363,7 +3404,9 @@ leaks in {t['decisions_tested']:,} checks -- evidence for the invariant, not a p
     ] = f"""Flagship attack (`make attack`): the gateway flags the document CRITICAL, the
 simulated agent recommends `APPROVE_REFUND`, the ledger says delivered, the
 claim is CONTRADICTED, `dispute-refund@v{max(by_id['dispute-refund'])}` blocks, the capability is DENIED,
-the final action is BLOCK, a case opens and the audit event is chained. Across
+the final action is BLOCK. The simulator records nothing (its ledger is a
+fixture signed on request); the same input through `/v1/disputes/evaluate`
+opens a case and chains an audit event. Across
 the {s['n_attacks']}-attack development corpus the same path executes {pct(s['asr_guarded'])} of attacks
 (structural) against {pct(s['asr_unguarded'])} for the simulated agent with no controls."""
     return out

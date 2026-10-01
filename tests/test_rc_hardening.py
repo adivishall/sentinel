@@ -37,6 +37,7 @@ from sentinel.decision.workflows import RunOptions
 from sentinel.domain.enums import CaseStatus, FactKind
 from sentinel.replay.engine import ReplayOverrides
 from sentinel.risk import scoring
+from tests.records import ledger
 from tests.reviewers import ANALYST, SENIOR, registry
 
 LEDGER_REFUNDED = {
@@ -91,7 +92,7 @@ def _get(url):
 def test_policy_version_override_would_pay_a_second_refund_so_the_api_refuses_it(server, app):
     # The defect: dispute-refund@v1 has no block-already-refunded rule.
     # the refunded ledger as its issuer signs it (verified facts: the point is the policy)
-    signed = app.issuer.sign(FactKind.DISPUTE_LEDGER, "DSP-REFUNDED", LEDGER_REFUNDED)
+    signed = app.issuer.sign(FactKind.DISPUTE_LEDGER, "DSP-REFUNDED", ledger(**LEDGER_REFUNDED))
     b = app.evaluate_dispute(CLAIM, envelope=signed, options=RunOptions(policy_version=1))
     assert b.decision.executed_capability is not None  # what the override would do ...
     assert not b.decision.authoritative and app.store.decision(b.decision.decision_id) is None

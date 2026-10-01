@@ -29,7 +29,7 @@ hostile document.
 | **Financial risk** | synthetic benchmark (empirical) | precision / recall / FPR against the generator's scenario labels | seed 42: 3,183 transactions, 157 accounts; two held-out seeds of similar size | dev 42 (point values tuned on it); held-out 7, 2024 | transactions P 86.7% R 67.2% FPR 0.19%; accounts P 90.0% R 90.0% | [§G](#g-financial-risk-on-labelled-synthetic-data-resultsfinancialjson) |
 | **Temporal correctness** | synthetic invariant check (empirical; not a proof) | a record dated after T changing a decision at T | 192 transactions; 9 kinds of future record at 4 offsets; 3,648 checks | seeds 42, 7 | **0 observed leaks** (95% upper bound 0.082% per check, 1.55% per sampled transaction) | [§I](#i-temporal-correctness-resultstemporaljson) |
 | **Claim classifier** | synthetic, same author; defence in depth, not the foundation | legitimate claims read as their type; the rest held for a human | 117 phrasings; 21 held-out unusual phrasings | hand-authored | held-out: first (blind) run 7/21; 17/21 after the patterns were extended by an author who had seen the misses; FN 4/56, FP 0/28 | [§L](#l-claim-classifier-resultsclaimsjson) |
-| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 1.1244 ms | [PERFORMANCE.md](PERFORMANCE.md) |
+| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.2396 ms | [PERFORMANCE.md](PERFORMANCE.md) |
 | **Live LLM** | live-model evaluation | the same suites against a real model | -- | `claude-opus-5-5` | **NOT RUN** -- no live number is quoted anywhere | [§K](#k-model--provider-evaluation-resultsmodelsjson) |
 
 ## Three kinds of numbers
@@ -100,7 +100,7 @@ prose, decides support.
 | ALTER_RISK | 5 | 100.0% | 0.0% |
 
 Blocked-by distribution (an attack can be stopped by several controls at
-once): ai_security_gateway 60, capability_authorization 135, capability_registry 30, policy:dispute-refund@v3 135, trusted_evidence 135.
+once): ai_security_gateway 60, capability_authorization 135, capability_registry 30, policy:dispute-refund@v4 135, trusted_evidence 135.
 
 > **Methodology** (`results/security.json`): synthetic (hand-authored corpus, offline simulated agent); guarded attack success is structural. *Dataset:* development attack corpus, seeds x amounts straddling the auto-limit, plus legitimate controls. *Method:* each case runs with no controls and with full controls; success = an unauthorised consequential capability executed; detection recall counts the gateway's flag; false positives count deserved refunds not executed. *Limitations:* the corpus and the detector share an author; the unguarded rate is a property of the simulator; every attack ledger is unsupporting so the guarded rate is 0 by construction. *Sample:* n_attacks=150, n_controls=21, n_deserved_controls=10.
 
@@ -546,34 +546,34 @@ across the tested synthetic benchmark", not a proof over every record.
 
 macOS-26.5.2-arm64-arm-64bit-Mach-O, Python 3.13.7; offline agent; workloads: 310-char injected
 narrative, 40-transaction baseline, graph of 8,403 nodes / 14,638 edges,
-14-rule policy over a 26-field context, 500 end-to-end iterations.
+17-rule policy over a 27-field context, 500 end-to-end iterations.
 Sequential, single-threaded, persistence excluded; machine-dependent.
 
 | Component | p50 ms | p95 ms | p99 ms | ops/s |
 |---|---:|---:|---:|---:|
-| `normalize` | 0.0178 | 0.0187 | 0.0209 | 55,706 |
-| `gateway_inspect` | 0.233 | 0.2664 | 0.3281 | 4,181 |
-| `claim_classify` | 0.264 | 0.317 | 0.3919 | 3,672 |
-| `evidence_reconcile` | 0.0361 | 0.0413 | 0.1019 | 26,009 |
-| `fact_verify` | 0.177 | 0.2302 | 0.4146 | 5,277 |
-| `risk_score_transaction` | 0.0149 | 0.0174 | 0.0608 | 61,828 |
-| `graph_linked_accounts` | 0.004 | 0.0047 | 0.0069 | 234,666 |
-| `graph_neighborhood_d2` | 0.0578 | 0.0642 | 0.2271 | 16,499 |
-| `policy_evaluate` | 0.0149 | 0.0173 | 0.0377 | 63,593 |
-| `decision_compose` | 0.0398 | 0.0482 | 0.0883 | 23,885 |
-| `audit_append` | 0.009 | 0.0114 | 0.0288 | 102,580 |
-| `e2e_dispute_pipeline` | 0.9452 | 1.1244 | 1.2266 | 1,025 |
+| `normalize` | 0.0176 | 0.0183 | 0.0202 | 56,436 |
+| `gateway_inspect` | 0.2255 | 0.235 | 0.2459 | 4,421 |
+| `claim_classify` | 0.2608 | 0.2713 | 0.2802 | 3,818 |
+| `evidence_reconcile` | 0.0352 | 0.0377 | 0.041 | 28,000 |
+| `fact_verify` | 0.1753 | 0.1834 | 0.1914 | 5,629 |
+| `risk_score_transaction` | 0.0147 | 0.0154 | 0.0201 | 66,621 |
+| `graph_linked_accounts` | 0.0039 | 0.0041 | 0.0049 | 250,431 |
+| `graph_neighborhood_d2` | 0.0538 | 0.0568 | 0.0608 | 18,290 |
+| `policy_evaluate` | 0.0168 | 0.0178 | 0.0217 | 58,472 |
+| `decision_compose` | 0.0418 | 0.0448 | 0.0494 | 23,600 |
+| `audit_append` | 0.0088 | 0.0102 | 0.0143 | 109,714 |
+| `e2e_dispute_pipeline` | 0.228 | 0.2396 | 0.2892 | 4,343 |
 
 A live LLM call (hundreds of milliseconds) dominates real latency by three
 orders of magnitude; Sentinel's own controls are not the bottleneck.
 
-> **Methodology** (`results/performance.json`): empirical, machine-dependent. *Dataset:* fixed workloads (narrative, baseline, graph, policy) on the local machine. *Method:* sequential single-threaded loops; percentiles over n iterations; persistence excluded. *Limitations:* the platform's own overhead only; a live model call dominates real latency. *Sample:* text_chars=310, baseline_transactions=40, graph_nodes=8403, graph_edges=14638, policy_rules=14, policy_context_fields=26, e2e_iterations=500.
+> **Methodology** (`results/performance.json`): empirical, machine-dependent. *Dataset:* fixed workloads (narrative, baseline, graph, policy) on the local machine. *Method:* sequential single-threaded loops; percentiles over n iterations; persistence excluded. *Limitations:* the platform's own overhead only; a live model call dominates real latency. *Sample:* text_chars=310, baseline_transactions=40, graph_nodes=8403, graph_edges=14638, policy_rules=17, policy_context_fields=27, e2e_iterations=500.
 
 ## K. Model / provider evaluation (`results/models.json`)
 
 | Provider | Model | Date | Status | ASR no controls | ASR Sentinel | FP | Latency p95 ms | Tokens in / out | Note |
 |---|---|---|---|---|---|---|---|---|---|
-| offline | `offline-simulator` | 2026-09-29 | ok | 90.0% | 0.0% | 0.0% | 0.163 | — |  |
+| offline | `offline-simulator` | 2026-09-29 | ok | 90.0% | 0.0% | 0.0% | 0.143 | — |  |
 | anthropic | `claude-opus-5-5` | 2026-09-29 | not_run | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
 
 Each provider row records the model, the run date, per-class outcomes, agent
@@ -637,5 +637,5 @@ make eval                      # everything above (main + held-out + surfaces = 
 make docs                      # re-render this file and every generated block from results/ and the code
 sentinel eval run --suite security|heldout|surfaces|kyb|baselines|ablation|financial|integrity|temporal|claims|performance|models|charts
 sentinel eval run --suite financial --full     # larger dataset (400 customers / 12k transactions)
-make test                      # 771 tests, incl. tests/test_results_regression.py which recomputes the headline claims
+make test                      # 823 tests, incl. tests/test_results_regression.py which recomputes the headline claims
 ```

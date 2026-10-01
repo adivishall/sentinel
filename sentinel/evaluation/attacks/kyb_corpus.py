@@ -26,6 +26,16 @@ REQUIRED_RECORD_FIELDS = (
 )
 
 
+# "Nothing on file" for each field of an acquirer record (KYBFacts' own defaults).
+STATED: dict[str, object] = {
+    "registration_status": "unverified",
+    "domain_age_days": 0,
+    "business_age_days": 0,
+    "prior_flags": 0,
+    "mcc_risk": "unknown",
+}
+
+
 def expected_outcome(records: dict[str, Any]) -> str:
     """Records-only ground truth.
 
@@ -253,6 +263,9 @@ def _case(
     attack_class: str | None = None,
     target: str | None = None,
 ) -> dict[str, Any]:
+    # every field of the acquirer's record stated (a signed statement must be complete);
+    # an unset one is stated as the acquirer's "nothing on file" value
+    records = {**STATED, **records}
     return {
         "id": cid,
         "category": category,

@@ -45,9 +45,10 @@ from sentinel.trust.facts import (
 )
 from sentinel.trust.issuer import Issuer, utc_now
 from sentinel.trust.keys import TrustStore, TrustStoreError
+from tests.records import ledger
 
 KIND = FactKind.DISPUTE_LEDGER
-LEDGER = {"amount": 18000, "delivery_status": "not_delivered", "refund_state": "none"}
+LEDGER = ledger(amount=18000, delivery_status="not_delivered", refund_state="none")
 CLAIM = "My order never arrived after three weeks."
 ISSUER = Issuer.ephemeral("core-ledger", scopes=("dispute_ledger", "kyb_record"))
 TRUST = TrustStore.empty().with_key(ISSUER.key)
@@ -420,14 +421,14 @@ def test_inv_audit_1_the_audit_event_identifies_the_facts(app):
 def test_inv_audit_1_replay_verifies_the_statement_again(app):
     _, b = _supported_dispute(app)
     r = app.replay(b.decision.decision_id, ReplayOverrides())
-    assert r.facts["recorded"] == r.facts["reverified"] == "VERIFIED_EXTERNAL"
+    assert r.facts["recorded"] == r.facts["signature_now"] == "VERIFIED_EXTERNAL"
     assert r.facts["same_payload"]
     # revoke the issuer's key afterwards: replay reports it
     app.runtime.trust = TrustStore.empty().with_key(
         dataclasses.replace(app.issuer.key, revoked_at=utc_now())
     )
     r2 = app.replay(b.decision.decision_id, ReplayOverrides())
-    assert r2.facts["recorded"] == "VERIFIED_EXTERNAL" and r2.facts["reverified"] == "REVOKED"
+    assert r2.facts["recorded"] == "VERIFIED_EXTERNAL" and r2.facts["signature_now"] == "REVOKED"
 
 
 # ---- regressions for the trust-audit findings (issue #11) ------------------------------------
@@ -446,9 +447,9 @@ def test_a_stored_dispute_is_judged_on_its_stored_submission(app):
 
 def test_system_of_record_fields_the_store_does_not_hold_are_unknown(app):
     d = app.store.all_disputes()[0]
-    ledger = app._dispute_ledger(d)
-    assert ledger["cardholder_present"] is None and ledger["cancellation_confirmed"] is None
-    assert "policy_auto_limit" not in ledger
+    stored = app._dispute_ledger(d)
+    assert stored["cardholder_present"] is None and stored["cancellation_confirmed"] is None
+    assert "policy_auto_limit" not in stored
     # an unauthorized claim is no longer "contradicted" by a hard-coded True
     b = run_dispute(
         Runtime(persist=False, trust=TRUST),
@@ -456,7 +457,7 @@ def test_system_of_record_fields_the_store_does_not_hold_are_unknown(app):
             UntrustedContent("I did not make this purchase, my card was used without me."),
             {},
             "DSP-U",
-            envelope=_signed(ledger, record_id="DSP-U"),
+            envelope=_signed(stored, record_id="DSP-U"),
         ),
     )
     assert b.reconciliation.verdict is EvidenceVerdict.INSUFFICIENT
@@ -554,3 +555,128 @@ def test_malformed_subjects_are_invalid(subject):
     env = ISSUER.sign(KIND, "ok", LEDGER)
     env["subject"] = subject
     assert _verify(env, subject=None).status is ProvenanceStatus.INVALID
+
+
+# ---- regressions: the adversarial review of the first draft (#11) -------------------------
+def test_f1_a_stored_dispute_cannot_be_re_pointed_with_its_own_statement(app):
+    d = app.store.all_disputes()[0]
+    own = app.store.fact_envelope(f"dispute:{d.dispute_id}")
+    for kw in ({"envelope": own}, {"envelope": own, "dispute_id": d.dispute_id}):
+        with pytest.raises(ValueError, match="evaluate it by id"):
+            app.evaluate_dispute("It never arrived.", **kw)
+    with pytest.raises(ValueError, match="evaluate it by id"):
+        app.evaluate_dispute("It never arrived.", LEDGER, dispute_id=d.dispute_id)
+
+
+def test_g1_the_conversation_route_does_not_re_point_a_stored_dispute_either(app):
+    """The review of #12 found the conversation route took a stored dispute's own signed
+    statement with new text: by id DSP-000042 (seed 2) went to review; through the
+    conversation it executed APPROVE_REFUND with the account's risk dropped."""
+    for d in app.store.all_disputes()[:25]:
+        own = app.store.fact_envelope(f"dispute:{d.dispute_id}")
+        assert own is not None
+        with pytest.raises(ValueError, match="evaluate it by id"):
+            app.evaluate_dispute_conversation(("Hello,", "it never arrived."), envelope=own)
+    assert not any(e.kind == "decision" for e in app.runtime.audit.events())
+
+
+def test_f2_deleting_the_rollback_marks_does_not_reopen_an_older_statement(app):
+    old = app.issuer.sign(KIND, "DSP-ROLL", LEDGER, sequence=1)
+    new = app.issuer.sign(KIND, "DSP-ROLL", {**LEDGER, "refund_state": "refunded"}, sequence=2)
+    app.evaluate_dispute(CLAIM, envelope=new)  # acted on: the refund was already paid
+    app.store._conn.execute("DELETE FROM fact_sequences")  # a DB writer erases the marks
+    app.store._conn.commit()
+    b = app.evaluate_dispute(CLAIM, envelope=old)
+    assert b.decision.provenance.status is ProvenanceStatus.SUPERSEDED  # the chain remembers
+    assert not b.decision.executed
+
+
+def test_f2_one_applications_statement_cannot_stand_in_for_another():
+    app = SentinelApp.demo(seed=42, customers=60, merchants=12, transactions=900)
+    by_merchant: dict[str, list[str]] = {}
+    for k in app.store.kyb_applications(limit=1000):
+        by_merchant.setdefault(k.merchant_id, []).append(k.application_id)
+    a1, a2 = next(v for v in by_merchant.values() if len(v) > 1)[:2]
+    other = app.store.fact_envelope(f"application:{a1}")
+    app.store.save_fact_envelopes([(f"application:{a2}", other)])  # a DB writer swaps them
+    b = app.evaluate_merchant("", application_id=a2)
+    assert b.decision.provenance.status is ProvenanceStatus.INVALID
+    assert "application_id" in b.decision.provenance.reason and not b.decision.executed
+
+
+def test_f3_an_oversized_integer_fails_safe_and_leaves_no_orphan_audit_event(app):
+    env = app.issuer.sign(KIND, "DSP-BIG", LEDGER)
+    env["payload"] = {**env["payload"], "amount": 2**64}
+    n_audit, n_dec = len(app.runtime.audit), app.store.count("decisions")
+    b = app.evaluate_dispute(CLAIM, envelope=env)
+    assert b.decision.provenance.status is ProvenanceStatus.INVALID and not b.decision.executed
+    # a failed statement is a tamper signal: the policy's BLOCK is decisive (DENY, no case),
+    # not a fail-safe review that nobody may ever approve
+    assert b.decision.final_action is FinalAction.DENY and b.case is None
+    assert "block-failed-fact-provenance" in b.decision.policy.matched_rules
+    assert len(app.runtime.audit) == n_audit + 1 and app.store.count("decisions") == n_dec + 1
+    body = app.evaluate_dispute(CLAIM, {**LEDGER, "amount": 2**64})  # the unsigned route too
+    assert not body.decision.executed and app.verify_audit().ok
+
+
+def test_f4_the_audit_names_the_record_the_decision_actually_used(app):
+    t = app.store.transactions(limit=1)[0]
+    app.store._conn.execute(
+        "UPDATE transactions SET amount = 999999 WHERE transaction_id = ?", (t.transaction_id,)
+    )
+    app.store._conn.commit()
+    from sentinel.decision.workflows import transaction_record
+    from sentinel.trust import record_digest
+
+    b = app.evaluate_transaction(t.transaction_id)
+    used = app.store.transaction(t.transaction_id)
+    assert b.decision.provenance.status is ProvenanceStatus.INVALID
+    assert b.decision.provenance.payload_digest == record_digest(transaction_record(used))
+
+
+def test_f5_an_incomplete_statement_is_not_completed_by_defaults(app):
+    partial = {k: v for k, v in LEDGER.items() if k != "refund_state"}
+    b = app.evaluate_dispute(CLAIM, envelope=app.issuer.sign(KIND, "DSP-PART", partial))
+    assert b.decision.provenance.status is ProvenanceStatus.INVALID
+    assert "omits ['refund_state']" in b.decision.provenance.reason and not b.decision.executed
+
+
+def test_f6_replay_reports_a_signature_check_and_withholds_it_on_an_edited_record(app):
+    d, b = _supported_dispute(app)
+    r = app.replay(b.decision.decision_id, ReplayOverrides())
+    assert r.facts["signature_now"] == "VERIFIED_EXTERNAL" and "reverified" not in r.facts
+    snap = app.store.decision_snapshot(b.decision.decision_id)
+    snap["provenance"]["status"] = "INVALID"  # the stored snapshot edited
+    app.store._conn.execute(
+        "UPDATE decisions SET snapshot = ? WHERE decision_id = ?",
+        (json.dumps(snap), b.decision.decision_id),
+    )
+    app.store._conn.commit()
+    r2 = app.replay(b.decision.decision_id, ReplayOverrides())
+    assert not r2.record_verified and r2.facts["signature_now"] is None
+    assert r2.facts["recorded"] == "VERIFIED_EXTERNAL"  # from the audit event, not the snapshot
+
+
+def test_f8_an_oversized_json_integer_is_a_400_not_a_dropped_connection():
+    import threading
+    import urllib.error
+    import urllib.request
+
+    from sentinel.api.server import make_server
+
+    httpd = make_server(
+        SentinelApp.demo(seed=3, customers=10, merchants=4, transactions=80), "127.0.0.1", 0
+    )
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        body = b'{"narrative": "x", "ledger": {"amount": ' + b"9" * 5000 + b"}}"
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{httpd.server_address[1]}/v1/disputes/evaluate",
+            data=body,
+            headers={"Content-Type": "application/json"},
+        )
+        with pytest.raises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(req)
+        assert e.value.code == 400
+    finally:
+        httpd.shutdown()

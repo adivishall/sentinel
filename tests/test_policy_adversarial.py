@@ -53,9 +53,12 @@ from sentinel.security.capabilities import CONSEQUENTIAL, REGISTRY, authorize
 from sentinel.security.provenance import UntrustedContent
 from sentinel.trust.issuer import Issuer
 from sentinel.trust.keys import TrustStore
+from tests.records import ledger as complete
 
 CLAIM = "My order never arrived, please refund."
-LEDGER = {"amount": 12000, "delivery_status": "not_delivered", "policy_auto_limit": 50000}
+LEDGER = complete(
+    **{"amount": 12000, "delivery_status": "not_delivered", "policy_auto_limit": 50000}
+)
 
 # the facts these calls authorize on are the institution's own records
 LOCAL = ProvenanceStatus.TRUSTED_LOCAL
@@ -439,9 +442,18 @@ def test_a_malformed_ledger_amount_goes_to_a_human_never_under_the_limit(amount)
     )
 
 
-def test_a_missing_ledger_amount_goes_to_a_human():
+def test_a_missing_ledger_amount_is_never_decided_on():
+    """Signed but incomplete, the statement is INVALID: the policy's failed-provenance
+    BLOCK is decisive even though the policy context lacks the amount (DENY, no case).
+    Unsigned, the ledger is a malformed claim: fail-safe human review."""
     ledger = {k: v for k, v in LEDGER.items() if k != "amount"}
-    assert _dispute(ledger).decision.final_action is FinalAction.REQUIRE_HUMAN_REVIEW
+    signed = _dispute(ledger).decision
+    assert signed.final_action is FinalAction.DENY and not signed.executed
+    assert "block-failed-fact-provenance" in signed.policy.matched_rules
+    unsigned = run_dispute(
+        Runtime(persist=False), DisputeRequest(UntrustedContent(CLAIM), ledger)
+    ).decision
+    assert unsigned.final_action is FinalAction.REQUIRE_HUMAN_REVIEW and not unsigned.executed
 
 
 def test_malformed_acquirer_records_go_to_a_human():

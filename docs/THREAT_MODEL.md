@@ -20,7 +20,7 @@ must be a function of trusted evidence, risk state, policy and authorization
 | Compromised / over-permissive AI agent | its own output: recommendations and tool calls | authorization |
 | Malicious model output | the same channel as above | evidence status |
 | Insider / operator error | policy misconfiguration | the field catalog / validation |
-| Storage attacker | records at rest, including the audit chain | a record behind a signed statement (a changed row, or a deleted statement under `require_signed_facts`, is `INVALID`); audit events before the last checkpoint the operator holds outside the store |
+| Storage attacker | records at rest, including the audit chain | a record behind a signed statement (a changed row, or a deleted statement under `require_signed_facts`, is `INVALID`); rolling a record back to an older statement already acted on (the marks are also derived from the audit chain); audit events before the last checkpoint the operator holds outside the store |
 
 ## Trust boundary
 

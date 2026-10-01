@@ -3,7 +3,7 @@
 Sentinel runs three ways. All run the **same** engine; only the model provider
 changes.
 
-## 1. Local (no dependencies, no key)
+## 1. Local (one dependency, no key)
 
 ```bash
 make api                          # API + console on :8000, in-memory demo dataset
@@ -62,6 +62,7 @@ sentinel trust keygen --issuer core-ledger --scopes dispute_ledger \
 sentinel trust sign --key /secure/core-ledger.pem --issuer core-ledger \
     --kind dispute_ledger --id DSP-000123 --payload ledger.json --out envelope.json
 sentinel --trust-store /etc/sentinel/trust.json trust verify envelope.json --kind dispute_ledger
+sentinel --trust-store /etc/sentinel/trust.json trust ingest envelope.json   # store it beside the record
 sentinel --trust-store /etc/sentinel/trust.json trust revoke <key_id> --reason compromised
 ```
 

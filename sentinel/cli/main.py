@@ -569,7 +569,11 @@ def cmd_case(args: argparse.Namespace) -> int:
                 state = (
                     f" ({c.resolution})"
                     if c.resolution
-                    else " (awaiting another reviewer's approval)" if args.outcome == "approve" else ""
+                    else (
+                        " (awaiting another reviewer's approval)"
+                        if args.outcome == "approve"
+                        else ""
+                    )
                 )
                 print(f"{c.case_id} -> {c.status.value}{state}  (by {by.reviewer_id}, {by.role})")
         except (ValueError, KeyError) as e:  # InvalidTransition / ReviewerNotAuthorized
@@ -986,6 +990,31 @@ def cmd_trust(args: argparse.Namespace) -> int:
         p = v.provenance
         _out(args, p.audit_detail() | {"reason": p.reason}, f"{p.status.value}: {p.reason}")
         return 0 if v.verified else 3
+    if cmd == "ingest":
+        # Load issuers' statements into the record store, so records read by id are
+        # verified against them (and a missing one is a tamper signal when
+        # SENTINEL_REQUIRE_SIGNED_FACTS is on). Each is verified first; nothing that does
+        # not verify is stored.
+        app = _app(args)
+        good: list[tuple[str, dict[str, Any]]] = []
+        for path in args.envelopes:
+            env = _load_json(path)
+            kind = FactKind(str(env.get("kind")))
+            v = verify_fact(env, trust=app.runtime.trust, now=utc_now(), kind=kind)
+            if not v.verified:
+                print(f"refused {path}: {v.provenance.status.value}: {v.provenance.reason}")
+                continue
+            record_key = str(env["subject"])
+            if kind is FactKind.KYB_RECORD:
+                app_id = (v.payload or {}).get("application_id")
+                if not isinstance(app_id, str):
+                    print(f"refused {path}: a KYB statement must name its application_id")
+                    continue
+                record_key = f"application:{app_id}"
+            good.append((record_key, env))
+            print(f"ingested {record_key} (sequence {env['sequence']}, {env['issuer']})")
+        app.store.save_fact_envelopes(good)
+        return 0 if len(good) == len(args.envelopes) else 3
     if cmd == "list":
         rows = app_trust.summary()
         _out(
@@ -1319,6 +1348,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     vf.add_argument("--subject", help="e.g. dispute:DSP-000123 (default: as the envelope names)")
     tr.add_parser("list", help="the trusted keys")
+    ig = tr.add_parser(
+        "ingest", help="verify issuers' statements and store them beside the records"
+    )
+    ig.add_argument("envelopes", nargs="+")
     tv = tr.add_parser("revoke", help="revoke a key in a trust-store file")
     tv.add_argument("key_id")
     tv.add_argument("--reason", default="compromised")

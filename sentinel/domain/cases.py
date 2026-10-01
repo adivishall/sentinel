@@ -59,6 +59,7 @@ class Case:
     policy_outcome: str | None = None
     evidence_verdict: str | None = None
     facts_provenance: str | None = None  # ProvenanceStatus of the decision's primary record
+    subject_id: str | None = None  # what the decision was about (for execution idempotency)
     amount: int = 0  # the decision's amount: checked against each approver's authority limit
     # distinct reviewers who must approve before the case resolves approved (four-eyes)
     approvals_required: int = 1

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sentinel.cases.identity import RESERVED_IDS, ROLE_RANK, Reviewer
 from sentinel.cases.rules import CaseTrigger, should_open_case
@@ -29,7 +29,7 @@ from sentinel.domain.enums import (
     Workflow,
 )
 from sentinel.domain.ids import content_hash, new_id, now_iso
-from sentinel.security.capabilities import authorize
+from sentinel.security.capabilities import authorize, execution_key
 from sentinel.security.capabilities import spec as cap_spec
 
 if TYPE_CHECKING:
@@ -130,6 +130,9 @@ class CaseService:
         # decision time. With it, a deactivated reviewer's pending approval stops counting
         # toward four eyes. None (a bare service) counts every recorded approval.
         self.standing = standing
+        # the runtime's execution ledger (a recording Runtime attaches it): a human approval
+        # executes the case's capability, so it claims the same key a decision would
+        self.executions: Any = None
 
     def _record(self, case: Case, *, actor: str, action: str, detail: dict[str, object]) -> Case:
         """Chain a human case action, then link it to the case. Free text (titles, notes)
@@ -228,6 +231,7 @@ class CaseService:
             policy_outcome=d.policy.outcome.value,
             evidence_verdict=d.evidence_verdict.value,
             facts_provenance=d.provenance.status.value if d.provenance is not None else None,
+            subject_id=d.subject_id,
             amount=d.amount,
             approvals_required=(
                 cap_spec(d.requested_capability).approvals_required(d.amount)
@@ -375,6 +379,17 @@ class CaseService:
                     "different reviewer must"
                 )
             final = len(pending) + 1 >= required
+            if final and self.executions is not None and case.capability and case.subject_id:
+                # the deciding approval executes the capability: once per subject, whoever
+                # executes (a first of two approvals executes nothing)
+                held = self.executions.claim(
+                    execution_key(case.case_type.value, case.subject_id, case.capability),
+                    f"case:{case_id}",
+                )
+                if held is not None:
+                    raise ReviewerNotAuthorized(
+                        f"{case.capability} already executed on this subject ({held})"
+                    )
         now = now_iso()
         hd = HumanDecision(
             new_id("HDEC"), case_id, by.reviewer_id, outcome, note, now, by.role, by.credential_id
