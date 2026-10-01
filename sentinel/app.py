@@ -247,12 +247,7 @@ class SentinelApp:
         self._world: _World | None = None
         policies = self.runtime.policies
         if policies.signed:
-            # an activation older than one this store's decisions were already made under is
-            # a rollback (someone removed the newer activation): refuse it, from the chain
-            for pid, seq in self.store.policy_activation_floor().items():
-                policies.set_activation_floor(pid, seq)
-            for pid in sorted({p.policy_id for p in policies.all()}):
-                policies.active(pid)  # raises PolicyIntegrityError: refuse to start
+            self._check_activations(policies)
         for p in self.runtime.policies.all():
             stored = self.store.policy_payload(p.policy_id, p.version)
             if stored is None:
@@ -306,11 +301,17 @@ class SentinelApp:
                 reviewers = (
                     ReviewerRegistry.load(self.reviewers_source) if self.reviewers_source else None
                 )
-            except (ValueError, OSError) as e:
+                if trust is not None and self.issuer is not None:
+                    trust = trust.with_key(self.issuer.key)
+            except Exception as e:  # noqa: BLE001 -- nothing new is trusted, nothing dropped
+                reason = str(e)
+                for src in (self.trust_source, self.reviewers_source):
+                    if src:  # file names, never paths on disk
+                        reason = reason.replace(str(src), Path(src).name)
                 detail: dict[str, Any] = {
                     "source": source,
                     "outcome": "refused",
-                    "reason": str(e)[:300],
+                    "reason": reason[:300],
                 }
                 self.runtime.audit.append(
                     actor="sentinel",
@@ -322,8 +323,6 @@ class SentinelApp:
                 _log.error("configuration reload refused", extra={"detail": detail})
                 return detail
             if trust is not None:
-                if self.issuer is not None:
-                    trust = trust.with_key(self.issuer.key)
                 self.runtime.trust = trust
                 self.what_if_runtime.trust = trust
             if reviewers is not None:
@@ -359,6 +358,34 @@ class SentinelApp:
             )
             _log.warning("configuration reloaded", extra={"detail": detail})
             return detail
+
+    def _check_activations(self, policies: Any) -> None:
+        """Refuse to start on an activation older than one this store already ran under
+        (someone removed the newer activation from RELEASES.json), then record the
+        activations in effect in the audit chain whenever they change -- so a rollback is
+        caught even for a policy no decision has used yet. Checked per app: the shared
+        registry is never mutated by one store's history."""
+        floor = self.store.policy_activation_floor()
+        active: dict[str, int] = {}
+        for pid in sorted({p.policy_id for p in policies.all()}):
+            rel = policies.active(pid).release  # raises PolicyIntegrityError: refuse to start
+            seq = rel.activation_sequence if rel is not None else None
+            if seq is None:
+                raise PolicyIntegrityError(f"{pid}: the active version has no activation")
+            if seq < floor.get(pid, 0):
+                raise PolicyIntegrityError(
+                    f"{pid}: activation {seq} is older than activation {floor[pid]}, already "
+                    "in effect for this store (rollback)"
+                )
+            active[pid] = seq
+        if any(floor.get(pid) != seq for pid, seq in active.items()):
+            self.runtime.audit.append(
+                actor="sentinel",
+                workflow="system",
+                action="POLICY_ACTIVATIONS",
+                kind="system",
+                detail={"activations": active},
+            )
 
     def _reviewer_active(self, reviewer_id: str) -> bool:
         """Whether ``reviewer_id`` still holds an active credential in the current registry."""
@@ -1828,7 +1855,7 @@ class SentinelApp:
             "default_transaction_model": scoring.TRANSACTION_DEFAULT.version,
             "facts_sources": {f.value: f.describe for f in FactsSource},
             "trust": {
-                "origin": self.runtime.trust.origin,
+                "origin": Path(self.runtime.trust.origin).name,
                 "keys": self.runtime.trust.summary(),
                 "demo_issuer": self.issuer.key.key_id if self.issuer is not None else None,
             },

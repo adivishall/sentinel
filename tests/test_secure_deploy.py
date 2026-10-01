@@ -17,6 +17,7 @@ import signal
 import threading
 import urllib.error
 import urllib.request
+from dataclasses import replace
 
 import pytest
 
@@ -279,6 +280,182 @@ def test_sighup_reloads(tmp_path, monkeypatch):
     try:
         serve(app, "127.0.0.1", 0)
         os.kill(os.getpid(), signal.SIGHUP)
+        import time
+
+        deadline = time.monotonic() + 10  # the reload runs on its own thread
+        while time.monotonic() < deadline and not any(
+            e.action == "CONFIG_RELOAD" for e in app.runtime.audit.events()
+        ):
+            time.sleep(0.02)
         assert any(e.action == "CONFIG_RELOAD" for e in app.runtime.audit.events())
     finally:
         signal.signal(signal.SIGHUP, old)
+
+
+# ---- regressions: the adversarial review of #20 ------------------------------------------------
+def _raw(port, path="/v1/system", *, method="GET", headers=None, body=None):
+    import http.client
+
+    c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+    c.putrequest(method, path, skip_host=True)
+    for k, v in (headers or {}).items():
+        c.putheader(k, v)
+    if body is not None:
+        c.putheader("Content-Length", str(len(body)))
+    c.endheaders(body)
+    return c.getresponse().status
+
+
+def test_r1_dns_rebinding_is_refused_by_the_host_check(live, monkeypatch):
+    port = int(live.rsplit(":", 1)[1])
+    evil = {"Host": f"rebind.attacker.test:{port}", "Origin": f"http://rebind.attacker.test:{port}"}
+    assert _raw(port, headers=evil) == 421
+    body = json.dumps({"case_type": "dispute", "title": "t"}).encode()
+    post = {**evil, "Content-Type": "application/json"}
+    assert _raw(port, "/v1/policies/evaluate", method="POST", headers=post, body=body) == 421
+    for host in (f"127.0.0.1:{port}", f"localhost:{port}", "LOCALHOST"):
+        assert _raw(port, headers={"Host": host}) == 200, host
+    monkeypatch.setenv("SENTINEL_ALLOWED_HOSTS", "sentinel.example.com")
+    assert _raw(port, headers={"Host": "sentinel.example.com"}) == 200
+    # behind a proxy that rewrites Host to the upstream: the public Origin is accepted
+    proxied = {
+        "Host": f"127.0.0.1:{port}",
+        "Origin": "https://sentinel.example.com",
+        "Content-Type": "application/json",
+    }
+    assert _raw(port, "/v1/policies/evaluate", method="POST", headers=proxied, body=b"{}") != 403
+
+
+def test_r9_a_malformed_origin_is_a_403_not_a_dropped_connection(live):
+    port = int(live.rsplit(":", 1)[1])
+    headers = {
+        "Host": f"127.0.0.1:{port}",
+        "Origin": "http://[",
+        "Content-Type": "application/json",
+    }
+    assert _raw(port, "/v1/policies/evaluate", method="POST", headers=headers, body=b"{}") == 403
+
+
+def test_r2_r3_reloads_happen_off_the_signal_handler_and_never_kill_the_server(
+    tmp_path, monkeypatch
+):
+    """Two SIGHUPs 0.2 ms apart deadlocked the server (a re-entered handler took its own
+    lock); a reload that raised anything but ValueError/OSError ended serve_forever."""
+    import time
+
+    f = _trust_file(tmp_path, "ledger-a")
+    app = SentinelApp.demo(seed=3, customers=10, merchants=4, transactions=80)
+    app.trust_source = str(f)
+    # a trust file naming the demo issuer's key with other settings: with_key raises
+    conflicting = TrustStore.empty().with_key(replace(app.issuer.key, label="someone else's"))
+    monkeypatch.setattr(srv.ThreadingHTTPServer, "serve_forever", lambda self, *a, **k: None)
+    old = signal.getsignal(signal.SIGHUP)
+    try:
+        serve(app, "127.0.0.1", 0)
+        os.kill(os.getpid(), signal.SIGHUP)
+        os.kill(os.getpid(), signal.SIGHUP)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and not any(
+            e.action == "CONFIG_RELOAD" for e in app.runtime.audit.events()
+        ):
+            time.sleep(0.02)
+        assert any(e.action == "CONFIG_RELOAD" for e in app.runtime.audit.events())
+        f.write_text(conflicting.dumps())
+        d = app.reload_config("test")  # raises inside: refused and audited, never thrown
+        assert d["outcome"] == "refused" and "/" not in d["reason"]
+    finally:
+        signal.signal(signal.SIGHUP, old)
+
+
+def test_r4_rotating_the_key_file_takes_effect_without_a_restart(tmp_path, monkeypatch):
+    import time
+
+    f = tmp_path / "api_key"
+    f.write_text("A" * 32)
+    monkeypatch.setenv("SENTINEL_API_KEY_FILE", str(f))
+    assert srv.api_key() == "A" * 32
+    time.sleep(0.01)
+    f.write_text("B" * 32)
+    os.utime(f, (time.time() + 5, time.time() + 5))  # a new mtime, whatever the clock grain
+    assert srv.api_key() == "B" * 32
+
+
+@pytest.mark.parametrize("blank", [" " * 16, "\t" * 20, "x" * 15 + " "])
+def test_r6_a_blank_or_padded_key_is_not_a_key(monkeypatch, blank):
+    monkeypatch.setenv("SENTINEL_API_KEY", blank)
+    with pytest.raises(InsecureBindError):
+        check_bind("0.0.0.0")
+
+
+def test_r5_the_start_record_holds_no_key_fingerprint(monkeypatch):
+    monkeypatch.setenv("SENTINEL_API_KEY", KEY)
+    app = SentinelApp.demo(seed=3, customers=10, merchants=4, transactions=80)
+    cfg = srv.server_config(app, "0.0.0.0", 0, insecure_demo=False)
+    assert cfg["api_key_source"] == "env" and "api_key_sha256_prefix" not in cfg
+    import hashlib
+
+    assert hashlib.sha256(KEY.encode()).hexdigest()[:12] not in json.dumps(cfg)
+
+
+def test_r7_data_files_are_behind_the_key_and_the_console_code_is_not(monkeypatch, app):
+    monkeypatch.setenv("SENTINEL_API_KEY", KEY)
+    httpd = make_server(app, "127.0.0.1", 0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    port = httpd.server_address[1]
+    try:
+        h = {"Host": f"127.0.0.1:{port}"}
+        assert _raw(port, "/", headers=h) == 200 and _raw(port, "/app.js", headers=h) == 200
+        assert _raw(port, "/snapshot.json", headers=h) == 401
+        assert _raw(port, "/snapshot.json", headers={**h, "Authorization": f"Bearer {KEY}"}) == 200
+    finally:
+        httpd.shutdown()
+
+
+def test_r11_concurrent_connections_are_capped(monkeypatch, app):
+    import socket as sk
+
+    monkeypatch.setenv("SENTINEL_MAX_CONNECTIONS", "2")
+    httpd = make_server(app, "127.0.0.1", 0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    port = httpd.server_address[1]
+    held = [sk.create_connection(("127.0.0.1", port)) for _ in range(2)]  # idle, held open
+    try:
+        import time
+
+        time.sleep(0.2)
+        extra = sk.create_connection(("127.0.0.1", port))
+        extra.settimeout(5)
+        extra.sendall(b"GET /health HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n")
+        assert extra.recv(100) == b""  # closed at once, no thread held
+        extra.close()
+    finally:
+        for s in held:
+            s.close()
+        httpd.shutdown()
+
+
+def test_r12_system_info_names_files_not_paths(tmp_path):
+    f = _trust_file(tmp_path, "ledger-a")
+    app = SentinelApp.demo(
+        seed=3, customers=10, merchants=4, transactions=80, trust=TrustStore.load(f)
+    )
+    assert "/" not in app.system_info()["trust"]["origin"]
+
+
+def test_r13_an_ipv6_loopback_bind_works(app):
+    import socket as sk
+
+    if not sk.has_ipv6:
+        pytest.skip("no IPv6")
+    try:
+        httpd = make_server(app, "::1", 0)
+    except OSError:
+        pytest.skip("IPv6 loopback unavailable here")
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        with urllib.request.urlopen(
+            f"http://[::1]:{httpd.server_address[1]}/health", timeout=10
+        ) as r:
+            assert r.status == 200
+    finally:
+        httpd.shutdown()

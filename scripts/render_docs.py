@@ -2481,9 +2481,28 @@ string where a number is expected raises, it is not "false".
   raises `PolicyIntegrityError` before anything is registered, and a store that
   recorded decisions under a version with other content refuses to open.
   `sentinel policy pin` pins *new* versions only and refuses to re-pin a
-  changed one: a policy change is a new version. This guards against an
-  accidental in-place edit; it is not a defence against someone who can edit
-  both the policy and the manifest (that is code review and signed releases).
+  changed one: a policy change is a new version. The manifest guards against an
+  accidental in-place edit; the signed release below is what defeats someone
+  who can edit both the policy and the manifest.
+- **Signed releases and explicit activation** (`sentinel.policy.release`). A
+  version decides only if a `policy-release` key the operator trusts signed
+  its digest (`sentinel.policy-release/1`) and a signed activation in effect
+  names it (`sentinel.policy-activation/1`: sequenced, never before the
+  document's own `effective_from`). A higher version number activates nothing.
+  The trust root is `SENTINEL_POLICY_TRUST`, else the root shipped in the
+  package (`sentinel/trust/policy_root.json`) -- never the policy directory.
+  An edited document with a recomputed manifest, an unsigned version, a forged
+  or edited activation, an unknown, wrong-purpose, wrong-scope or revoked
+  signer, a relabelled version, an unreadable `effective_from`, YAML, a
+  duplicate JSON key or a non-JSON value is refused, named. Activations in
+  effect are chained into the audit log at every start (`POLICY_ACTIVATIONS`),
+  so removing the newest one is a rollback the next start refuses. A release
+  is bound to its document: an edited copy (a replay override, an in-process
+  change) carries `INVALID`, and the authority gate refuses to record a
+  decision under anything but a verified, activated release of exactly the
+  document that ran. Every decision records the digest, release status,
+  signer, key and activation; replay compares the recorded release with the
+  artifact it ran. `sentinel policy sign | activate | verify`.
 - **A trusted fact can never overwrite a computed field**: the composer
   writes its own fields first and only fills gaps from the workflow's facts.
 

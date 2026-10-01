@@ -13,7 +13,8 @@ WHAT-IF
 
 Version classes, for every policy and risk model:
 
-    active           the one authoritative evaluation uses (the highest shipped version)
+    active           the one authoritative evaluation uses (signed registry: the version a
+                     signed activation in effect names; unsigned: the highest version)
     historical       every other registered version; kept so recorded decisions replay
     replay/what-if   any registered version, named explicitly; never persisted
     caller-selected  none on the authoritative path
@@ -26,7 +27,7 @@ written."""
 from __future__ import annotations
 
 from sentinel.decision.composer import FULL, DecisionInputs
-from sentinel.policy.loader import PolicyIntegrityError, PolicyRegistry
+from sentinel.policy.loader import PolicyIntegrityError, PolicyRegistry, policy_digest
 from sentinel.risk import scoring
 
 
@@ -56,9 +57,15 @@ def downgrades(inputs: DecisionInputs, policies: PolicyRegistry) -> tuple[str, .
         elif inputs.policy.content_hash != active.content_hash:
             out.append(f"policy {inputs.policy.key} content differs from the registered policy")
         elif policies.signed and (
-            inputs.policy.release is None or not inputs.policy.release.verified
+            inputs.policy.release is None
+            or not inputs.policy.release.verified
+            or inputs.policy.release.digest != policy_digest(inputs.policy)
+            or inputs.policy.release.activation_sequence is None
         ):
-            out.append(f"policy {inputs.policy.key} has no verified signed release")
+            out.append(
+                f"policy {inputs.policy.key} is not a verified, activated release of exactly "
+                "this document"
+            )
     risk = inputs.risk
     if risk is not None and risk.entity_type in scoring.ACTIVE:
         want = scoring.ACTIVE[risk.entity_type].version

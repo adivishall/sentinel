@@ -253,10 +253,18 @@ block.
     extended against a separate development set by an author who had seen the
     14 misses, and it now scores 17/21. An honest estimate of unseen wording
     lies somewhere between, and every miss still goes to a human.
-29. **The policy manifest guards against accidents, not insiders.** Pinned
-    digests stop a shipped version being edited in place or deleted; someone
-    who can edit both the policy and `MANIFEST.json` can still change it. That
-    needs signed releases and code review, which a repository cannot supply.
+29. **A signed policy release proves who approved a policy, not that it is
+    right.** A version decides only under a verified release and an explicit
+    activation, so a writer of the policy directory cannot change what decides.
+    But:
+    - the shipped trust root is a file in the package: someone who can rewrite
+      the installed package can replace it (a deployment sets
+      `SENTINEL_POLICY_TRUST` to a root it controls, outside the package);
+    - the shipped versions were signed with the maintainer's key, whose private
+      half is held off the repository; there is no multi-party sign-off;
+    - a signer can release and activate a bad policy; rollback protection
+      covers activations recorded in this store's audit chain, which is as
+      strong as the chain itself (item 17).
 
 <!-- gen:limitations-solid -->
 ## What is genuinely solid

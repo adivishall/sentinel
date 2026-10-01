@@ -147,9 +147,12 @@ closes them.
   mechanism, not an external trust relationship.
 - Auth is optional, and the server only warns when it starts open on a
   non-loopback bind. What-if switches are refused on the evaluate routes.
-- Shipped policy versions are pinned by digest, so an in-place edit fails
-  closed; someone who can edit both the policy and the manifest can still
-  change it -- production needs signed, immutable policy artefacts.
+- Policy versions are signed releases, explicitly activated (D34): a writer
+  of the policy directory cannot make an edited or unsigned policy decide. The
+  shipped trust root lives in the package, so someone who can rewrite the
+  installed package can replace it; a deployment sets `SENTINEL_POLICY_TRUST`
+  to a root it controls. A signer can still release a bad policy: replay is
+  how one finds out.
 - The audit chain detects modification, deletion, insertion and reordering by
   anyone who cannot recompute it. A storage attacker **can** recompute it: a
   consistent rewrite of the events after the last checkpoint passes both

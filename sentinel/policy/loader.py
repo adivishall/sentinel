@@ -130,6 +130,30 @@ _RULE_KEYS = frozenset({"id", "when", "outcome", "reason"})
 _COND_KEYS = frozenset({"field", "op", "value"})
 
 
+def _json_native(v: object, where: str) -> None:
+    """A rule value must be a JSON value (str, int, float, bool, null, or a list of them).
+    A YAML date or a byte string stringifies to text another document could hold, so two
+    different documents would share a digest; refuse it instead."""
+    if v is None or isinstance(v, (str, bool, int, float)):
+        return
+    if isinstance(v, list):
+        for x in v:
+            _json_native(x, where)
+        return
+    raise PolicyValidationError(f"{where}: value {v!r} is not a JSON value ({type(v).__name__})")
+
+
+def _no_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    out: dict[str, object] = {}
+    for k, v in pairs:
+        if k in out:
+            raise PolicyValidationError(
+                f"duplicate key {k!r}: a reviewer and the engine could read different values"
+            )
+        out[k] = v
+    return out
+
+
 def _strict(obj: object, allowed: frozenset[str], where: str) -> None:
     """Fail closed on keys the engine does not read: a misspelt ``"unless"`` or an
     ``"enabled": false`` would otherwise be silently ignored."""
@@ -145,6 +169,9 @@ def _parse(doc: dict[str, object]) -> Policy:
     if "default_outcome" not in doc:
         # No implicit ALLOW: the document states what happens when no rule matches.
         raise PolicyValidationError("policy must declare default_outcome")
+    version = doc.get("version")
+    if not isinstance(version, int) or isinstance(version, bool) or version < 1:
+        raise PolicyValidationError(f"version must be a positive integer, got {version!r}")
     try:
         rules = []
         for r in _as_list(doc.get("rules", [])):
@@ -152,6 +179,8 @@ def _parse(doc: dict[str, object]) -> Policy:
             assert isinstance(r, dict)
             for c in _as_list(r["when"]):
                 _strict(c, _COND_KEYS, f"rule {r.get('id')!r} condition")
+                assert isinstance(c, dict)
+                _json_native(c.get("value"), f"rule {r.get('id')!r} condition")
             conds = tuple(
                 Condition(str(c["field"]), str(c["op"]), c.get("value")) for c in r["when"]
             )
@@ -186,7 +215,7 @@ def load_policy(path: str | Path) -> Policy:
             raise PolicyValidationError("YAML policies need PyYAML; use JSON") from e
         doc = yaml.safe_load(text)
     else:
-        doc = json.loads(text)
+        doc = json.loads(text, object_pairs_hook=_no_duplicate_keys)
     if not isinstance(doc, dict):
         raise PolicyValidationError("policy document must be a mapping")
     return _parse(doc)
@@ -222,13 +251,14 @@ class PolicyRegistry:
         self._floor: dict[str, int] = {}
         self.release_problems: tuple[str, ...] = ()
         self.release_origin = "unsigned"
+        self.trust_root = "none"
 
     def _ensure(self) -> None:
         if self._autoload is not None:
             d, self._autoload = self._autoload, None
             try:
                 self.load_dir(d)
-            except PolicyValidationError:
+            except Exception:
                 self._autoload = d  # stay unusable: every later use raises again
                 raise
 
@@ -254,6 +284,10 @@ class PolicyRegistry:
         the policy trust root and refuses any version without one. Verification happens
         before anything is registered."""
         d = Path(directory)
+        if self.signed and any(Path(f).suffix in (".yaml", ".yml") for f in _policy_files(d)):
+            raise PolicyIntegrityError(
+                "signed policies are JSON only (YAML typing is not canonical)"
+            )
         policies = [load_policy(f) for f in _policy_files(d)]
         if pinned is None:
             pinned = d.resolve() == POLICY_DIR.resolve() or (d / MANIFEST).exists()
@@ -266,7 +300,16 @@ class PolicyRegistry:
         return len(policies)
 
     def _verify_releases(self, policies: list[Policy], d: Path) -> list[Policy]:
-        trust = self._trust if self._trust is not None else policy_trust()
+        if any(Path(f).suffix in (".yaml", ".yml") for f in _policy_files(d)):
+            raise PolicyIntegrityError(
+                "signed policies are JSON only (YAML typing is not canonical)"
+            )
+        if not policies:
+            raise PolicyIntegrityError(f"no policies in {d}: nothing to decide with")
+        try:
+            trust = self._trust if self._trust is not None else policy_trust()
+        except (ValueError, OSError) as e:
+            raise PolicyIntegrityError(f"the policy trust root does not load: {e}") from None
         try:
             book = ReleaseBook.load(d / RELEASES_FILE)
         except ValueError as e:
@@ -280,13 +323,22 @@ class PolicyRegistry:
                     f"{r.policy_id}@v{r.version} {r.status.value} ({r.reason})" for r in refused
                 )
             )
-        equivocation = [x for x in res.problems if "equivocation" in x]
-        if equivocation:
-            raise PolicyIntegrityError("; ".join(equivocation))
+        fatal = [
+            x
+            for x in res.problems
+            if "equivocation" in x or "effective_from" in x and "unreadable" in x
+        ]
+        if fatal:
+            raise PolicyIntegrityError("; ".join(fatal))
         self._activations = res.activations
         self.release_problems = res.problems
         # file names only: /v1/system shows this, and paths on disk are not its business
         self.release_origin = f"{Path(book.origin).name} verified against {Path(trust.origin).name}"
+        self.trust_root = (
+            "operator"
+            if self._trust is not None or os.environ.get("SENTINEL_POLICY_TRUST")
+            else "shipped"
+        )
         return [replace(p, release=res.releases[(p.policy_id, p.version)]) for p in policies]
 
     def set_activation_floor(self, policy_id: str, sequence: int) -> None:
@@ -361,6 +413,9 @@ class PolicyRegistry:
         out: dict[str, Any] = {
             "signed": self.signed,
             "origin": self.release_origin,
+            # "shipped": the root packaged with Sentinel -- it stops a writer confined to the
+            # policy directory; a deployment sets SENTINEL_POLICY_TRUST to a root it controls
+            "trust_root": self.trust_root,
             "problems": list(self.release_problems),
             "policies": {},
         }
