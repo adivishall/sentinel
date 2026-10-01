@@ -115,7 +115,8 @@ bulk backtesting over a history; scheduled drift monitoring.
 capability executes unless verified or trusted facts support it, a signed and
 activated policy allows it and the registry authorises the actor; attacker
 text, model output and caller-chosen fields cannot change that (the adaptive
-red team: 0 bypasses in 5,760 queries); unsigned or failed
+red team, a regression check of the design: 0 bypasses in 5,749 queries and
+25 structured attempts; text never reaches the facts that decide); unsigned or failed
 facts never execute; a modified policy cannot decide; a reviewer cannot declare
 their own authority and four eyes needs two identities; no what-if is recorded
 as authoritative; a recorded decision replays; tampering is detected, and a
@@ -542,7 +543,14 @@ to its document (a replay override kept a VERIFIED stamp); DNS rebinding
 defeated the browser checks and two SIGHUPs deadlocked the server; one corrupt
 record at checkpoint time disabled anchoring for good, and the scheduled
 checkpoint job broke the running server; a benchmark row reported a 0% false
-positive rate over zero measured controls.
+positive rate over zero measured controls. The review of the red team found the
+release's one real bypass, by hand rather than by the search: `^...$` with
+`match()` accepts a final newline, so a dispute the system had already refunded
+could be named again as `"DSP-000002\n"` with a body ledger, and a human
+approval of that case refunded it a second time. Every grammar is now a full
+match, and the red team now tries that spelling. The same review showed the
+red team's evasion numbers counted seeds the detector already missed; they are
+now measured against an unmutated baseline.
 
 ## Questions where the honest answer is "not implemented"
 

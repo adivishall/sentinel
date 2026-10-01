@@ -60,7 +60,7 @@ HEADER_FIELDS = (
     "head_hash",
     "issued_at",
 )
-_HEX64 = re.compile(r"^[0-9a-f]{64}$")
+_HEX64 = re.compile(r"[0-9a-f]{64}")  # fullmatch: "$" alone also matches before a final "\n"
 ANCHORED, NOT_ANCHORED, MISMATCH = "anchored", "not_anchored", "anchor_mismatch"
 
 
@@ -133,9 +133,9 @@ def _shape(stmt: object) -> tuple[bool, str]:
         if not isinstance(v, int) or isinstance(v, bool) or v < 1:
             return False, f"{f} is not a positive integer"
     prev = stmt["previous_checkpoint"]
-    if prev is not None and (not isinstance(prev, str) or not _HEX64.match(prev)):
+    if prev is not None and (not isinstance(prev, str) or not _HEX64.fullmatch(prev)):
         return False, "previous_checkpoint is not a digest"
-    if not _HEX64.match(stmt["head_hash"]) or not _HEX64.match(stmt["chain_id"]):
+    if not _HEX64.fullmatch(stmt["head_hash"]) or not _HEX64.fullmatch(stmt["chain_id"]):
         return False, "head_hash / chain_id is not a SHA-256"
     try:
         canonical_json({k: stmt[k] for k in HEADER_FIELDS})

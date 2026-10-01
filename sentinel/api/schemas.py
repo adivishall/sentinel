@@ -53,7 +53,7 @@ def req_str(d: dict[str, Any], key: str, *, alt: str | None = None, max_len: int
 def req_id(d: dict[str, Any], key: str, *, alt: str | None = None) -> str:
     """A caller-named record id, in the one grammar (``sentinel.domain.ids.RECORD_ID``)."""
     v = req_str(d, key, alt=alt, max_len=64)
-    if not RECORD_ID.match(v):
+    if not RECORD_ID.fullmatch(v):
         raise ValidationError(f"{key!r} is not a record id (letters, digits, . _ -; 1-64 chars)")
     return v
 

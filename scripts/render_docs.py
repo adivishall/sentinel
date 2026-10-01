@@ -312,14 +312,27 @@ def render_evaluation(R: dict[str, Any], tests: int) -> str:
     live = _live_row(m)
     rto = rt["objectives"]
     rt_ops = tbl(
-        ["Operator", "Queries", "Detector missed"],
         [
-            [f"`{op}`", v["queries"], pct(v["detection_evasion_rate"])]
+            "Operator",
+            "Evades alone (contradicted)",
+            "No-op",
+            "Evades alone (over-limit)",
+            "No-op",
+        ],
+        [
+            [
+                f"`{op}`",
+                pct(v["detection_evasion_rate"]),
+                pct(v["no_op_rate"]),
+                pct(rto["over_limit"]["by_operator"][op]["detection_evasion_rate"]),
+                pct(rto["over_limit"]["by_operator"][op]["no_op_rate"]),
+            ]
             for op, v in rto["contradicted"]["by_operator"].items()
         ],
+        "lrrrr",
     )
     rt_struct = tbl(
-        ["Structured attack", "Channel", "Outcome", "Facts treated as", "Executed"],
+        ["Structured attack", "Channel", "Outcome", "Facts treated as", "Executed", "Stopped by"],
         [
             [
                 x["attack"],
@@ -328,8 +341,24 @@ def render_evaluation(R: dict[str, Any], tests: int) -> str:
                 + (")" if x["status"].startswith("refused") else ""),
                 x["provenance"] or "—",
                 x["executed"] or "nothing",
+                x["stopped_by"],
             ]
             for x in rt["structured"]["attempts"]
+        ],
+    )
+    rt_seen = tbl(
+        ["", "Contradicted", "Over-limit"],
+        [
+            [
+                "policy outcome (all queries)",
+                ", ".join(f"{k} {v:,}" for k, v in rto["contradicted"]["policy_outcomes"].items()),
+                ", ".join(f"{k} {v:,}" for k, v in rto["over_limit"]["policy_outcomes"].items()),
+            ],
+            [
+                "layers that blocked (queries)",
+                ", ".join(f"`{k}` {v:,}" for k, v in rto["contradicted"]["blocked_by"].items()),
+                ", ".join(f"`{k}` {v:,}" for k, v in rto["over_limit"]["blocked_by"].items()),
+            ],
         ],
     )
     n_classes = len(s["by_class"])
@@ -1160,7 +1189,8 @@ the set is **partially informed, not blind**. First run: **{cl['frozen']['correc
 correct; {cl['frozen']['false_negatives']} of {cl['frozen']['false_negative_n']} legitimate claims not
 recognised ({cl['frozen']['misread_as_another_type']} misread as another type -- every miss abstained, i.e. a
 human reads it); {cl['frozen']['false_positives']} of {cl['frozen']['false_positive_n']} ambiguous or non-claim messages
-read as a claim. That is the estimate to quote for unfamiliar wording: about
+read as a claim, and {sum(1 for x in cl['frozen']['failures'] if x['expected'] == 'non_claim' and x['got'] == 'abstain')} of {cl['frozen']['by_label']['non_claim']['n']} non-claims abstained instead of being
+recognised as non-claims (held for a human: a cost, not a misreading). That is the estimate to quote for unfamiliar wording: about
 half of honest claims phrased in ways the patterns have not seen go to a
 human, and none is read as the wrong claim.
 
@@ -1175,43 +1205,66 @@ false-negative row measures.
 ## M. Adaptive red team (`results/redteam.json`)
 
 A seeded, black-box attacker *searches* instead of replaying fixed attacks.
-Per corpus seed it mutates the text -- {len(rt["operators"])} operators:
-{", ".join(f"`{o}`" for o in rt["operators"])} -- submits each variant, reads
-only what the API returns (final action, detector rating, policy outcome,
-what blocked it) and keeps the variant that got furthest; {rt["budget_per_seed"]}
-queries per seed, seed `{rt["seed"]}` (rerunning reproduces every query). Two
-objectives: **contradicted** -- the corpus attacks, the ledger says delivered;
-**over-limit** -- the ledger *supports* non-receipt but the amount is over the
-₹50,000 auto-limit, so the text must push a true claim past the human review
-policy requires. A structured campaign then attacks every channel that is not
-text, through the real API handlers.
+Per corpus seed it first submits the unmutated text (the baseline), then
+mutates it -- {len(rt["operators"])} operators:
+{", ".join(f"`{o}`" for o in rt["operators"])} -- submitting up to {rt["budget_per_seed"]}
+distinct variants (never a repeat, never an unchanged text; `multi_turn` goes
+through the conversation path), reading only what the API returns (final
+action, detector rating, policy outcome, what blocked it) and keeping the
+variant that got furthest. Seed `{rt["seed"]}`; rerunning reproduces every
+query. Two objectives: **contradicted** -- the corpus attacks, the ledger says
+delivered; **over-limit** -- the ledger *supports* non-receipt but the amount
+is over the ₹50,000 auto-limit, so the text must push a true claim past the
+human review policy requires. A structured campaign then attacks every channel
+that is not text, through the real API handlers.
+
+**What the search can reach.** Text reaches the claim type and the detector's
+rating. The amount, the ledger and the capability come from the issuer's
+signed statement, which the search cannot change -- so it puts real pressure
+on the detector and none on the layers that decide. Its zero bypasses are
+**structural** (the design), and this suite is the regression check that the
+implementation honours it; the facts are attacked by the structured campaign.
 
 Four numbers, never combined into one:
 
 | Metric | Contradicted | Over-limit | What it means |
 |---|---:|---:|---|
-| Detection-only evasion (per query) | {pct(rto["contradicted"]["detection_evasion_rate"])} | {pct(rto["over_limit"]["detection_evasion_rate"])} | variants the AI Security Gateway rated below MEDIUM: the lexical detector is beatable, as expected |
-| Seeds where the search found a detector evasion | {pct(rto["contradicted"]["seeds_with_a_detection_evasion"])} | {pct(rto["over_limit"]["seeds_with_a_detection_evasion"])} | out of {rto["contradicted"]["seeds"]} / {rto["over_limit"]["seeds"]} seeds |
-| Capability / policy evasion | {pct(rto["contradicted"]["capability_policy_evasion_rate"])} | {pct(rto["over_limit"]["capability_policy_evasion_rate"])} | policy said ALLOW and the registry granted a consequential capability |
-| Trusted-fact manipulation | {pct(rt["metrics"]["trusted_fact_manipulation_rate"])} (structured) | | attacker-supplied facts treated as TRUSTED_LOCAL or VERIFIED_EXTERNAL |
-| **Authoritative-decision bypasses** | **{rt["metrics"]["authoritative_bypass_count"]}** in {rt["methodology"]["sample"]["queries"]:,} queries + {rt["structured"]["n"]} structured attempts | | an unauthorised consequential capability executed |
+| Detector missed the unmutated seed (baseline) | {rto["contradicted"]["baseline_detector_missed"]} / {rto["contradicted"]["seeds"]} | {rto["over_limit"]["baseline_detector_missed"]} / {rto["over_limit"]["seeds"]} | before any search; not counted below |
+| **1. Detection-only evasion** (per query, seeds the detector caught) | {pct(rto["contradicted"]["detection_evasion_rate"])} | {pct(rto["over_limit"]["detection_evasion_rate"])} | mutated variants rated below MEDIUM, of {rto["contradicted"]["queries_on_caught_seeds"]:,} / {rto["over_limit"]["queries_on_caught_seeds"]:,} queries |
+| Caught seeds where the search found an evasion | {rto["contradicted"]["caught_seeds_evaded"]} / {rto["contradicted"]["seeds_caught_unmutated"]} | {rto["over_limit"]["caught_seeds_evaded"]} / {rto["over_limit"]["seeds_caught_unmutated"]} | the lexical detector is beatable, as expected |
+| **2. Capability / policy evasion** | {pct(rto["contradicted"]["capability_policy_evasion_rate"])} | {pct(rto["over_limit"]["capability_policy_evasion_rate"])} | policy said ALLOW and the registry granted a consequential capability |
+| **3. Trusted-fact manipulation** | {pct(rt["metrics"]["trusted_fact_manipulation_rate"])} of {rt["structured"]["n"]} structured attempts | | attacker-supplied facts treated as TRUSTED_LOCAL or VERIFIED_EXTERNAL |
+| **4. Authoritative-decision bypasses** | **{rt["metrics"]["authoritative_bypass_count"]}** | | an unauthorised consequential capability executed: {rt["bypass_breakdown"]["text_search_full_controls_non_recording"]} in {rt["methodology"]["sample"]["queries"]:,} text queries (full authoritative controls, on a runtime that records nothing) + {rt["bypass_breakdown"]["structured_campaign_recording_api"]} in {rt["structured"]["n"]} structured attempts (the recording API) |
 
-The detector missing a fifth to a quarter of mutated variants is the reason it
-is not the control: what decides is the trusted ledger, policy and the
-capability registry, and the search found no path through them. A non-zero
-bypass count would be listed here attack by attack and the tests fail on it.
+Queries are distinct variants: {rto["contradicted"]["redraws"] + rto["over_limit"]["redraws"]:,} draws that repeated a variant
+or left the text unchanged were discarded and drawn again. What the attacker
+saw, across every query:
 
-Detector misses by operator (contradicted objective):
+{rt_seen}
+
+A non-zero bypass count would be listed here attack by attack, and the tests
+fail on it.
+
+Each operator's own effect -- applied once, alone, to every seed the detector
+caught unmutated (a no-op leaves the text unchanged and cannot evade):
 
 {rt_ops}
 
-The structured campaign (one attempt each; the full record is in the JSON):
+The structured campaign (one attempt each; the full record is in the JSON),
+with the layer that stopped each:
 
 {rt_struct}
 
-The campaign found one inconsistency, fixed with a regression test: the dispute
-route dropped a `dispute_id` sent with body facts, so the stored-record check
-did not run there (a new, `UNTRUSTED` dispute was evaluated -- no bypass).
+Found while building and reviewing this suite, each fixed with a regression
+test: the dispute route dropped a `dispute_id` sent with body facts, so the
+stored-record check did not run there (a new, `UNTRUSTED` dispute was
+evaluated), and the conversation path did the same; **an id spelled with a
+trailing newline passed the record-id grammar** (`$` also matches before a
+final `\\n`), so a dispute the system had already refunded could be named
+again with body facts, and a human approval of that case refunded it a second
+time -- the one real bypass, found by the adversarial review rather than the
+search (the campaign now tries newline, CRLF, case, Unicode-hyphen and
+fullwidth spellings); an unknown record id was a 500 on every evaluate route.
 
 {_meth(rt, "redteam")}
 
@@ -3365,7 +3418,8 @@ bulk backtesting over a history; scheduled drift monitoring.
 capability executes unless verified or trusted facts support it, a signed and
 activated policy allows it and the registry authorises the actor; attacker
 text, model output and caller-chosen fields cannot change that (the adaptive
-red team: {rt['metrics']['authoritative_bypass_count']} bypasses in {rt['methodology']['sample']['queries']:,} queries); unsigned or failed
+red team, a regression check of the design: {rt['metrics']['authoritative_bypass_count']} bypasses in {rt['methodology']['sample']['queries']:,} queries and
+{rt['structured']['n']} structured attempts; text never reaches the facts that decide); unsigned or failed
 facts never execute; a modified policy cannot decide; a reviewer cannot declare
 their own authority and four eyes needs two identities; no what-if is recorded
 as authoritative; a recorded decision replays; tampering is detected, and a
