@@ -545,3 +545,29 @@ def test_r7_id_variants_of_a_stored_record_are_not_new_subjects():
         app.evaluate_transaction(replace(t, transaction_id=t.transaction_id.lower(), amount=1))
     with pytest.raises(ValueError, match="not a record id"):
         app.evaluate_transaction(replace(t, transaction_id="TX 1", amount=1))
+
+
+def test_r8_a_trailing_newline_is_not_a_new_subject():
+    """``$`` also matches before a final newline, so ``"TX-000123\\n"`` passed the record-id
+    grammar: a second UNTRUSTED subject for a stored record and a second execution-ledger
+    key (on the dispute route a human approval refunded an already-refunded dispute
+    again; review of #15). Every id check is a full match."""
+    from sentinel.api.schemas import ValidationError, opt_id, req_id
+    from sentinel.api.server import build_routes
+    from sentinel.domain.ids import check_record_id
+    from sentinel.domain.serialization import to_dict
+
+    for odd in ("DSP-1\n", "DSP-1\r\n", "\nDSP-1", "DSP-1\x00"):
+        with pytest.raises(ValueError, match="not a record id"):
+            check_record_id(odd)
+        with pytest.raises(ValidationError, match="not a record id"):
+            req_id({"id": odd}, "id")
+        with pytest.raises(ValidationError, match="not a record id"):
+            opt_id({"id": odd}, "id")
+    app = SentinelApp.demo(seed=7, customers=40, merchants=10, transactions=600)
+    t = app.store.transactions(limit=1)[0]
+    fn, params = build_routes(app).match("POST", "/v1/transactions/evaluate")
+    with pytest.raises(ValidationError, match="not a record id"):
+        fn({}, {"transaction": {**to_dict(t), "transaction_id": t.transaction_id + "\n"}}, params)
+    with pytest.raises(ValueError, match="not a record id"):
+        app.evaluate_transaction(replace(t, transaction_id=t.transaction_id + "\n", amount=1))

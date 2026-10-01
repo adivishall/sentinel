@@ -34,11 +34,13 @@ def now_iso() -> str:
 # A record id a caller may name: ASCII letters, digits and . _ -, 1-64 characters (the same
 # grammar a signed statement's subject uses). Whitespace, case tricks via Unicode (U+2011,
 # fullwidth letters) and NFKC-foldable look-alikes are refused, so two spellings of one
-# stored id cannot be two subjects for the execution ledger.
-RECORD_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+# stored id cannot be two subjects for the execution ledger. Always ``fullmatch``: ``$``
+# also matches before a final newline, and ``"DSP-1\n"`` was a second subject for a
+# stored dispute that a human approval then refunded again (review of #15).
+RECORD_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 
 
 def check_record_id(value: object, what: str = "record id") -> str:
-    if not isinstance(value, str) or not RECORD_ID.match(value):
+    if not isinstance(value, str) or not RECORD_ID.fullmatch(value):
         raise ValueError(f"{what} {value!r} is not a record id (letters, digits, . _ -; 1-64)")
     return value
