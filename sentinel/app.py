@@ -173,7 +173,7 @@ class SentinelApp:
             ) in ("1", "true", "yes")
         self.runtime = Runtime(
             policies=DEFAULT_REGISTRY,
-            cases=CaseService(SqliteCaseRepository(self.store)),
+            cases=CaseService(SqliteCaseRepository(self.store), standing=self._reviewer_active),
             audit=AuditChain(SqliteAuditBackend(self.store)),
             provider=provider,
             persist=persist,
@@ -214,6 +214,11 @@ class SentinelApp:
     @classmethod
     def open(cls, path: str, **kw: Any) -> SentinelApp:
         return cls(SentinelStore(path), **kw)
+
+    def _reviewer_active(self, reviewer_id: str) -> bool:
+        """Whether ``reviewer_id`` still holds an active credential in the current registry."""
+        r = self.reviewers.get(reviewer_id)
+        return r is not None and r.active
 
     @classmethod
     def demo(

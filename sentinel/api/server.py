@@ -468,16 +468,19 @@ def build_routes(app: SentinelApp) -> Router:
     r.add("GET", "/v1/decisions/(?P<id>[^/]+)", lambda q, b, p: _decision_view(app, p["id"]))
 
     # ---- cases --------------------------------------------------------------------------------
-    def _reviewer(d: dict[str, Any]) -> Any:
+    def _reviewer(d: dict[str, Any], fields: frozenset[str]) -> Any:
         """The authenticated reviewer for a case action. Identity comes from the reviewer
-        registry via the X-Reviewer-Token header; a body that names a reviewer or a role
-        is refused rather than ignored."""
+        registry via the X-Reviewer-Token header. A body field the action does not take --
+        one naming a reviewer or a role, or any other -- is refused rather than ignored."""
         named = [k for k in _IDENTITY_FIELDS if k in d]
         if named:
             raise S.ValidationError(
                 f"{named} cannot be sent: who acts, and at what level, comes from the "
                 "reviewer credential (X-Reviewer-Token), not from the request"
             )
+        unknown = sorted(set(d) - fields)
+        if unknown:
+            raise S.ValidationError(f"unknown fields {unknown}; this action takes {sorted(fields)}")
         who = app.reviewers.authenticate(REVIEWER_TOKEN.get())
         if who is None:
             raise ApiError(
@@ -487,7 +490,7 @@ def build_routes(app: SentinelApp) -> Router:
 
     def case_create(q: Any, b: Any, p: Any) -> Any:
         d = S.obj(b)
-        by = _reviewer(d)
+        by = _reviewer(d, frozenset({"case_type", "title", "entities", "priority"}))
         try:
             wf = Workflow(S.req_str(d, "case_type", max_len=40))
             prio = CasePriority(S.opt_str(d, "priority", "P3", 4) or "P3")
@@ -504,7 +507,7 @@ def build_routes(app: SentinelApp) -> Router:
 
     def case_transition(q: Any, b: Any, p: Any) -> Any:
         d = S.obj(b)
-        by = _reviewer(d)
+        by = _reviewer(d, frozenset({"status", "note"}))
         try:
             to = CaseStatus(S.req_str(d, "status", max_len=30))
             return to_dict(
@@ -521,7 +524,7 @@ def build_routes(app: SentinelApp) -> Router:
 
     def case_decide(q: Any, b: Any, p: Any) -> Any:
         d = S.obj(b)
-        by = _reviewer(d)
+        by = _reviewer(d, frozenset({"outcome", "note"}))
         try:
             return to_dict(
                 app.runtime.cases.record_human_decision(
@@ -886,7 +889,10 @@ class SentinelHandler(BaseHTTPRequestHandler):
         fn, params = route
         if path not in ("/health", "/version") and not _authorized(self.headers):
             return self._send(401, _error(401, "unauthorized", rid), rid)
-        REVIEWER_TOKEN.set(self.headers.get("X-Reviewer-Token"))
+        presented = self.headers.get_all("X-Reviewer-Token") or []
+        if len(presented) > 1:  # e.g. a proxy appended one: which one acts is ambiguous
+            return self._send(400, _error(400, "more than one X-Reviewer-Token", rid), rid)
+        REVIEWER_TOKEN.set(presented[0] if presented else None)
         body: Any = None
         if method == "POST":
             try:

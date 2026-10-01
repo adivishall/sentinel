@@ -566,10 +566,12 @@ def cmd_case(args: argparse.Namespace) -> int:
                 c = app.runtime.cases.record_human_decision(
                     args.case_id, by=by, outcome=args.outcome, note=args.note or ""
                 )
-                print(
-                    f"{c.case_id} -> {c.status.value} ({c.resolution or 'pending'})  "
-                    f"(by {by.reviewer_id}, {by.role})"
+                state = (
+                    f" ({c.resolution})"
+                    if c.resolution
+                    else " (awaiting another reviewer's approval)" if args.outcome == "approve" else ""
                 )
+                print(f"{c.case_id} -> {c.status.value}{state}  (by {by.reviewer_id}, {by.role})")
         except (ValueError, KeyError) as e:  # InvalidTransition / ReviewerNotAuthorized
             print(f"error: {e}", file=sys.stderr)
             return 1

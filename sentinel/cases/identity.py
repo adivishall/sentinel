@@ -29,12 +29,17 @@ from sentinel.trust.canonical import CanonicalError, strict_loads
 FORMAT = "sentinel.reviewers/1"
 ROLES = ("HUMAN_REVIEWER", "SENIOR_REVIEWER")
 ROLE_RANK = {"HUMAN_REVIEWER": 1, "SENIOR_REVIEWER": 2}
-# identifiers that denote the system or a model: never a reviewer
+# Words that denote the system or a model: an id with one as a component (split on . _ -)
+# is refused -- ``sentinel``, ``sentinel-bot``, ``ai-reviewer``, ``claude``, ``gpt-4o``. A
+# name check is hygiene for the audit trail, not the control: authority comes from the
+# credential the operator issued, and the operator owns the ids.
 RESERVED_IDS = frozenset(
     {"sentinel", "system", "automation", "auto", "agent", "ai", "model", "llm", "bot", "human"}
 )
+MODEL_NAMES = frozenset({"claude", "anthropic", "gpt", "openai", "gemini", "llama", "copilot"})
 _ID = re.compile(r"^[a-z][a-z0-9._-]{1,39}$")
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
+_CREDENTIAL_ID = re.compile(r"^cred-[0-9a-f]{12}$")
 
 
 class ReviewerRegistryError(ValueError):
@@ -57,6 +62,16 @@ class Reviewer:
 
 def token_digest(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def credential_id(digest: str) -> str:
+    """The credential's name in the audit chain: derived from its digest, never the token."""
+    return "cred-" + digest[:12]
+
+
+def reserved(reviewer_id: str) -> bool:
+    """Whether an id names the system or a model (in whole or as a component)."""
+    return bool(set(re.split(r"[._-]", reviewer_id)) & (RESERVED_IDS | MODEL_NAMES))
 
 
 def issue_token() -> str:
@@ -104,7 +119,7 @@ class ReviewerRegistry:
             raise ReviewerRegistryError(f"reviewer {reviewer_id!r} exists")
         token = issue_token()
         r = _validate(
-            Reviewer(reviewer_id, name, role, authority_limit, "cred-" + token_digest(token)[:12])
+            Reviewer(reviewer_id, name, role, authority_limit, credential_id(token_digest(token)))
         )
         return (
             ReviewerRegistry(self._entries + (_Entry(r, token_digest(token)),), self.origin),
@@ -167,19 +182,25 @@ class ReviewerRegistry:
             if not isinstance(e, dict) or set(e) - allowed:
                 raise ReviewerRegistryError(f"reviewers[{i}]: unknown or malformed fields")
             try:
+                for k in ("reviewer_id", "name", "role", "credential_id", "token_sha256"):
+                    if not isinstance(e[k], str):
+                        raise ReviewerRegistryError(f"{k} must be a string")
                 r = _validate(
                     Reviewer(
-                        str(e["reviewer_id"]),
-                        str(e["name"]),
-                        str(e["role"]),
+                        e["reviewer_id"],
+                        e["name"],
+                        e["role"],
                         e["authority_limit"],
-                        str(e["credential_id"]),
+                        e["credential_id"],
                         e.get("active", True),
                     )
                 )
-                digest = str(e["token_sha256"])
+                digest = e["token_sha256"]
                 if not _HEX64.match(digest):
                     raise ReviewerRegistryError("token_sha256 must be 64 hex characters")
+                if r.credential_id != credential_id(digest):
+                    # derived from the digest: it cannot be blank, shared or the token itself
+                    raise ReviewerRegistryError("credential_id does not name this credential")
             except (KeyError, TypeError) as err:
                 raise ReviewerRegistryError(f"reviewers[{i}]: {err}") from None
             except ReviewerRegistryError as err:
@@ -202,10 +223,13 @@ class ReviewerRegistry:
 
 
 def _validate(r: Reviewer) -> Reviewer:
-    if not _ID.match(r.reviewer_id) or r.reviewer_id in RESERVED_IDS:
+    if not _ID.match(r.reviewer_id) or reserved(r.reviewer_id):
         raise ReviewerRegistryError(
-            f"reviewer id {r.reviewer_id!r} must be a lowercase identifier and not a system name"
+            f"reviewer id {r.reviewer_id!r} must be a lowercase identifier that names neither "
+            "the system nor a model"
         )
+    if not _CREDENTIAL_ID.match(r.credential_id):
+        raise ReviewerRegistryError("credential_id must be cred- and 12 hex characters")
     if not r.name or len(r.name) > 80 or any(ord(c) < 32 for c in r.name):
         raise ReviewerRegistryError("name must be 1-80 printable characters")
     if r.role not in ROLES:

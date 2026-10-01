@@ -1060,6 +1060,10 @@ class SqliteAuditBackend:
         return None
 
 
+# the amount of a stored case whose amount was never recorded: larger than any real limit
+UNBOUNDED_AMOUNT = 2**53 - 1
+
+
 class SqliteCaseRepository:
     def __init__(self, store: SentinelStore) -> None:
         self.store = store
@@ -1080,8 +1084,21 @@ class SqliteCaseRepository:
             ),
         )
 
-    @staticmethod
-    def _from(payload: dict[str, Any]) -> Case:
+    def _amount(self, p: dict[str, Any]) -> int:
+        """A case's amount. A case stored before amounts were recorded takes its decision's;
+        one with a capability and no amount anywhere is treated as unbounded, so no finite
+        authority limit covers it (fail closed, not open)."""
+        if "amount" in p:
+            return int(p["amount"])
+        if p.get("decision_ids"):
+            r = self.store._one(
+                "SELECT amount FROM decisions WHERE decision_id = ?", (p["decision_ids"][0],)
+            )
+            if r is not None and r["amount"] is not None:
+                return int(r["amount"])
+        return UNBOUNDED_AMOUNT if p.get("capability") else 0
+
+    def _from(self, payload: dict[str, Any]) -> Case:
         p = payload
         return Case(
             p["case_id"],
@@ -1108,7 +1125,8 @@ class SqliteCaseRepository:
             p.get("policy_outcome"),
             p.get("evidence_verdict"),
             p.get("facts_provenance"),
-            int(p.get("amount", 0)),
+            self._amount(p),
+            # never below the capability registry's count (sentinel.cases.service)
             int(p.get("approvals_required", 1)),
         )
 

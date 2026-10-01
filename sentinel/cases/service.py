@@ -9,6 +9,7 @@ cannot be written into the case table without leaving a chained record."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from typing import TYPE_CHECKING, Protocol
 
@@ -116,9 +117,19 @@ class MemoryCaseRepository:
 
 
 class CaseService:
-    def __init__(self, repo: CaseRepository | None = None, audit: AuditChain | None = None) -> None:
+    def __init__(
+        self,
+        repo: CaseRepository | None = None,
+        audit: AuditChain | None = None,
+        *,
+        standing: Callable[[str], bool] | None = None,
+    ) -> None:
         self.repo: CaseRepository = repo or MemoryCaseRepository()
         self.audit: AuditChain | None = audit
+        # Whether a reviewer id still holds an active credential -- the registry's answer at
+        # decision time. With it, a deactivated reviewer's pending approval stops counting
+        # toward four eyes. None (a bare service) counts every recorded approval.
+        self.standing = standing
 
     def _record(self, case: Case, *, actor: str, action: str, detail: dict[str, object]) -> Case:
         """Chain a human case action, then link it to the case. Free text (titles, notes)
@@ -147,7 +158,7 @@ class CaseService:
         if need == "NOBODY":
             return False, "no actor may approve this capability"
         if _ROLE_RANK.get(role, 0) < _ROLE_RANK.get(need, 99):
-            return False, f"approving this case needs {need}; the reviewer declared {role}"
+            return False, f"approving this case needs {need}; the reviewer is a {role}"
         if case.capability is None:
             return True, "no consequential capability on this case"
         auth = authorize(
@@ -287,6 +298,9 @@ class CaseService:
             )
         if to not in TRANSITIONS[case.status]:
             raise InvalidTransition(f"{case.status.value} -> {to.value} is not allowed")
+        if case.status is CaseStatus.ESCALATED and by.rank < _ROLE_RANK["SENIOR_REVIEWER"]:
+            # an escalation hands the case up: only the level it went to may move it on
+            raise ReviewerNotAuthorized("an escalated case is moved on by a SENIOR_REVIEWER")
         now = now_iso()
         ev = CaseEvent(
             new_id("CEV"),
@@ -339,10 +353,12 @@ class CaseService:
             )
         if outcome == "escalate" and case.status is CaseStatus.ESCALATED:
             raise InvalidTransition("the case is already escalated")
-        if case.status is CaseStatus.ESCALATED and by.rank < _ROLE_RANK["SENIOR_REVIEWER"]:
-            # escalating hands the case up; it is not advisory
+        if _escalated(case) and by.rank < _ROLE_RANK["SENIOR_REVIEWER"]:
+            # escalating hands the case up; it is not advisory, and it stays handed up when
+            # the case moves back to investigation
             raise ReviewerNotAuthorized("an escalated case is decided by a SENIOR_REVIEWER")
-        pending = _pending_approvals(case)
+        pending = _pending_approvals(case, self.standing)
+        required = _approvals_required(case)
         final = True
         if outcome == "approve":
             ok, why = self.approval(case, by.role)
@@ -358,14 +374,14 @@ class CaseService:
                     f"four eyes: {by.reviewer_id} has already approved this case; a second, "
                     "different reviewer must"
                 )
-            final = len(pending) + 1 >= case.approvals_required
+            final = len(pending) + 1 >= required
         now = now_iso()
         hd = HumanDecision(
             new_id("HDEC"), case_id, by.reviewer_id, outcome, note, now, by.role, by.credential_id
         )
         detail: dict[str, object] = {"outcome": outcome, "role": by.role}
         if outcome == "approve":
-            detail.update(approvals=len(pending) + 1, required=case.approvals_required)
+            detail.update(approvals=len(pending) + 1, required=required)
         ev = CaseEvent(new_id("CEV"), case_id, "human_decision", by.reviewer_id, detail, now)
         to = (
             CaseStatus.ESCALATED
@@ -431,13 +447,39 @@ def _who(by: Reviewer) -> dict[str, object]:
     }
 
 
-def _pending_approvals(case: Case) -> list[str]:
-    """Reviewers whose approvals count toward the case's current decision: approvals
-    since the last escalation (an escalated case is decided afresh at the higher level)."""
-    out: list[str] = []
-    for h in case.human_decisions:
-        if h.outcome == "escalate":
-            out = []
-        elif h.outcome == "approve":
-            out.append(h.reviewer)
-    return out
+def _escalations(case: Case) -> list[int]:
+    """Positions in the case's event history where it was escalated -- by a decision or
+    by a status change."""
+    return [
+        i
+        for i, e in enumerate(case.events)
+        if (e.kind == "human_decision" and e.detail.get("outcome") == "escalate")
+        or (e.kind == "status_changed" and e.detail.get("to") == CaseStatus.ESCALATED.value)
+    ]
+
+
+def _escalated(case: Case) -> bool:
+    return bool(_escalations(case))
+
+
+def _pending_approvals(case: Case, standing: Callable[[str], bool] | None = None) -> list[str]:
+    """Reviewers whose approvals count toward the case's current decision: approvals since
+    the last escalation, however it was escalated (an escalated case is decided afresh at
+    the higher level), by reviewers who still hold an active credential."""
+    since = max(_escalations(case), default=-1)
+    return [
+        e.actor
+        for e in case.events[since + 1 :]
+        if e.kind == "human_decision"
+        and e.detail.get("outcome") == "approve"
+        and (standing is None or standing(e.actor))
+    ]
+
+
+def _approvals_required(case: Case) -> int:
+    """Distinct approvals the case needs: what was recorded when it opened, and never fewer
+    than the capability registry asks for the case's amount now."""
+    if case.capability is None:
+        return case.approvals_required
+    registry = cap_spec(Capability(case.capability)).approvals_required(case.amount)
+    return max(case.approvals_required, registry)
