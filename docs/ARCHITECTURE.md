@@ -237,6 +237,18 @@ input snapshot), `policy_decisions`, `ai_recommendations`, `cases`,
 repository adapters (`SqliteAuditBackend`, `SqliteCaseRepository`) keep the
 audit chain and case service storage-agnostic.
 
+## Systems of record (`data/providers.py`)
+
+The decision logic never reads storage; `SentinelApp` reads through three
+interfaces, so a deployment can answer them from a payment processor, a
+ledger, an acquirer or a KYC/KYB provider without touching a decision rule:
+`RecordProvider` (the records a decision is about, by id), `FactProvider`
+(issuers' signed statements about them) and `RiskContextProvider` (history
+around a record, as of a moment -- point-in-time reads only). The shipped
+`SentinelStore` over a generated, synthetic dataset is the only
+implementation; a test asserts that no decision, risk, evidence, policy or
+security module imports the store. No real bank system is integrated.
+
 ## Application layer and surfaces
 
 `sentinel/app.py::SentinelApp` owns the store, the runtime (policies,
