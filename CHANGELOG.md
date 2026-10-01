@@ -177,6 +177,43 @@ can be trusted (roadmap issues #11–#20).
   Documented, not changed: account-security cases carry no amount, so authority limits do
   not bound them (role and four eyes do).
 
+### Security — signed policy releases (#14)
+- A policy version decides only if a `policy-release` key the operator trusts signed its
+  exact content (`sentinel.policy-release/1`, Ed25519 over the full SHA-256 of the
+  document) and a signed activation in effect names it (`sentinel.policy-activation/1`:
+  explicit, sequenced, never before the document's own `effective_from`). A higher version
+  number activates nothing.
+- The trust root is `SENTINEL_POLICY_TRUST` or the shipped `sentinel/trust/policy_root.json`
+  (a public key), never the policy directory: an edited policy with a recomputed manifest,
+  an unsigned new version, a forged or edited activation, an unknown, wrong-purpose,
+  wrong-scope or revoked signer, a relabelled version, an early activation and two
+  activations with one sequence are each refused, named. An activation older than one a
+  store's decisions were made under (read from the audit chain) is a rollback and refused.
+- Every decision records the policy digest, release status, signer, key id and activation
+  sequence (decision, audit event, snapshot). The authority gate refuses to record a
+  decision under an unverified release, and replay reports the recorded release beside the
+  artifact it ran.
+- `sentinel policy sign | activate | verify`; `SENTINEL_REQUIRE_SIGNED_POLICY` (default on).
+- **Adversarial review of this branch.** Every edit-and-repin, unsigned version, forged
+  activation, relabel, revoked or wrong-purpose signer was refused. Found and fixed, each
+  with a regression test (`tests/test_policy_release.py::test_r*`):
+  - a release was not bound to its document: a replay rule override, or an in-process
+    edit, kept a VERIFIED stamp. A policy whose content differs from its release now
+    carries `INVALID`; the authority gate requires a verified, activated release of
+    exactly the document that ran; replay reports the artifact's own digest;
+  - the digest was not canonical for non-JSON values (a YAML date stringified like a
+    string): policy values must be JSON values, duplicate keys and non-integer versions
+    are refused, and signed policies are JSON only;
+  - an unreadable trust root left the shared registry usable but empty; it now stays
+    unusable and the start is refused;
+  - rollback was caught only for policies with a recorded decision: activations in effect
+    are now chained at every start (`POLICY_ACTIVATIONS`);
+  - one store's history set a floor on the process-wide registry and locked out every
+    other app; the check is per app, and "no trustworthy active policy" is a 503;
+  - `policy activate` took its next sequence from unverified book entries;
+  - an `effective_from` the verifier could not read silently skipped the effective-date
+    floor; it is refused.
+
 ### Evaluation
 - The corpora's ledgers and acquirer records are signed by an ephemeral evaluation
   issuer and verified in every case, so the suites measure text and model influence on
