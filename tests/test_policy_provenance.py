@@ -371,13 +371,17 @@ def test_two_concurrent_requests_execute_once():
 
 def test_a_human_approval_is_an_execution_too():
     svc_rt = Runtime(trust=TRUST)  # recording: its case service claims executions
-    b = run_dispute(svc_rt, _signed({**SUPPORTING, "amount": 60_000}, "DSP-H"))  # over the limit
+    # one statement, evaluated twice: signing it again could straddle a second boundary,
+    # and the same sequence with another issued_at is equivocation (INVALID, a BLOCK) --
+    # a different refusal from the one this test is about (a CI flake)
+    req = _signed({**SUPPORTING, "amount": 60_000}, "DSP-H")  # over the limit
+    b = run_dispute(svc_rt, req)
     assert b.case is not None and not b.decision.executed
     c = svc_rt.cases.transition(b.case.case_id, CaseStatus.INVESTIGATING, by=ANALYST)
     c = svc_rt.cases.record_human_decision(c.case_id, by=ALICE, outcome="approve")
     assert c.resolution == "approve"
     # the refund was paid by the human's approval: the system does not pay it again
-    again = run_dispute(svc_rt, _signed({**SUPPORTING, "amount": 60_000}, "DSP-H"))
+    again = run_dispute(svc_rt, req)
     assert not again.decision.executed and "case:" in again.decision.authorization.reason
 
 
