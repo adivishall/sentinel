@@ -109,6 +109,37 @@ class ReplayResult:
     anchoring: dict[str, Any] = field(default_factory=dict)
 
     @property
+    def drift(self) -> list[str]:
+        """Every way the replay differs from the decision as recorded, named: the empty
+        list means the recorded decision reproduces under the same versions."""
+        out = []
+        if self.policy_drift:
+            out.append("policy_content")
+        if (self.versions.get("risk_model") or {}).get("configuration_changed"):
+            out.append("risk_model_configuration")
+        if self.original_drift:
+            out.append("engine")
+        if not self.record_verified:
+            out.append("record_vs_audit")
+        if self.policy_release.get("artifact_matches_recorded") is False:
+            out.append("policy_release_artifact")
+        if self.anchoring.get("decision_event") == "anchor_mismatch":
+            out.append("audit_anchor")
+        sig = (self.facts or {}).get("signature_now")  # a status checked now, or None
+        if sig is not None and sig != "VERIFIED_EXTERNAL":
+            out.append("fact_signature")
+        return out
+
+    @property
+    def drift_class(self) -> str:
+        """none | override (the outcome changed only because of the replay's own
+        overrides) | one named drift | multiple."""
+        d = self.drift
+        if not d:
+            return "override" if self.changed else "none"
+        return d[0] if len(d) == 1 else "multiple"
+
+    @property
     def engine_drift(self) -> bool:
         """Alias: the recorded outcome no longer reproduces from its own snapshot."""
         return self.original_drift
@@ -138,6 +169,8 @@ class ReplayResult:
             "facts": self.facts,
             "policy_release": self.policy_release,
             "anchoring": self.anchoring,
+            "drift": self.drift,
+            "drift_class": self.drift_class,
         }
 
 

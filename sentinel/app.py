@@ -1705,6 +1705,98 @@ class SentinelApp:
     def verify_audit(self) -> ChainVerification:
         return self.runtime.audit.verify()
 
+    def decision_lineage(self, decision_id: str) -> dict[str, Any] | None:
+        """One recorded decision, answered question by question: what produced it, when,
+        under which versions, from which sources at which trust level, on what evidence,
+        under which policy and capability, who authorised it, what finally happened, and
+        where it sits in the audit chain. Assembled from the stored record and its audit
+        event; nothing is recomputed (replay does that)."""
+        d = self.store.decision(decision_id)
+        if d is None:
+            return None
+        snap = self.store.decision_snapshot(decision_id) or {}
+        ev = self.runtime.audit.get(decision_id)
+        detail: dict[str, Any] = dict(ev.detail) if ev else {}
+        pol = d.get("policy") or {}
+        auth = d.get("authorization") or {}
+        ai = d.get("ai_recommendation") or {}
+        risk = snap.get("risk") or {}
+        case = self.runtime.cases.get(d["case_id"]) if d.get("case_id") else None
+        humans = [
+            {
+                "reviewer": h.reviewer,
+                "role": h.role,
+                "credential_id": getattr(h, "credential_id", None),
+                "outcome": h.outcome,
+                "at": h.created_at,
+            }
+            for h in (case.human_decisions if case is not None else ())
+        ]
+        return {
+            "decision_id": decision_id,
+            "what": {
+                "workflow": d["workflow"],
+                "subject": f"{d['subject_type']}:{d['subject_id']}",
+                "amount": d["amount"],
+            },
+            "when": {"decided_at": d["created_at"], "engine_version": snap.get("engine_version")},
+            "facts": {
+                "source": d.get("facts_source"),
+                "provenance": d.get("provenance"),
+                "payload_digest": dict(detail.get("facts") or {}).get("payload_digest"),
+            },
+            "evidence": {
+                "verdict": d["evidence_verdict"],
+                "evidence_ids": d.get("evidence_ids", []),
+            },
+            "risk": {
+                "score": d["risk_score"],
+                "level": d["risk_level"],
+                "model_version": risk.get("model_version"),
+                "model_digest": risk.get("model_digest"),
+            },
+            "ai": {
+                "provider": d.get("provider"),
+                "model": d.get("model"),
+                "recommended": ai.get("recommended_action"),
+                "requested_capability": ai.get("requested_capability"),
+                "trust": "MODEL_GENERATED (recorded, never authoritative)",
+            },
+            "policy": {
+                "policy": f"{pol.get('policy_id')}@v{pol.get('version')}",
+                "outcome": pol.get("outcome"),
+                "matched_rules": pol.get("matched_rules", []),
+                "digest": pol.get("policy_digest"),
+                "release": pol.get("release_status"),
+                "signer": pol.get("release_signer"),
+                "key_id": pol.get("release_key_id"),
+                "activation": pol.get("activation_sequence"),
+            },
+            "capability": {
+                "requested": d.get("requested_capability"),
+                "authorization": auth.get("status"),
+                "actor": auth.get("actor"),
+                "reason": auth.get("reason"),
+            },
+            "authorised_by": {
+                "system": auth.get("status") == "GRANTED",
+                "humans": humans,
+                "case_id": d.get("case_id"),
+            },
+            "outcome": {
+                "final_action": d["final_action"],
+                "executed": d.get("executed_capability"),
+                "authoritative": d.get("authoritative"),
+                "blocked_by": d.get("blocked_by", []),
+            },
+            "audit": {
+                "event_id": d.get("audit_event_id"),
+                "sequence": ev.sequence if ev else None,
+                "event_hash": ev.event_hash if ev else None,
+                "anchoring": self.audit_anchoring().for_event(ev.sequence if ev else None),
+            },
+        }
+
     def audit_anchoring(self) -> Anchoring:
         """The chain checked against every signed checkpoint the anchor holds
         (``sentinel.audit.anchor``): anchored | not_anchored | anchor_mismatch."""

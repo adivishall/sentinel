@@ -76,6 +76,21 @@ model for another surface (e.g. `acct-1.0` on a transaction scenario) is a 400,
 not a silent misapplication. `sentinel.decision.authority` enforces the same
 rule inside the engine, whatever the surface.
 
+## Decision lineage
+
+`GET /v1/decisions/{id}/lineage` answers, for one recorded decision: **what**
+(workflow, subject, amount), **when** (time, engine version), **facts** (source,
+provenance, payload digest), **evidence**, **risk** (score, model version and
+configuration digest), **ai** (provider, model, recommendation -- recorded,
+never authoritative), **policy** (version, outcome, rules, release digest,
+signer, activation), **capability** (requested, authorization, actor), **who
+authorised it** (the system's grant, or the reviewers -- id, role, credential
+id -- who acted on its case), the **outcome**, and its place in the **audit**
+chain with anchoring status. It is assembled from the stored record and its
+audit event; nothing is recomputed. Replay does that, and every replay names
+its `drift` (policy content, risk-model configuration, engine, record vs audit,
+policy-release artifact, audit anchor, fact signature) and a `drift_class`.
+
 ## Response — the canonical Decision
 
 ```jsonc
