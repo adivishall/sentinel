@@ -425,8 +425,11 @@ def test_r11_concurrent_connections_are_capped(monkeypatch, app):
         time.sleep(0.2)
         extra = sk.create_connection(("127.0.0.1", port))
         extra.settimeout(5)
-        extra.sendall(b"GET /health HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n")
-        assert extra.recv(100) == b""  # closed at once, no thread held
+        try:  # closed at once, no thread held: EOF, or a reset if it lands mid-send
+            extra.sendall(b"GET /health HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n")
+            assert extra.recv(100) == b""
+        except (ConnectionResetError, BrokenPipeError):
+            pass
         extra.close()
     finally:
         for s in held:
