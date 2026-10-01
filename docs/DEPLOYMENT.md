@@ -226,6 +226,18 @@ activation, picked up at restart.
   server reads it again when it changes (an environment variable needs a
   restart).
 
+### Dependencies
+
+The runtime has one third-party dependency: `cryptography` (pyca), for Ed25519,
+because a vetted implementation is the only acceptable source of signatures;
+it brings `cffi`. Everything else is the standard library. The live provider
+(`anthropic`, optional extra `live`) and the dev tools are pinned exactly in
+`pyproject.toml` / `requirements-dev.txt`; the runtime floor (`cryptography>=42`)
+is a floor, not a lock, so security releases are not blocked. A production
+build should install from a hash-pinned lock file (`pip-compile
+--generate-hashes`) and run `pip-audit` on it; CI here pins the GitHub
+Actions by tag, not by commit SHA.
+
 ### Logs and retention
 
 Logs are JSON on stderr (`SENTINEL_LOG`); ship them. They carry ids, hashes
