@@ -559,7 +559,7 @@ class SentinelApp:
             self.store.save_security_event(b.security_event)
         snap = snapshot(b.inputs) if b.inputs is not None else {}
         self.store.save_decision(b.decision, snap, [to_dict(e) for e in b.reconciliation.evidence])
-        log_decision(_log, b.decision)
+        log_decision(_log, b.decision, risk_version=b.risk.model_version if b.risk else None)
         METRICS.inc(f"decisions.{b.decision.workflow.value}")
         METRICS.inc(f"actions.{b.decision.final_action.value}")
         return b
