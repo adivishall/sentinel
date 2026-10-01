@@ -171,8 +171,13 @@ trusted exactly as far as their provenance goes:
   where the store itself is not a sufficient boundary.
 - Body facts are never trusted.
 
-Put the API behind the institution's boundary and set `SENTINEL_API_KEY`. The
-server prints a warning when it starts open on a non-loopback address.
+The server binds loopback by default and refuses a network bind without an API
+key (`SENTINEL_API_KEY` / `SENTINEL_API_KEY_FILE`, 16+ characters) unless it
+was started with `--insecure-demo`, which is logged, audited and marked on
+every response (`X-Sentinel-Insecure-Demo: 1`). POST bodies must be
+`application/json`, and a cross-site POST (`Origin` of another host,
+`Origin: null`, `Sec-Fetch-Site: cross-site`) is refused. See
+[DEPLOYMENT](DEPLOYMENT.md#what-the-server-enforces).
 
 `POST /v1/replay` compares the recomputed decision with the decision **as
 recorded**, never merely "replay completed":
@@ -222,8 +227,9 @@ case open ("approvals 1 of 2").
 | Status | When |
 |---|---|
 | 400 | malformed JSON (including a duplicated key), missing/invalid field, unknown option, invalid policy document, `facts_envelope` together with the facts it replaces, new text on a stored dispute or application |
-| 401 | `SENTINEL_API_KEY` set and no valid `Authorization: Bearer` / `X-API-Key` (compared in constant time); a case action without an active reviewer credential (`X-Reviewer-Token`) |
-| 403 | a what-if switch (`unguarded`, `options.controls`, `options.policy_version`, `options.risk_model`, investigation `as_of`) on an evaluate route; a reviewer that is not a human actor or lacks the case's required level |
+| 401 | an API key is configured and no valid `Authorization: Bearer` / `X-API-Key` (compared in constant time); a case action without an active reviewer credential (`X-Reviewer-Token`) |
+| 415 | a POST whose `Content-Type` is not `application/json` |
+| 403 | a cross-site POST (`Origin` not this host, `Origin: null`, `Sec-Fetch-Site: cross-site`); a what-if switch (`unguarded`, `options.controls`, `options.policy_version`, `options.risk_model`, investigation `as_of`) on an evaluate route; a reviewer that is not a human actor or lacks the case's required level |
 | 404 | unknown route / id |
 | 409 | invalid case transition; a human decision on an OPEN or RESOLVED case |
 | 413 | body over 256 KB (the body is drained first, so the client sees the 413) or a text over 20,000 chars |

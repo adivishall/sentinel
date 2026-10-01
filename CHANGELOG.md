@@ -177,6 +177,31 @@ can be trusted (roadmap issues #11–#20).
   Documented, not changed: account-security cases carry no amount, so authority limits do
   not bound them (role and four eyes do).
 
+### Security — secure-by-default deployment (#20)
+- **Loopback by default** (`serve`, `make_server`, `make api`). A network bind with no API
+  key is refused before a socket opens (CLI exit 2); a key shorter than 16 characters does
+  not count. `--insecure-demo` (`SENTINEL_INSECURE_DEMO=1`) is the only way to serve the
+  network unauthenticated: logged at ERROR, audited, marked on every response, bannered in
+  the console. The Docker image therefore refuses to start without a key or the flag;
+  `make docker-run` publishes the demo on 127.0.0.1 only.
+- `SENTINEL_API_KEY_FILE` (a mounted secret); the key is compared over SHA-256 digests in
+  constant time; the console asks for it once and keeps it for the tab.
+- **Browser requests:** POSTs must be `application/json` (415) and same-origin (403 for a
+  foreign `Origin`, `Origin: null` or `Sec-Fetch-Site: cross-site`), so a page elsewhere
+  cannot drive the loopback default. Security headers on every response and a CSP on the
+  console; negative `Content-Length` is a 400; a 30-second socket timeout.
+- **The record of how the server ran:** a `SERVER_START` audit event (bind, auth mode, key
+  fingerprint prefix, insecure-demo, signed facts and policy settings, trust-store and
+  reviewer-registry fingerprints). SIGHUP reloads the trust store and reviewer registry
+  deliberately: audited (`CONFIG_RELOAD`, with what changed), and a file that fails to
+  load keeps the running configuration (`CONFIG_RELOAD_FAILED`).
+- `/version` no longer names the provider and model unauthenticated; `/v1/system` names
+  the store's file, not its path. The in-memory demo's reviewer credentials are minted
+  only on loopback or under `--insecure-demo`.
+- `docs/DEPLOYMENT.md` is a runbook: TLS termination, the three key purposes (facts,
+  policy release, audit checkpoint) and why none lives on the Sentinel host, issuer and
+  policy-release keys, reviewer credentials, reload, rotation and revocation.
+
 ### Evaluation
 - The corpora's ledgers and acquirer records are signed by an ephemeral evaluation
   issuer and verified in every case, so the suites measure text and model influence on
