@@ -680,3 +680,25 @@ def test_f8_an_oversized_json_integer_is_a_400_not_a_dropped_connection():
         assert e.value.code == 400
     finally:
         httpd.shutdown()
+
+
+def test_a_trailing_newline_never_satisfies_a_grammar():
+    """``$`` in a Python pattern also matches before a final newline, so ``^id$`` with
+    ``match`` accepted ``"DSP-1\\n"`` (found by the review of #15). Every grammar is a full
+    match: a subject, a timestamp, an issuer, a route."""
+    from sentinel.api.server import Router
+    from sentinel.trust.keys import parse_ts
+
+    env = _signed(record_id="DSP-1\n")
+    prov = _verify(env, subject=None)
+    assert prov.status is ProvenanceStatus.INVALID and "malformed subject" in prov.reason
+    with pytest.raises(ValueError):
+        parse_ts("2026-01-01T00:00:00Z\n", "issued_at")
+    doc = TRUST.to_json()
+    doc["keys"][0]["issuer"] += "\n"
+    with pytest.raises(TrustStoreError):
+        TrustStore.from_json(doc)
+    router = Router()
+    router.add("GET", "/v1/system", lambda: None)
+    assert router.match("GET", "/v1/system") is not None
+    assert router.match("GET", "/v1/system\n") is None
