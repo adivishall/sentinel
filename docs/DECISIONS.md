@@ -550,9 +550,11 @@ that did not run is NOT RUN with the reason. The agent parses only an `end_turn`
 every other ending is a labelled fail-safe recommendation.
 
 **Why.** "Model X scored Y" hides the settings, the date and what answered (a served
-model can differ from the requested one). And a refusal or a truncated reply read as a
-tool call is a decision nobody made: half a JSON object can still look like
-`approve_refund`, and an empty refusal parsed as "deny" would block a legitimate claim.
+model can differ from the requested one). And a reply cut off at `max_tokens` can still
+hold complete-looking JSON (a recommendation the model never finished), as can a refusal
+that carries partial text: parsing either as a tool call records a recommendation nobody
+made. (An empty reply was already a fallback; what this closes is the complete-looking
+truncated or refused one.)
 
 **Trade-off.** No universal score, so no headline number. Agents now ask for 4,096
 tokens, which costs more per call than the old 1,024 but is what current models need

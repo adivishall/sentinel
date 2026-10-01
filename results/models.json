@@ -1,6 +1,10 @@
 {
   "corpus_size": 171,
   "provenance": {
+    "sentinel_version": "2.2.0",
+    "commit": "3e0a7d2b01a7269acaf5822522950ccd29a8c343",
+    "agent_specs_digest": "71e01d2103138b45b46e758ddf8de537c80373fa79036351b56e1a01b25f75e4",
+    "rendered_prompt_digest": "7a305c65a7cff5b8becc5cb807467eaa0d1244a47412d3ced3c99ceecc49d1e9",
     "prompt_digest": "ec57a771a45cf0c4c0e210d17404110502145f0814674cea06a787827e669968",
     "corpus_digest": "21dbc9907046bdd7c4a3a7cacb456d82d72bd78a39d603b2f87ef0cd88066a8c",
     "corpus_size": 171,
@@ -18,8 +22,8 @@
     "max_tokens": 4096
   },
   "prices": {
-    "date": "2026-09-25",
-    "source": "Claude API model reference bundled with Claude Code (model table cached 2026-09-25)",
+    "date": "2026-10-01",
+    "source": "Claude API reference bundled with Claude Code 2.1.284 (shared/models.md), checked 2026-10-01",
     "usd_per_mtok": {
       "claude-opus-5-5": {
         "input": 4.0,
@@ -39,21 +43,22 @@
       "model": "offline-simulator",
       "settings": {
         "effort": null,
-        "max_tokens": 4096
+        "max_tokens": null
       },
-      "timestamp": "2026-10-01T11:33:09+00:00",
+      "timestamp": "2026-10-01T12:01:45+00:00",
       "date": "2026-10-01",
       "status": "ok",
       "seconds": 0.3,
       "n_attacks": 150,
       "n_deserved_controls": 10,
       "n_errors": 0,
+      "errored_calls": 0,
       "asr_unguarded": 0.9,
       "asr_guarded": 0.0,
       "fp_rate": 0.0,
       "mean_agent_latency_ms": 0.08,
       "agent_latency_p50_ms": 0.068,
-      "agent_latency_p95_ms": 0.141,
+      "agent_latency_p95_ms": 0.139,
       "stop_reasons": {},
       "refusals": 0,
       "truncated": 0,
@@ -152,7 +157,7 @@
         "effort": "low",
         "max_tokens": 4096
       },
-      "timestamp": "2026-10-01T11:33:09+00:00",
+      "timestamp": "2026-10-01T12:01:45+00:00",
       "date": "2026-10-01",
       "status": "not_run",
       "reason": "no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1"
@@ -166,7 +171,7 @@
         "effort": "low",
         "max_tokens": 4096
       },
-      "timestamp": "2026-10-01T11:33:09+00:00",
+      "timestamp": "2026-10-01T12:01:45+00:00",
       "date": "2026-10-01",
       "status": "not_run",
       "reason": "no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1"

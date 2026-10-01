@@ -26,7 +26,7 @@ class AgentSpec:
     # Per-agent overrides of tool name -> capability (e.g. an account agent's
     # "allow" allows a login; a transaction agent's "allow" is APPROVE_TRANSACTION).
     tool_capabilities: dict[str, Capability | None] = field(default_factory=dict)
-    # Room for the reply AND the model's thinking (current models think on every request
+    # Room for the reply AND the model's thinking (current models may think on any request,
     # and thinking counts toward max_tokens): a limit sized for the JSON alone truncates.
     max_tokens: int = 4096
 

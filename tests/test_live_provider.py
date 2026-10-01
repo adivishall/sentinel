@@ -108,7 +108,7 @@ def test_every_completion_records_what_a_reproducible_row_needs(sdk):
     assert c.settings == {
         "max_tokens": 4096,
         "effort": DEFAULT_EFFORT,
-        "thinking": "model default (adaptive)",
+        "thinking": "omitted (the model's default applies)",
         "temperature": None,
     }
     p.complete("s", "u", role="dispute")
@@ -182,7 +182,7 @@ def test_the_benchmark_has_one_row_per_exact_configuration(sdk, monkeypatch):
     prov = r["provenance"]
     assert len(prov["prompt_digest"]) == 64 and len(prov["corpus_digest"]) == 64
     assert prov["policy"]["key"].startswith("dispute-refund@v") and prov["risk_models"]
-    assert r["prices"]["date"] == "2026-09-25"
+    assert r["prices"]["date"] == "2026-10-01"
     first = next(x for x in r["rows"] if x["config"] == "claude-opus-5-5/effort-low")
     assert first["calls"][0]["request_id"] == "req_abc"
 
@@ -210,7 +210,7 @@ def test_one_failed_call_is_one_error_row_and_the_run_continues(sdk, monkeypatch
     sdk.script.append(_APIStatusError("overloaded", 529))
     r = models.run(sample=12, provider="anthropic")
     row = r["results"][0]
-    assert row["status"] == "ok" and row["n_errors"] == 1
+    assert row["status"] == "partial" and row["n_errors"] == 1  # one failed case, excluded
     err = next(x for x in r["rows"] if "error_type" in x)
     assert err["error_type"] == "_APIStatusError" and err["status_code"] == 529
 
@@ -249,3 +249,62 @@ def test_the_smoke_test_says_not_run_without_a_key(tmp_path, monkeypatch):
     assert mod.main(str(out)) == 1
     doc = json.loads(out.read_text())
     assert doc["status"] == "not_run" and "ANTHROPIC_API_KEY" in doc["reason"]
+
+
+# ---- regressions: the adversarial review of #19 / #16 -------------------------------------------
+def test_r1_no_rate_over_nothing_and_a_partial_row_says_so(sdk, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-not-a-key")
+    monkeypatch.delenv("SENTINEL_FORCE_OFFLINE", raising=False)
+    monkeypatch.setattr(models, "CONFIGS", models.CONFIGS[:2])
+    import sentinel.agents.providers.anthropic as prov
+
+    real = prov.AnthropicProvider.complete
+    # fail every deserved control: their submissions are legitimate claims
+    legit = {c["submission"] for c in models.corpus.build() if not c["is_attack"]}
+
+    def complete_legit(self, system, user, **kw):
+        if any(t[:40] in user for t in legit):
+            raise _APIStatusError("overloaded", 529)
+        return real(self, system, user, **kw)
+
+    monkeypatch.setattr(prov.AnthropicProvider, "complete", complete_legit)
+    row = models.run(provider="anthropic")["results"][0]
+    assert row["n_deserved_controls"] == 0 and row["fp_rate"] is None  # never "0%"
+    assert row["status"] == "partial" and "excluded" in row["reason"]
+    assert row["n_errors"] == 10
+
+
+def test_r2_an_errored_configuration_keeps_its_spend(sdk, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-not-a-key")
+    monkeypatch.delenv("SENTINEL_FORCE_OFFLINE", raising=False)
+    monkeypatch.setattr(models, "CONFIGS", models.CONFIGS[:2])
+    import sentinel.agents.providers.anthropic as prov
+
+    real = prov.AnthropicProvider.complete
+    attacks = {c["submission"][:40] for c in models.corpus.build() if c["is_attack"]}
+
+    def complete(self, system, user, **kw):
+        if any(t in user for t in attacks):
+            raise _APIStatusError("overloaded", 529)
+        return real(self, system, user, **kw)
+
+    monkeypatch.setattr(prov.AnthropicProvider, "complete", complete)
+    row = models.run(sample=12, provider="anthropic")["results"][0]
+    assert row["status"] == "error" and "no attack measured" in row["reason"]
+    assert row["input_tokens"] and row["cost_usd"] is not None  # what did run was billed
+
+
+def test_r4_provenance_covers_specs_rendered_prompts_and_code(sdk):
+    from sentinel.evaluation.attacks import corpus
+
+    p = models.provenance(corpus.build())
+    for k in ("agent_specs_digest", "rendered_prompt_digest", "sentinel_version"):
+        assert p[k], k
+    assert "commit" in p
+
+
+def test_r5_an_operator_configuration_is_never_skipped(monkeypatch):
+    monkeypatch.setenv("SENTINEL_MODEL", "claude-opus-5-5")
+    monkeypatch.setenv("SENTINEL_EFFORT", "high")
+    ids = [c["id"] for c in models._configs("anthropic")]
+    assert "claude-opus-5-5/effort-high" in ids and "claude-opus-5-5/effort-low" in ids
