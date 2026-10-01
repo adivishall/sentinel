@@ -258,22 +258,50 @@ can be trusted (roadmap issues #11–#20).
 
 ### Adaptive red team (#15; supersedes #4)
 - `sentinel eval run --suite redteam` (`sentinel/evaluation/redteam.py`): a seeded,
-  black-box attacker that *searches*. Per corpus seed it mutates the text with 13
-  operators -- paraphrase, synonyms, reordering, authority spoofing, homoglyphs,
-  zero-width, bidi, spacing, multi-turn splitting, document style, indirect requests,
-  ambiguous wording, compositions -- reads only what the API returns, and hill-climbs on
+  black-box attacker that *searches*. Per corpus seed it submits the unmutated text (the
+  baseline), then up to 24 distinct mutated variants -- 14 operators: paraphrase,
+  synonyms, reordering, authority spoofing, homoglyphs, fullwidth, zero-width, bidi,
+  spacing, indirect requests, ambiguous wording, multi-turn (submitted as a conversation),
+  document style, compositions -- reading only what the API returns and hill-climbing on
   executed, policy ALLOW and detector rating. Two objectives: contradicted claims, and
   over-limit refunds the ledger *supports* (the text must push past mandatory review).
   A structured campaign attacks facts (unsigned, altered, forged, expired, replayed,
-  mis-addressed envelopes; re-pointed and case-variant stored ids), caller-chosen
-  capabilities, backdated time, what-if switches and reviewer identity through the API.
-- Four numbers, never combined: detection-only evasion **22.4% / 25.8%** of 5,760 queries
-  (the lexical detector is beatable, as expected); capability/policy evasion **0**;
-  trusted-fact manipulation **0** of 16 structured attempts; authoritative bypasses **0**.
-  A bypass would be listed attack by attack, and the tests fail on it.
+  mis-addressed envelopes; out-of-vocabulary values; re-pointed stored records; five other
+  spellings of a stored id), caller-chosen capabilities, backdated time, what-if switches,
+  reviewer identity and a tampered policy release, and names the layer that stopped each.
+- Four numbers, never combined. **Detection-only evasion 8.0% / 9.7%** per query, on the
+  seeds the detector caught unmutated (it already missed 30 of 150 and 18 of 90 seeds
+  before any search -- reported as the baseline); the search found an evasion for 18 of
+  120 and 17 of 72 caught seeds. **Capability/policy evasion 0**; **trusted-fact
+  manipulation 0** of 25 structured attempts; **authoritative bypasses 0** in 5,749 text
+  queries and 25 structured attempts. The zero is structural: text reaches the claim type
+  and the detector, never the amount, ledger or capability, which come from signed facts.
 - Found and fixed: the dispute route dropped a `dispute_id` sent with body facts, so the
   stored-record check never ran there (a new, `UNTRUSTED` dispute was evaluated; no
   bypass). It is now checked like every other route.
+- **Adversarial review of this branch.** It found no bypass by the search, and one real
+  bypass by hand, fixed at its origin on #12 (feat/policy-provenance) and pinned by tests:
+  - **a trailing newline passed the record-id grammar.** `^...$` with `match()` accepts
+    `"DSP-000002\n"` (`$` also matches before a final newline), so a dispute the system
+    had already refunded could be named again with a body ledger; a human approval of
+    the resulting case refunded it a second time, under a second execution-ledger key.
+    Every grammar in the code base is now a `fullmatch` (record ids, statement subjects,
+    digests, timestamps, issuer and reviewer ids, credential ids, routes);
+  - the conversation path still dropped `dispute_id`; it is now refused for a stored
+    dispute like the other paths;
+  - an unknown record id was a 500 on every evaluate route (an unmapped `KeyError`), so
+    INV-API-1 did not hold; it is a 404 (`UnknownRecord`), a malformed one a 400;
+  - the metrics overstated the search: detector evasion counted seeds already missed
+    unmutated (22.4% / 25.8% before), the per-operator table credited whichever operator
+    ran last (bidi 23.4%, alone 0.8%), 1,314 queries repeated a variant and many
+    mutations were no-ops; `multi_turn` only wrote "Turn N:" labels, and `bidi` closed
+    isolates with the wrong terminator. Each is fixed and tested; the methodology now
+    says the search pressures the detector, not the layers that decide;
+  - the invariant table overclaimed INV-CAP-1 and INV-PROV-2 and its test skipped two
+    rows; each row now says what its tests show.
+- **Caller-visible change:** the dispute route keeps a `dispute_id` sent with body facts
+  (the subject is the caller's id, not a random one); a malformed id is a 400 and a
+  non-string id a 400, where both were silently ignored.
 
 ### Live provider and model benchmark (#19, #16)
 - **The current Claude API** (`anthropic==1.11.0`, verified on PyPI; the old 0.40.0 pin
