@@ -136,13 +136,13 @@ class Router:
         self.routes: list[tuple[str, re.Pattern[str], Any]] = []
 
     def add(self, method: str, pattern: str, fn: Any) -> None:
-        self.routes.append((method, re.compile("^" + pattern + "$"), fn))
+        self.routes.append((method, re.compile(pattern), fn))
 
     def match(self, method: str, path: str) -> tuple[Any, dict[str, str]] | None:
         for m, rx, fn in self.routes:
             if m != method:
                 continue
-            mt = rx.match(path)
+            mt = rx.fullmatch(path)  # not match + "$": "$" also matches before a final "\n"
             if mt:
                 return fn, mt.groupdict()
         return None
