@@ -264,13 +264,34 @@ can be trusted (roadmap issues #11–#20).
 - **Anchors** (`sentinel.audit.anchor`): an exclusive-create directory (one file per
   checkpoint, never overwritten) and an append-only JSONL file; `Anchor` is the interface
   for a WORM store or a transparency log (none integrated). Checkpoints link to each other,
-  and each publication is recorded in the chain (`CHECKPOINT_PUBLISHED`), so a dropped,
-  substituted or deleted checkpoint is visible.
+  and each publication is recorded in the chain (`CHECKPOINT_PUBLISHED`): a dropped or
+  substituted checkpoint is visible, and so is a deleted one unless the same party can also
+  rewrite the chain's unanchored tail (only WORM or an external log rules that out).
 - `anchored` | `not_anchored` | `anchor_mismatch` for the chain (`audit verify --anchor`,
-  `/v1/audit/verify`, `/v1/system`) and for each decision (replay; a mismatch makes
-  `record_verified` false). INV-AUDIT-2 is tested in both directions: a consistent rewrite
-  before an anchored checkpoint is a mismatch; one after it is reported as `not_anchored`,
-  never as anchored.
+  `/v1/audit/verify`) and for each decision (replay; a mismatch makes `record_verified`
+  false). INV-AUDIT-2 is tested in both directions: a consistent rewrite before an anchored
+  checkpoint is a mismatch; one after it is reported as `not_anchored`, never as anchored.
+- **Adversarial review of this branch.** Rewrites before a checkpoint, from genesis, with
+  relinked hashes, swapped, inserted, symlinked or edited anchor entries were all detected.
+  Found and fixed, each with a regression test:
+  - **one corrupted record at checkpoint time disabled anchoring for good**: a checkpoint
+    with a null head was signed and written before the job crashed, and every later
+    rewrite then looked like the honest state. No checkpoint is signed over a chain that
+    does not verify or disagrees with its anchor, and the anchor refuses malformed
+    statements;
+  - **the scheduled checkpoint job broke the running server**: its `CHECKPOINT_PUBLISHED`
+    record, appended from another process, made every later decision a 500. The chain
+    adopts records another writer appended when they link to its head;
+  - `--require-anchored` was inverted (an honest chain always exited 3; removing the
+    publication record made it pass): the publication record is required and not counted
+    as a gap, and an integrity failure is exit 2 whatever the flags;
+  - revoking a checkpoint key was a permanent mismatch: its checkpoints now retire with a
+    note, and a current key re-anchors;
+  - `/v1/system` re-read and re-verified the whole chain twice per call (2.4 s at 100k
+    events): it names the anchor only; `/v1/audit/verify` checks it;
+  - `--json` omitted the anchoring; `--anchor` was ignored with `--file`; a non-UTF-8 byte in
+    a JSONL anchor was a 400; anchor errors named paths; a relabelled sequence could claim
+    coverage; a checkpoint issued in the future was accepted.
 - `sentinel audit checkpoint --sign-key --signer --anchor`, `audit verify --anchor
   [--require-anchored]`, `trust keygen --purpose audit-checkpoint`, `SENTINEL_AUDIT_ANCHOR`.
 

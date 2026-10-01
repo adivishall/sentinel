@@ -12,7 +12,7 @@ make api                          # API + console on http://127.0.0.1:8000, in-m
 # or with a persistent store:
 make data && make analyze && sentinel --db data/sentinel.db serve
 make audit-verify                 # verify the tamper-evident audit chain
-make audit-checkpoint             # export (and, with SENTINEL_AUDIT_KEY, sign) the chain head
+make audit-checkpoint             # legacy HMAC export; signed, anchored checkpoints: see "Audit checkpoints"
 ```
 
 The in-memory demo prints two demo reviewer credentials (alice, sam) for the
@@ -126,7 +126,7 @@ for another. Keep them on independent schedules.
 |---|---|---|
 | Fact issuer (`purpose: facts`) | each system of record, ideally in an HSM/KMS | public keys in `SENTINEL_TRUST_STORE` |
 | Policy release (`purpose: policy-release`) | the policy release pipeline | public keys in `SENTINEL_POLICY_TRUST` |
-| Audit checkpoint (`purpose: audit-checkpoint`) | the operator's checkpointing job, off the store host | public keys in `SENTINEL_TRUST_STORE`; the anchor is read-only for the server |
+| Audit checkpoint (`purpose: audit-checkpoint`) | the operator's checkpointing job (its own process and credentials, not the server's) | public keys in `SENTINEL_TRUST_STORE`; the anchor is read-only for the server |
 
 **Private signing keys never live on the Sentinel application host.** The
 trust stores hold public keys only; deploy them read-only and root-owned,
@@ -149,7 +149,9 @@ sentinel --trust-store /etc/sentinel/trust.json trust revoke <key_id> --reason c
 ```bash
 sentinel trust keygen --issuer audit-notary --purpose audit-checkpoint \
     --key-out /secure/audit-checkpoint.pem --trust-out /etc/sentinel/trust.json
-# a scheduled job, off the store host, with the anchor on storage the store writer cannot reach
+# a scheduled job (its own process; the server adopts the record it appends), with the
+# anchor on storage the store's writer cannot modify -- WORM, or a directory exported or
+# committed elsewhere after each run
 sentinel --db /data/sentinel.db --trust-store /etc/sentinel/trust.json audit checkpoint \
     --sign-key /secure/audit-checkpoint.pem --signer audit-notary --anchor /mnt/worm/sentinel-anchor
 sentinel --db /data/sentinel.db --trust-store /etc/sentinel/trust.json audit verify \
@@ -235,6 +237,7 @@ service. `http.server` is not a production web server; real use needs the
 reverse proxy above (or a real WSGI/ASGI server), SSO/OIDC for reviewers
 instead of Sentinel-issued bearer tokens, a secret manager, log shipping,
 retention and PII policies, integration with the real ledger, records and
-authentication services in place of the SQLite context builders, an
-asymmetric, externally anchored audit checkpoint (issue #17), and a live-model
-evaluation on the operator's own key.
+authentication services in place of the SQLite context builders, an anchor
+nobody can delete from (WORM storage or a transparency log; the shipped anchors
+are a directory and a file), and a live-model evaluation on the operator's own
+key.
