@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import time
+from collections import Counter
 from typing import Any
 
 from sentinel.agents.providers import mode
@@ -35,16 +36,6 @@ from sentinel.evaluation.common import (
 )
 
 PROVIDERS = ("offline", "anthropic")
-
-
-def _provider(name: str) -> LLMProvider:
-    if name == "offline":
-        return OfflineProvider()
-    if name == "anthropic":
-        from sentinel.agents.providers.anthropic import AnthropicProvider
-
-        return AnthropicProvider()
-    raise ValueError(f"unknown provider {name!r}; choose from {PROVIDERS}")
 
 
 def _usage(p: LLMProvider) -> dict[str, int | None]:
@@ -88,8 +79,8 @@ CONFIGS: tuple[dict[str, Any], ...] = (
 # Dated list prices, used only to cost a row that actually ran (input and output tokens;
 # cache tokens are reported, not priced). Unknown model -> no cost, never an estimate.
 PRICES: dict[str, Any] = {
-    "date": "2026-09-25",
-    "source": "Claude API model reference bundled with Claude Code (model table cached 2026-09-25)",
+    "date": "2026-10-01",
+    "source": "Claude API reference bundled with Claude Code 2.1.284 (shared/models.md), checked 2026-10-01",
     "usd_per_mtok": {
         "claude-opus-5-5": {"input": 4.0, "output": 20.0},
         "claude-sonnet-5-5": {"input": 2.0, "output": 10.0},
@@ -101,8 +92,12 @@ PARSE_FAILURE = "unparseable agent output"
 def _configs(provider: str) -> list[dict[str, Any]]:
     out = [c for c in CONFIGS if provider in ("all", c["provider"])]
     extra = os.environ.get("SENTINEL_MODEL")
-    if extra and provider in ("all", "anthropic") and not any(c["model"] == extra for c in out):
-        effort = os.environ.get("SENTINEL_EFFORT", "low")
+    effort = os.environ.get("SENTINEL_EFFORT", "low")
+    if (
+        extra
+        and provider in ("all", "anthropic")
+        and not any((c["model"], c["effort"]) == (extra, effort) for c in out)
+    ):
         out.append(
             {
                 "id": f"{extra}/effort-{effort}",
@@ -127,13 +122,40 @@ def _build(cfg: dict[str, Any]) -> LLMProvider:
 def provenance(cases: list[dict[str, Any]]) -> dict[str, Any]:
     """What a row was measured against: the agent prompts, the corpus, the policy and the
     risk models, by digest -- so two rows are comparable only when these match."""
+    import dataclasses
+    import subprocess
+
+    from sentinel import __version__
     from sentinel.agents.catalog import SPECS
+    from sentinel.decision.workflows import FULL, NONE, _prompt
+    from sentinel.evaluation.common import dispute_request
     from sentinel.policy import DEFAULT_REGISTRY
     from sentinel.policy.loader import policy_digest
     from sentinel.risk import scoring
 
     pol = DEFAULT_REGISTRY.active("dispute-refund")
+    req = dispute_request(cases[0]) if cases else None
+    contents = (req.narrative, *req.documents) if req is not None else ()
+    try:  # the code that ran, when it runs from a checkout
+        commit = (
+            subprocess.run(
+                ["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5
+            ).stdout.strip()
+            or None
+        )
+    except (OSError, subprocess.SubprocessError):
+        commit = None
     return {
+        "sentinel_version": __version__,
+        "commit": commit,
+        # every field of every agent spec: prompt, tool surface, fallback, overrides, limits
+        "agent_specs_digest": content_hash(
+            {k: dataclasses.asdict(v) for k, v in sorted(SPECS.items())}, 64
+        ),
+        # what the model actually receives for one canonical case, guarded and unguarded
+        "rendered_prompt_digest": content_hash(
+            [_prompt(contents, "", FULL), _prompt(contents, "", NONE)], 64
+        ),
         "prompt_digest": content_hash({k: v.system_prompt for k, v in SPECS.items()}, 64),
         "corpus_digest": content_hash(cases, 64),
         "corpus_size": len(cases),
@@ -168,6 +190,9 @@ def _run_with(
     by: dict[str, list[int]] = {}
     served: set[str] = set()
 
+    measured_calls: list[dict[str, Any]] = []
+    errored_calls = 0
+
     def calls() -> list[dict[str, Any]]:
         out = []
         for c in drain() if callable(drain) else []:
@@ -194,7 +219,9 @@ def _run_with(
             if not live:
                 raise
             errors += 1
-            rows.append(_error_row(p, c, e, calls()))
+            failed = calls()
+            errored_calls += len(failed)
+            rows.append(_error_row(p, c, e, failed))
             continue
         n_att += 1
         ub, gb = breach(b0), breach(b1)
@@ -227,9 +254,11 @@ def _run_with(
                 "guarded_breach": gb,
                 "blocked_by": list(b1.decision.blocked_by),
                 "latency_ms": b1.ai.latency_ms if b1.ai else None,
-                **({"calls": calls()} if live else {}),
+                **({"calls": (cc := calls())} if live else {}),
             }
         )
+        if live:
+            measured_calls.extend(cc)
     for c in deserved:
         try:
             b = run_case(rt, c, FULL)
@@ -237,7 +266,9 @@ def _run_with(
             if not live:
                 raise
             errors += 1
-            rows.append(_error_row(p, c, e, calls()))
+            failed = calls()
+            errored_calls += len(failed)
+            rows.append(_error_row(p, c, e, failed))
             continue
         n_ok += 1
         missed = deserved_approval_missed(b, c)
@@ -254,20 +285,30 @@ def _run_with(
                 "guarded_final_action": b.decision.final_action.value,
                 "deserved_approval_missed": missed,
                 "latency_ms": b.ai.latency_ms if b.ai else None,
-                **({"calls": calls()} if live else {}),
+                **({"calls": (cc := calls())} if live else {}),
             }
         )
+        if live:
+            measured_calls.extend(cc)
     lp = percentiles(lat) if lat else {}
     usage = _usage(p)
-    stop_reasons = dict(getattr(p, "stop_reasons", {}) or {})
-    outcomes = dict(getattr(p, "outcomes", {}) or {})
+    # counted over the calls of measured cases only (an errored case's calls are reported
+    # apart, so the counts match the denominators)
+    if live:
+        stop_reasons = dict(Counter(str(x["stop_reason"] or "none") for x in measured_calls))
+        outcomes = dict(Counter(str(x["outcome"]) for x in measured_calls))
+    else:
+        stop_reasons = dict(getattr(p, "stop_reasons", {}) or {})
+        outcomes = dict(getattr(p, "outcomes", {}) or {})
     summary = {
         "n_attacks": n_att,
         "n_deserved_controls": n_ok,
         "n_errors": errors,
-        "asr_unguarded": round(ug / max(1, n_att), 3),
-        "asr_guarded": round(g / max(1, n_att), 3),
-        "fp_rate": round(fp / max(1, n_ok), 3),
+        "errored_calls": errored_calls,
+        # a rate over nothing is not 0: None when nothing of that kind was measured
+        "asr_unguarded": round(ug / n_att, 3) if n_att else None,
+        "asr_guarded": round(g / n_att, 3) if n_att else None,
+        "fp_rate": round(fp / n_ok, 3) if n_ok else None,
         "mean_agent_latency_ms": round(sum(lat) / max(1, len(lat)), 2),
         "agent_latency_p50_ms": lp.get("p50_ms"),
         "agent_latency_p95_ms": lp.get("p95_ms"),
@@ -317,7 +358,10 @@ def run(sample: int | None = None, provider: str = "all") -> dict[str, Any]:
             "provider": cfg["provider"],
             "requested_model": cfg["model"],
             "model": cfg["model"],
-            "settings": {"effort": cfg["effort"], "max_tokens": prov["max_tokens"]},
+            "settings": {
+                "effort": cfg["effort"],
+                "max_tokens": prov["max_tokens"] if cfg["provider"] != "offline" else None,
+            },
             "timestamp": stamp,
             "date": stamp[:10],
         }
@@ -338,17 +382,42 @@ def run(sample: int | None = None, provider: str = "all") -> dict[str, Any]:
             t0 = time.time()
             summary, prow = _run_with(p, cases)
             rows.extend({**r, "config": cfg["id"]} for r in prow)
+            spend = {
+                k: summary.get(k)
+                for k in (
+                    "input_tokens",
+                    "output_tokens",
+                    "cost_usd",
+                    "n_errors",
+                    "n_deserved_controls",
+                )
+            }
             if summary["n_errors"] and not summary["n_attacks"]:
                 results.append(
                     {
                         **head,
                         "status": "error",
-                        "reason": f"every call failed ({summary['n_errors']})",
+                        "reason": (
+                            f"{summary['n_errors']} cases failed; no attack measured "
+                            f"({summary['n_deserved_controls']} controls ran)"
+                        ),
+                        **spend,
                     }
                 )
                 continue
+            status = "partial" if summary["n_errors"] else "ok"
             results.append(
-                {**head, "status": "ok", "seconds": round(time.time() - t0, 1), **summary}
+                {
+                    **head,
+                    "status": status,
+                    **(
+                        {"reason": f"{summary['n_errors']} cases failed and are excluded"}
+                        if status == "partial"
+                        else {}
+                    ),
+                    "seconds": round(time.time() - t0, 1),
+                    **summary,
+                }
             )
         except Exception as e:  # noqa: BLE001 -- a live provider can fail in many ways
             results.append(

@@ -78,7 +78,7 @@ class AnthropicProvider:
         settings: dict[str, object] = {
             "max_tokens": max_tokens,
             "effort": self.effort,
-            "thinking": "model default (adaptive)",
+            "thinking": "omitted (the model's default applies)",
             "temperature": None,
         }
         t0 = time.perf_counter()

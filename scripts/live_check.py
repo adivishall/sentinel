@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -42,7 +41,6 @@ def main(out: str = OUT) -> int:
         f"Model: {p.model}  effort: {p.effort}   (override with SENTINEL_MODEL / SENTINEL_EFFORT)"
     )
     try:
-        t0 = time.perf_counter()
         c = p.complete("Reply with the single word OK.", "ping", role="ping", max_tokens=1024)
         doc: dict[str, object] = {
             "status": "ok" if c.outcome == "ok" else c.outcome,
@@ -52,7 +50,7 @@ def main(out: str = OUT) -> int:
             "sdk_version": c.sdk_version,
             "request_id": c.request_id,
             "stop_reason": c.stop_reason,
-            "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
+            "latency_ms": round(c.latency_ms, 1),  # the call alone, not SDK import / client setup
             "input_tokens": c.input_tokens,
             "output_tokens": c.output_tokens,
             "cache_read_input_tokens": c.cache_read_input_tokens,
