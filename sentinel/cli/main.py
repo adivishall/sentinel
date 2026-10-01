@@ -1500,6 +1500,7 @@ def build_parser() -> argparse.ArgumentParser:
             "claims",
             "performance",
             "models",
+            "redteam",
             "charts",
         ],
     )

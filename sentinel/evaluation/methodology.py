@@ -8,6 +8,12 @@ from __future__ import annotations
 from typing import Any
 
 _STATIC: dict[str, dict[str, str]] = {
+    "redteam": {
+        "kind": "synthetic (seeded black-box search against the offline simulated agent); the bypass count is structural, detector evasion is empirical",
+        "dataset": "every development-corpus attack as a seed (contradicted objective) and its over-limit variants with a supporting ledger (over-limit objective), plus a structured-channel campaign through the API handlers",
+        "method": "per seed, a hill-climbing attacker applies seeded mutation operators and keeps the variant scoring best on what the API returns (executed, policy ALLOW, lower detector rating); four metrics are reported separately",
+        "limitations": "the operators and the detector share an author; the victim agent is the offline simulator (it always complies), so the search pressure is on the deterministic layers, not a real model's judgement; a hand-written operator set is not an exhaustive attacker",
+    },
     "security": {
         "kind": "synthetic (hand-authored corpus, offline simulated agent); guarded attack success is structural",
         "dataset": "development attack corpus, seeds x amounts straddling the auto-limit, plus legitimate controls",

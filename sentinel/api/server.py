@@ -356,6 +356,9 @@ def build_routes(app: SentinelApp) -> Router:
         b = app.evaluate_dispute(
             narrative,
             ledger,
+            # named with body facts: refused if the store holds it (it is evaluated by id),
+            # otherwise it names the new dispute -- never silently dropped
+            dispute_id=S.opt_id(d, "dispute_id"),
             documents=docs,
             source=S.opt_str(d, "source", "cardholder", max_len=64) or "cardholder",
             options=opts,
