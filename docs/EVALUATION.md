@@ -571,15 +571,25 @@ orders of magnitude; Sentinel's own controls are not the bottleneck.
 
 ## K. Model / provider evaluation (`results/models.json`)
 
-| Provider | Model | Date | Status | ASR no controls | ASR Sentinel | FP | Latency p95 ms | Tokens in / out | Note |
-|---|---|---|---|---|---|---|---|---|---|
-| offline | `offline-simulator` | 2026-09-29 | ok | 90.0% | 0.0% | 0.0% | 0.143 | — |  |
-| anthropic | `claude-opus-5-5` | 2026-09-29 | not_run | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
+| Configuration | Date | Status | Served model | ASR no controls | ASR Sentinel | FP | Latency p50 / p95 ms | Refusals / truncated / parse failures | Tokens in / out | Cost (USD) | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `offline-simulator` | 2026-10-01 | OK | — | 90.0% | 0.0% | 0.0% | 0.068 / 0.141 | 0 / 0 / 0 | — | — |  |
+| `claude-opus-5-5/effort-low` | 2026-10-01 | NOT RUN | — | — | — | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
+| `claude-sonnet-5-5/effort-low` | 2026-10-01 | NOT RUN | — | — | — | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
 
-Each provider row records the model, the run date, per-class outcomes, agent
-latency and the provider's token totals where its SDK reports them
-(`results/models_rows.json` has one line per attack). Run any provider with
-`sentinel eval run --suite models --provider anthropic`.
+One row per exact configuration (provider, requested model, effort,
+`max_tokens`), all measured against the same prompts, corpus, policy and risk
+models -- identified by digest in `results/models.json` (`provenance`): prompt
+`ec57a771a45cf0c4…`, corpus
+`21dbc9907046bdd7…`, policy
+`dispute-refund@v4`. A row that ran
+records the served model, SDK version, stop reasons, refusals, truncations and
+parse failures (each a fail-safe recommendation, never a denial), latency
+p50/p95, tokens and, where a dated list price is known
+(2026-09-25), its cost. A row that did not run stays
+**NOT RUN** with the reason. There is no score across rows: each describes
+one configuration on one date (`results/models_rows.json` has every call's
+request id). Run with `sentinel eval run --suite models --provider anthropic`.
 
 Live results depend on provider/model/date and are not claimed to generalise.
 Run `SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models` with your own
@@ -637,5 +647,5 @@ make eval                      # everything above (main + held-out + surfaces = 
 make docs                      # re-render this file and every generated block from results/ and the code
 sentinel eval run --suite security|heldout|surfaces|kyb|baselines|ablation|financial|integrity|temporal|claims|performance|models|charts
 sentinel eval run --suite financial --full     # larger dataset (400 customers / 12k transactions)
-make test                      # 919 tests, incl. tests/test_results_regression.py which recomputes the headline claims
+make test                      # 930 tests, incl. tests/test_results_regression.py which recomputes the headline claims
 ```

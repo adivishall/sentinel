@@ -256,6 +256,27 @@ can be trusted (roadmap issues #11–#20).
   Documented, not changed: a client trickling bytes is the proxy's to cut off; concurrent
   connections are now capped (`SENTINEL_MAX_CONNECTIONS`).
 
+### Live provider and model benchmark (#19, #16)
+- **The current Claude API** (`anthropic==1.11.0`, verified on PyPI; the old 0.40.0 pin
+  predated typed `output_config`). Requests send `max_tokens` sized for thinking as well as
+  the reply (agents ask for 4,096), `output_config.effort`, no sampling parameters and no
+  thinking budget. Every completion records requested and served model, SDK version,
+  request id, stop reason (and a refusal's category), latency, tokens including cache
+  tokens, and the settings sent.
+- **Only `end_turn` is parsed.** A truncated reply (even one that looks like complete
+  JSON), a refusal (with or without `stop_details`), an empty reply or an unexpected stop
+  is a labelled fail-safe: the agent's fallback tool, never "deny", never a consequential
+  capability. A refusal is not a verdict.
+- **One benchmark row per exact configuration** (provider, requested model, effort,
+  `max_tokens`), measured against the same prompts, corpus, policy and risk models,
+  identified by digest. A row that ran records served models, SDK version, ASR, FP,
+  latency p50/p95, stop-reason counts, refusals, truncations, parse failures, tokens and,
+  only from a dated list price, cost. One failed call is one error row. Configurations that
+  did not run stay **NOT RUN** with the reason; there is no score across rows. In this
+  repository: the offline simulator ran; `claude-opus-5-5/effort-low` and
+  `claude-sonnet-5-5/effort-low` are NOT RUN (no key). `scripts/live_check.py` records
+  `results/live_check.json` -- `not_run` here.
+
 ### Security — asymmetric, anchored audit checkpoints (#17)
 - `sentinel.audit-checkpoint/1`: the chain's head (recomputed from genesis), length, chain
   id, checkpoint sequence and the previous checkpoint's digest, signed with Ed25519 by a key

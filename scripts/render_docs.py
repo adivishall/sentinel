@@ -268,7 +268,11 @@ def evaluation_categories(R: dict[str, Any]) -> str:
                 "the same suites against a real model",
                 "--",
                 f"`{live['model']}`",
-                f"**{str(live['status']).upper().replace('_', ' ')}** -- no live number is quoted anywhere",
+                (
+                    f"**{str(live['status']).upper().replace('_', ' ')}** -- no live number is quoted anywhere"
+                    if live.get("status") != "ok"
+                    else f"**OK** ({live.get('date')}) -- one configuration, one date; see §K"
+                ),
                 "[§K](docs/EVALUATION.md#k-model--provider-evaluation-resultsmodelsjson)",
             ],
         ],
@@ -572,32 +576,44 @@ was not done."""
     )
     model_rows = tbl(
         [
-            "Provider",
-            "Model",
+            "Configuration",
             "Date",
             "Status",
+            "Served model",
             "ASR no controls",
             "ASR Sentinel",
             "FP",
-            "Latency p95 ms",
+            "Latency p50 / p95 ms",
+            "Refusals / truncated / parse failures",
             "Tokens in / out",
+            "Cost (USD)",
             "Note",
         ],
         [
             [
-                x["provider"],
-                f"`{x['model']}`",
+                f"`{x.get('config', x.get('model'))}`",
                 x.get("date") or str(x.get("timestamp", ""))[:10],
-                x["status"],
+                str(x["status"]).upper().replace("_", " "),
+                ", ".join(f"`{v}`" for v in x.get("served_models", [])) or "—",
                 pct(x.get("asr_unguarded")),
                 pct(x.get("asr_guarded")),
                 pct(x.get("fp_rate")),
-                x.get("agent_latency_p95_ms", "—"),
+                (
+                    f"{x.get('agent_latency_p50_ms')} / {x.get('agent_latency_p95_ms')}"
+                    if x["status"] == "ok"
+                    else "—"
+                ),
+                (
+                    f"{x.get('refusals', 0)} / {x.get('truncated', 0)} / {x.get('parse_failures', 0)}"
+                    if x["status"] == "ok"
+                    else "—"
+                ),
                 (
                     f"{x['input_tokens']} / {x['output_tokens']}"
                     if x.get("input_tokens") is not None
                     else "—"
                 ),
+                x.get("cost_usd") if x.get("cost_usd") is not None else "—",
                 x.get("reason", ""),
             ]
             for x in m["results"]
@@ -1041,10 +1057,19 @@ orders of magnitude; Sentinel's own controls are not the bottleneck.
 
 {model_rows}
 
-Each provider row records the model, the run date, per-class outcomes, agent
-latency and the provider's token totals where its SDK reports them
-(`results/models_rows.json` has one line per attack). Run any provider with
-`sentinel eval run --suite models --provider anthropic`.
+One row per exact configuration (provider, requested model, effort,
+`max_tokens`), all measured against the same prompts, corpus, policy and risk
+models -- identified by digest in `results/models.json` (`provenance`): prompt
+`{m.get('provenance', {}).get('prompt_digest', '—')[:16]}…`, corpus
+`{m.get('provenance', {}).get('corpus_digest', '—')[:16]}…`, policy
+`{m.get('provenance', {}).get('policy', {}).get('key', '—')}`. A row that ran
+records the served model, SDK version, stop reasons, refusals, truncations and
+parse failures (each a fail-safe recommendation, never a denial), latency
+p50/p95, tokens and, where a dated list price is known
+({m.get('prices', {}).get('date', '—')}), its cost. A row that did not run stays
+**NOT RUN** with the reason. There is no score across rows: each describes
+one configuration on one date (`results/models_rows.json` has every call's
+request id). Run with `sentinel eval run --suite models --provider anthropic`.
 
 Live results depend on provider/model/date and are not claimed to generalise.
 Run `SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models` with your own
