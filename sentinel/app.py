@@ -289,11 +289,17 @@ class SentinelApp:
                 reviewers = (
                     ReviewerRegistry.load(self.reviewers_source) if self.reviewers_source else None
                 )
-            except (ValueError, OSError) as e:
+                if trust is not None and self.issuer is not None:
+                    trust = trust.with_key(self.issuer.key)
+            except Exception as e:  # noqa: BLE001 -- nothing new is trusted, nothing dropped
+                reason = str(e)
+                for src in (self.trust_source, self.reviewers_source):
+                    if src:  # file names, never paths on disk
+                        reason = reason.replace(str(src), Path(src).name)
                 detail: dict[str, Any] = {
                     "source": source,
                     "outcome": "refused",
-                    "reason": str(e)[:300],
+                    "reason": reason[:300],
                 }
                 self.runtime.audit.append(
                     actor="sentinel",
@@ -305,8 +311,6 @@ class SentinelApp:
                 _log.error("configuration reload refused", extra={"detail": detail})
                 return detail
             if trust is not None:
-                if self.issuer is not None:
-                    trust = trust.with_key(self.issuer.key)
                 self.runtime.trust = trust
                 self.what_if_runtime.trust = trust
             if reviewers is not None:
@@ -1763,7 +1767,7 @@ class SentinelApp:
             "default_transaction_model": scoring.TRANSACTION_DEFAULT.version,
             "facts_sources": {f.value: f.describe for f in FactsSource},
             "trust": {
-                "origin": self.runtime.trust.origin,
+                "origin": Path(self.runtime.trust.origin).name,
                 "keys": self.runtime.trust.summary(),
                 "demo_issuer": self.issuer.key.key_id if self.issuer is not None else None,
             },

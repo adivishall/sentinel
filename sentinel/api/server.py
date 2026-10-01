@@ -31,6 +31,7 @@ import mimetypes
 import os
 import re
 import signal
+import socket
 import sys
 import threading
 import time
@@ -73,8 +74,11 @@ _ERROR_CODES = {
     404: "not_found",
     409: "conflict",
     413: "payload_too_large",
+    415: "unsupported_media_type",
+    421: "misdirected_request",
     429: "rate_limited",
     500: "internal_error",
+    503: "unavailable",
 }
 
 
@@ -127,21 +131,25 @@ def _no_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 MIN_API_KEY = 16  # characters; a shorter key does not protect a network-reachable service
-_KEY_FILE_CACHE: dict[str, str] = {}
+_KEY_FILE_CACHE: dict[str, tuple[float, str]] = {}
 
 
 def api_key() -> str | None:
     """The API key: ``SENTINEL_API_KEY``, or the contents of ``SENTINEL_API_KEY_FILE`` (a
-    mounted secret, so the key is not in the process environment or ``docker inspect``)."""
-    key = os.environ.get("SENTINEL_API_KEY")
+    mounted secret, so the key is not in the process environment or ``docker inspect``).
+    The file is read again when it changes, so rotating the secret in place takes effect
+    without a restart. Surrounding whitespace is not part of a key; a blank key is none."""
+    key = (os.environ.get("SENTINEL_API_KEY") or "").strip()
     if key:
         return key
     path = os.environ.get("SENTINEL_API_KEY_FILE")
     if not path:
         return None
-    if path not in _KEY_FILE_CACHE:
-        _KEY_FILE_CACHE[path] = Path(path).read_text(encoding="utf-8").strip()
-    return _KEY_FILE_CACHE[path] or None
+    mtime = Path(path).stat().st_mtime
+    cached = _KEY_FILE_CACHE.get(path)
+    if cached is None or cached[0] != mtime:
+        _KEY_FILE_CACHE[path] = (mtime, Path(path).read_text(encoding="utf-8").strip())
+    return _KEY_FILE_CACHE[path][1] or None
 
 
 def _authorized(headers: Any) -> bool:
@@ -188,6 +196,24 @@ def check_bind(host: str, *, insecure_demo: bool = False) -> str:
             "--insecure-demo (SENTINEL_INSECURE_DEMO=1) for a throwaway demo"
         )
     return "network"
+
+
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "[::1]"})
+
+
+def allowed_hosts() -> frozenset[str]:
+    """Host names (no port) a request may address, beyond the loopback names:
+    ``SENTINEL_ALLOWED_HOSTS`` -- the public name a TLS proxy serves the API under."""
+    raw = os.environ.get("SENTINEL_ALLOWED_HOSTS", "")
+    return frozenset(h.strip().lower() for h in raw.split(",") if h.strip())
+
+
+def _hostname(netloc: str) -> str:
+    """``host[:port]`` -> host, lowercased (an IPv6 literal keeps its brackets)."""
+    netloc = netloc.strip().lower()
+    if netloc.startswith("["):
+        return netloc[: netloc.find("]") + 1] if "]" in netloc else netloc
+    return netloc.rsplit(":", 1)[0] if netloc.count(":") == 1 else netloc
 
 
 # The console is the only HTML served: same-origin scripts and API calls, no framing.
@@ -900,7 +926,10 @@ class SentinelHandler(BaseHTTPRequestHandler):
     router: Router
     limiter: RateLimiter
     insecure_demo: bool = False
-    timeout = 30  # seconds per socket read: a client that stalls mid-request is dropped
+    loopback_bind: bool = True
+    # seconds per socket read: a client that stalls is dropped (one that trickles a byte at
+    # a time is the TLS proxy's to cut off; concurrent connections are capped below)
+    timeout = 30
 
     def _common_headers(self) -> None:
         for k, v in _SECURITY_HEADERS:
@@ -942,6 +971,17 @@ class SentinelHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
         return True
 
+    def _host_refused(self) -> bool:
+        """DNS rebinding: a page on attacker.example can make its name resolve to
+        127.0.0.1 and then talk to this server *same-origin*. Its requests still name its
+        own host, so a loopback server answers only requests addressed to a loopback name
+        (or to a name the operator listed in SENTINEL_ALLOWED_HOSTS)."""
+        allowed = allowed_hosts()
+        if not self.loopback_bind and not allowed:
+            return False  # a network bind without a list: the API key is the control
+        host = _hostname(self.headers.get("Host") or "")
+        return host not in _LOOPBACK_HOSTS and host not in allowed
+
     def _cross_site(self) -> tuple[int, str] | None:
         """A state-changing request must be JSON and same-origin. A browser page elsewhere
         can send a text/plain POST without a preflight; requiring application/json forces
@@ -956,7 +996,13 @@ class SentinelHandler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin")
         if origin is not None:
             host = (self.headers.get("Host") or "").lower()
-            if origin == "null" or urlparse(origin).netloc.lower() != host:
+            try:
+                netloc = urlparse(origin).netloc.lower()
+            except ValueError:  # e.g. "http://[" -- unparseable is not same-origin
+                return 403, "cross-origin request refused"
+            # same origin, or the public name a TLS proxy serves under (the proxy may
+            # rewrite Host to the upstream address)
+            if origin == "null" or (netloc != host and _hostname(netloc) not in allowed_hosts()):
                 return 403, "cross-origin request refused"
         return None
 
@@ -973,12 +1019,21 @@ class SentinelHandler(BaseHTTPRequestHandler):
         client = self.client_address[0] if self.client_address else "?"
         if not self.limiter.allow(client):
             return self._send(429, _error(429, "rate limit exceeded", rid), rid)
+        if self._host_refused():
+            return self._send(
+                421, _error(421, "this server does not answer for that host", rid), rid
+            )
         if method == "GET" and (
             path == "/"
             or path.startswith("/ui")
             or path.endswith((".html", ".js", ".css", ".png", ".svg", ".json"))
             and not path.startswith("/v1")
         ):
+            # the console's code is public; any data file (snapshot.json) is behind the key
+            public = path in ("/", "/index.html", "/app.js", "/styles.css", "/ui/app.js")
+            public = public or path in ("/ui", "/ui/index.html", "/ui/styles.css")
+            if not public and not _authorized(self.headers):
+                return self._send(401, _error(401, "unauthorized", rid), rid)
             if self._static(path):
                 return None
         route = self.router.match(method, path)
@@ -1057,6 +1112,34 @@ class SentinelHandler(BaseHTTPRequestHandler):
         self._dispatch("POST")
 
 
+class BoundedServer(ThreadingHTTPServer):
+    """A thread per connection, at most ``max_connections`` at once: past the cap a new
+    connection is closed at once instead of holding a thread."""
+
+    daemon_threads = True
+    max_connections = 64
+
+    def __init__(self, *a: Any, **kw: Any) -> None:
+        super().__init__(*a, **kw)
+        self._slots = threading.BoundedSemaphore(self.max_connections)
+
+    def process_request(self, request: Any, client_address: Any) -> None:
+        if not self._slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request: Any, client_address: Any) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+
 def make_server(
     app: SentinelApp,
     host: str = "127.0.0.1",
@@ -1075,9 +1158,18 @@ def make_server(
             "router": build_routes(app),
             "limiter": RateLimiter(int(os.environ.get("SENTINEL_RATE_LIMIT", "600"))),
             "insecure_demo": insecure_demo and not is_loopback(host),
+            "loopback_bind": is_loopback(host),
         },
     )
-    return ThreadingHTTPServer((host, port), handler)
+    server_cls = type(
+        "SentinelServer",
+        (BoundedServer,),
+        {
+            "address_family": socket.AF_INET6 if ":" in host else socket.AF_INET,
+            "max_connections": int(os.environ.get("SENTINEL_MAX_CONNECTIONS", "64")),
+        },
+    )
+    return server_cls((host, port), handler)
 
 
 def server_config(app: SentinelApp, host: str, port: int, *, insecure_demo: bool) -> dict[str, Any]:
@@ -1091,7 +1183,11 @@ def server_config(app: SentinelApp, host: str, port: int, *, insecure_demo: bool
         "port": port,
         "bind": "loopback" if is_loopback(host) else "network",
         "auth": "api_key" if key else "open",
-        "api_key_sha256_prefix": hashlib.sha256(key.encode()).hexdigest()[:12] if key else None,
+        # whether a key is set and where from -- never a fingerprint of it (an unsalted hash
+        # prefix of a guessable key is a guessing oracle)
+        "api_key_source": (
+            None if not key else "env" if os.environ.get("SENTINEL_API_KEY") else "file"
+        ),
         "insecure_demo": bool(insecure_demo and not is_loopback(host)),
         "mode": info.get("mode"),
         "provider": info.get("provider"),
@@ -1136,9 +1232,26 @@ def serve(
             file=sys.stderr,
         )
     if hasattr(signal, "SIGHUP") and threading.current_thread() is threading.main_thread():
-        # a deliberate reload of the trust store and reviewer registry (audited); a file
-        # that fails to load keeps the configuration that was running
-        signal.signal(signal.SIGHUP, lambda *_: app.reload_config("sighup"))
+        # A deliberate reload of the trust store and reviewer registry (audited). The
+        # handler only sets an event: a signal handler can be re-entered, and reloading in
+        # it could deadlock on its own lock. A reloader thread does the work and never
+        # lets a failure take the server down.
+        wake = threading.Event()
+
+        def reloader() -> None:
+            while True:
+                wake.wait()
+                wake.clear()
+                try:
+                    app.reload_config("sighup")
+                except Exception as e:  # noqa: BLE001 -- keep serving the old configuration
+                    _log.error(
+                        "configuration reload crashed",
+                        extra={"detail": {"error": type(e).__name__}},
+                    )
+
+        threading.Thread(target=reloader, name="sentinel-reload", daemon=True).start()
+        signal.signal(signal.SIGHUP, lambda *_: wake.set())
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
