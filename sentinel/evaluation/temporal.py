@@ -420,7 +420,9 @@ def _world(seed: int, sample: int) -> tuple[Dataset, SentinelApp, list[Transacti
 
 
 def run(
-    seeds: tuple[int, ...] = (42, 7), sample: int = 96, kinds: tuple[str, ...] = tuple(KINDS)
+    seeds: tuple[int, ...] = (42, 7, 11, 23),
+    sample: int = 128,
+    kinds: tuple[str, ...] = tuple(KINDS),
 ) -> dict[str, Any]:
     """``sample`` transactions per seed. Every comparison is exact: a feature snapshot,
     score and factor list either match byte for byte or the case is a leak."""
@@ -548,7 +550,7 @@ def run(
     }
 
 
-def main(out_dir: str = "results", sample: int = 96) -> dict[str, Any]:
+def main(out_dir: str = "results", sample: int = 128) -> dict[str, Any]:
     r = run(sample=sample)
     r["methodology"] = methodology("temporal", r)
     write_json(out_dir, "temporal.json", r)
