@@ -856,15 +856,30 @@ class SentinelStore:
         every decision event names the statement it used (``detail.facts``). A DB writer
         who deletes ``fact_sequences`` rows must also rewrite the chain to roll back."""
         r = self._one(
-            "SELECT json_extract(payload, '$.detail.facts.sequence') AS seq, "
-            "json_extract(payload, '$.detail.facts.envelope_digest') AS dig FROM audit_events "
-            "WHERE json_extract(payload, '$.detail.facts.status') = 'VERIFIED_EXTERNAL' "
-            "AND json_extract(payload, '$.detail.facts.source') = ? "
-            "AND json_extract(payload, '$.detail.facts.subject') = ? "
+            "SELECT json_extract(p, '$.detail.facts.sequence') AS seq, "
+            "json_extract(p, '$.detail.facts.envelope_digest') AS dig FROM "
+            "(SELECT CASE WHEN json_valid(payload) THEN payload ELSE '{}' END AS p "
+            "FROM audit_events) "
+            "WHERE json_extract(p, '$.detail.facts.status') = 'VERIFIED_EXTERNAL' "
+            "AND json_extract(p, '$.detail.facts.source') = ? "
+            "AND json_extract(p, '$.detail.facts.subject') = ? "
             "ORDER BY seq DESC LIMIT 1",
             (issuer, subject),
         )
         return (int(r["seq"]), str(r["dig"])) if r and r["seq"] is not None else None
+
+    def policy_activation_floor(self) -> dict[str, int]:
+        """The highest policy activation each policy's decisions were made under, read from
+        the tamper-evident audit chain: an older activation is a rollback."""
+        # an unreadable record is the chain verifier's to report, not a reason to crash here
+        rows = self._rows(
+            "SELECT json_extract(p, '$.policy_id') AS pid, "
+            "MAX(json_extract(p, '$.detail.policy_release.activation_sequence')) AS seq FROM "
+            "(SELECT CASE WHEN json_valid(payload) THEN payload ELSE '{}' END AS p "
+            "FROM audit_events) WHERE json_extract(p, "
+            "'$.detail.policy_release.activation_sequence') IS NOT NULL GROUP BY pid"
+        )
+        return {str(r["pid"]): int(r["seq"]) for r in rows if r["pid"] is not None}
 
     def advance_fact_sequence(
         self, issuer: str, subject: str, sequence: int, envelope_digest: str

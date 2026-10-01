@@ -26,7 +26,7 @@ written."""
 from __future__ import annotations
 
 from sentinel.decision.composer import FULL, DecisionInputs
-from sentinel.policy.loader import PolicyRegistry
+from sentinel.policy.loader import PolicyIntegrityError, PolicyRegistry
 from sentinel.risk import scoring
 
 
@@ -45,6 +45,8 @@ def downgrades(inputs: DecisionInputs, policies: PolicyRegistry) -> tuple[str, .
         active = policies.active(inputs.policy.policy_id)
     except KeyError:
         out.append(f"policy {inputs.policy.policy_id!r} is not registered")
+    except PolicyIntegrityError as e:
+        out.append(f"policy {inputs.policy.policy_id!r} has no trustworthy active version: {e}")
     else:
         if inputs.policy.version != active.version:
             out.append(
@@ -53,6 +55,10 @@ def downgrades(inputs: DecisionInputs, policies: PolicyRegistry) -> tuple[str, .
             )
         elif inputs.policy.content_hash != active.content_hash:
             out.append(f"policy {inputs.policy.key} content differs from the registered policy")
+        elif policies.signed and (
+            inputs.policy.release is None or not inputs.policy.release.verified
+        ):
+            out.append(f"policy {inputs.policy.key} has no verified signed release")
     risk = inputs.risk
     if risk is not None and risk.entity_type in scoring.ACTIVE:
         want = scoring.ACTIVE[risk.entity_type].version

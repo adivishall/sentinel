@@ -115,6 +115,100 @@ def _load_json(path: str) -> dict[str, Any]:
     return data
 
 
+def _policy_release(args: argparse.Namespace) -> int:
+    """Signed policy releases (``sentinel.policy.release``). ``sign`` and ``activate`` run
+    where the policy-release private key is (the release pipeline, never the Sentinel
+    host); they append signed statements to RELEASES.json. ``verify`` checks a policy
+    directory against the policy trust root, as the server does at start."""
+    from datetime import timedelta
+
+    from sentinel.policy.loader import (
+        POLICY_DIR,
+        PolicyIntegrityError,
+        PolicyRegistry,
+        load_policy,
+        policy_trust,
+    )
+    from sentinel.policy.release import RELEASES_FILE, ReleaseBook, sign_activation, sign_release
+    from sentinel.trust import crypto
+    from sentinel.trust.issuer import utc_now
+    from sentinel.trust.keys import TrustStore, parse_ts
+
+    d = Path(args.dir) if args.dir else POLICY_DIR
+    if args.policy_command == "verify":
+        trust = TrustStore.load(args.trust) if args.trust else policy_trust()
+        reg = PolicyRegistry(signed=True, trust=trust)
+        try:
+            reg.load_dir(d)
+        except PolicyIntegrityError as e:
+            _out(args, {"ok": False, "error": str(e)}, f"REFUSED: {e}")
+            return 2
+        report = reg.release_report()
+        lines = [f"policy releases: {report['origin']}"]
+        for pid, r in report["policies"].items():
+            a = r["active"]
+            lines.append(
+                f"  {pid:<28} active v{a.get('version', '?')} {a.get('status')} "
+                f"(activation {a.get('activation_sequence')}, effective {a.get('effective_from')}, "
+                f"signer {a.get('signer')} {a.get('key_id')})"
+            )
+        lines += [f"  problem: {x}" for x in report["problems"]]
+        _out(args, {"ok": not report["problems"], **report}, "\n".join(lines))
+        return 0 if not report["problems"] else 2
+    private = crypto.load_private_pem(args.key)
+    policy = next(
+        (
+            p
+            for p in (load_policy(f) for f in sorted(d.glob(f"{args.policy}.v{args.version}.*")))
+            if p.policy_id == args.policy and p.version == args.version
+        ),
+        None,
+    )
+    if policy is None:
+        raise ValueError(f"no {args.policy}@v{args.version} in {d}")
+    path = d / RELEASES_FILE
+    book = ReleaseBook.load(path)
+    now = utc_now()
+    if args.policy_command == "sign":
+        book.releases.append(
+            sign_release(private, signer=args.signer, policy=policy, released_at=now)
+        )
+        msg = f"released {policy.key} (digest of the document as it is now) -> {path}"
+    else:
+        last = max(
+            (
+                a.get("sequence", 0)
+                for a in book.activations
+                if isinstance(a, dict) and a.get("policy_id") == policy.policy_id
+            ),
+            default=0,
+        )
+        seq = args.sequence if args.sequence is not None else last + 1
+        if seq <= last:
+            raise ValueError(
+                f"activation sequence must exceed {last}, the latest for {args.policy}"
+            )
+        effective = (
+            parse_ts(args.effective_from, "--effective-from") if args.effective_from else now
+        )
+        if effective < now - timedelta(days=3650):
+            raise ValueError("--effective-from is implausibly old")
+        book.activations.append(
+            sign_activation(
+                private,
+                signer=args.signer,
+                policy=policy,
+                sequence=seq,
+                effective_from=effective,
+                issued_at=now,
+            )
+        )
+        msg = f"activated {policy.key} as activation {seq}, effective {args.effective_from or 'now'} -> {path}"
+    path.write_text(book.dumps(), encoding="utf-8")
+    print(msg)
+    return 0
+
+
 def scoring_models() -> list[str]:
     from sentinel.risk import scoring
 
@@ -589,6 +683,8 @@ def cmd_policy(args: argparse.Namespace) -> int:
         added = pin_manifest(args.dir or POLICY_DIR)
         print("pinned: " + (", ".join(added) if added else "nothing new"))
         return 0
+    if args.policy_command in ("sign", "activate", "verify"):
+        return _policy_release(args)
     app = _app(args)
     reg = app.runtime.policies
     if args.policy_command == "list":
@@ -1233,6 +1329,24 @@ def build_parser() -> argparse.ArgumentParser:
         "pin", help="pin new policy versions in MANIFEST.json (a pinned version never changes)"
     )
     pp.add_argument("--dir", help="policy directory (default: the shipped policies)")
+    for name, helptext in (
+        ("sign", "sign a policy version's release (run where the policy-release key is)"),
+        ("activate", "sign an activation: make a released version the active one"),
+    ):
+        ps2 = po.add_parser(name, help=helptext)
+        ps2.add_argument("--key", required=True, help="the policy-release private key (PEM)")
+        ps2.add_argument("--signer", required=True, help="the signer id the trust store names")
+        ps2.add_argument("--policy", required=True)
+        ps2.add_argument("--version", type=int, required=True)
+        ps2.add_argument("--dir", help="policy directory (default: the shipped policies)")
+        if name == "activate":
+            ps2.add_argument("--sequence", type=int, help="default: one more than the latest")
+            ps2.add_argument("--effective-from", help="YYYY-MM-DDTHH:MM:SSZ (default: now)")
+    pv = po.add_parser("verify", help="verify every release and the active versions")
+    pv.add_argument("--dir", help="policy directory (default: the shipped policies)")
+    pv.add_argument(
+        "--trust", help="policy trust store (default: SENTINEL_POLICY_TRUST or shipped)"
+    )
 
     cap = sub.add_parser("capability").add_subparsers(dest="cap_command", required=True)
     cap.add_parser("list", help="the capability security matrix")

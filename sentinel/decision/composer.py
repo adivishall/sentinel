@@ -18,7 +18,7 @@ model's stated verdict is believed). The protected path is always ``FULL``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from sentinel.domain.decisions import (
     AIRecommendation,
@@ -237,7 +237,22 @@ def _decide(
             "authorization control disabled",
         )
     action, reason = _final_action(v.verdict, pol, auth, v.security, v.controls)
-    return pol, auth, action, reason, context
+    return _with_release(pol, v.policy), auth, action, reason, context
+
+
+def _with_release(pol: PolicyDecision, policy: Policy) -> PolicyDecision:
+    """Record what establishes the policy that decided (its signed release)."""
+    rel = policy.release
+    if rel is None:
+        return pol
+    return replace(
+        pol,
+        policy_digest=rel.digest,
+        release_status=rel.status.value,
+        release_signer=rel.signer,
+        release_key_id=rel.key_id,
+        activation_sequence=rel.activation_sequence,
+    )
 
 
 def _trusted_view(inputs: DecisionInputs) -> _TrustedView:
@@ -426,14 +441,8 @@ def compose(inputs: DecisionInputs) -> Decision:
         contradiction_count=len(inputs.reconciliation.contradictions),
         security_severity=inputs.security.severity,
         security_event_id=None,
-        policy=PolicyDecision(
-            pol.policy_id,
-            pol.version,
-            pol.outcome,
-            pol.matched_rules,
-            pol.explanations,
-            content_hash(context),
-            inputs.policy.content_hash,
+        policy=replace(
+            pol, context_hash=content_hash(context), policy_hash=inputs.policy.content_hash
         ),
         authorization=auth,
         human_review=HumanReview(human, reason if human else ""),

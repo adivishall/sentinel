@@ -37,10 +37,16 @@ def snapshot(inputs: DecisionInputs) -> dict[str, Any]:
     from sentinel import __version__
 
     d = to_dict(inputs)
+    rel = inputs.policy.release
     d["policy"] = {
         "policy_id": inputs.policy.policy_id,
         "version": inputs.policy.version,
         "content_hash": inputs.policy.content_hash,
+        # the signed release the decision ran under (replay checks the artifact against it)
+        "digest": rel.digest if rel is not None else None,
+        "release_status": rel.status.value if rel is not None else None,
+        "release_key_id": rel.key_id if rel is not None else None,
+        "activation_sequence": rel.activation_sequence if rel is not None else None,
     }
     d["engine_version"] = __version__
     return d

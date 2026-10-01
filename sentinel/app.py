@@ -206,6 +206,14 @@ class SentinelApp:
         )
         self.replay_engine = ReplayEngine(self.runtime.policies)
         self._world: _World | None = None
+        policies = self.runtime.policies
+        if policies.signed:
+            # an activation older than one this store's decisions were already made under is
+            # a rollback (someone removed the newer activation): refuse it, from the chain
+            for pid, seq in self.store.policy_activation_floor().items():
+                policies.set_activation_floor(pid, seq)
+            for pid in sorted({p.policy_id for p in policies.all()}):
+                policies.active(pid)  # raises PolicyIntegrityError: refuse to start
         for p in self.runtime.policies.all():
             stored = self.store.policy_payload(p.policy_id, p.version)
             if stored is None:
@@ -1641,6 +1649,7 @@ class SentinelApp:
             "provider": p.name,
             "model": p.model,
             "policies": [pp.key for pp in self.runtime.policies.all()],
+            "policy_releases": self.runtime.policies.release_report(),
             "risk_models": sorted(scoring.MODELS),
             "default_transaction_model": scoring.TRANSACTION_DEFAULT.version,
             "facts_sources": {f.value: f.describe for f in FactsSource},

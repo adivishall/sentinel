@@ -4,15 +4,32 @@
 from __future__ import annotations
 
 import json
+import os
+from collections.abc import Callable
+from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from sentinel.domain.enums import PolicyOutcome, Workflow
 from sentinel.domain.ids import content_hash
 from sentinel.policy.engine import PolicyValidationError, validate
 from sentinel.policy.models import Condition, Policy, Rule
+from sentinel.policy.release import (
+    RELEASES_FILE,
+    Activation,
+    PolicyRelease,
+    ReleaseBook,
+    ReleaseStatus,
+    resolve,
+)
+from sentinel.trust.issuer import utc_now
+from sentinel.trust.keys import TrustStore, format_ts
 
 POLICY_DIR = Path(__file__).parent / "policies"
 MANIFEST = "MANIFEST.json"
+# the policy trust root shipped with Sentinel: outside the policy directory, public keys only
+SHIPPED_POLICY_ROOT = Path(__file__).parent.parent / "trust" / "policy_root.json"
 
 
 class PolicyIntegrityError(PolicyValidationError):
@@ -84,7 +101,9 @@ def pin_manifest(directory: str | Path = POLICY_DIR) -> list[str]:
 
 
 def _policy_files(d: Path) -> list[Path]:
-    return sorted(f for f in d.glob("*.json") if f.name != MANIFEST) + sorted(d.glob("*.y*ml"))
+    return sorted(f for f in d.glob("*.json") if f.name not in (MANIFEST, RELEASES_FILE)) + sorted(
+        d.glob("*.y*ml")
+    )
 
 
 def _as_list(v: object) -> list[object]:
@@ -178,12 +197,31 @@ def policy_from_dict(doc: dict[str, object]) -> Policy:
 
 
 class PolicyRegistry:
-    def __init__(self, *, autoload: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        autoload: str | Path | None = None,
+        signed: bool = False,
+        trust: TrustStore | None = None,
+        clock: Callable[[], datetime] = utc_now,
+    ) -> None:
         """``autoload``: a directory loaded (and verified) on first use rather than at
         construction, so importing the package never fails but using an unverified
-        policy set always does -- and ``sentinel policy pin`` can still run."""
+        policy set always does -- and ``sentinel policy pin`` can still run.
+
+        ``signed``: every loaded version must carry a verified release
+        (``sentinel.policy.release``), and the active version of each policy is the one a
+        signed activation in effect names -- never simply the highest number. ``trust``
+        is the policy trust root (default: ``policy_trust()``, outside the directory)."""
         self._policies: dict[tuple[str, int], Policy] = {}
         self._autoload = Path(autoload) if autoload is not None else None
+        self.signed = signed
+        self._trust = trust
+        self._clock = clock
+        self._activations: dict[str, list[Activation]] = {}
+        self._floor: dict[str, int] = {}
+        self.release_problems: tuple[str, ...] = ()
+        self.release_origin = "unsigned"
 
     def _ensure(self) -> None:
         if self._autoload is not None:
@@ -195,22 +233,66 @@ class PolicyRegistry:
                 raise
 
     def register(self, policy: Policy) -> Policy:
+        if policy.release is None:
+            policy = replace(
+                policy,
+                release=PolicyRelease(
+                    ReleaseStatus.UNSIGNED,
+                    policy.policy_id,
+                    policy.version,
+                    policy_digest(policy),
+                    reason="registered without a release (unsigned registry)",
+                ),
+            )
         self._policies[(policy.policy_id, policy.version)] = policy
         return policy
 
     def load_dir(self, directory: str | Path = POLICY_DIR, *, pinned: bool | None = None) -> int:
         """Load every policy in ``directory``. The shipped directory is always verified
         against its manifest; another directory is verified when it has one (or when
-        ``pinned=True``). Verification happens before anything is registered."""
+        ``pinned=True``). A signed registry also verifies every version's release against
+        the policy trust root and refuses any version without one. Verification happens
+        before anything is registered."""
         d = Path(directory)
         policies = [load_policy(f) for f in _policy_files(d)]
         if pinned is None:
             pinned = d.resolve() == POLICY_DIR.resolve() or (d / MANIFEST).exists()
         if pinned:
             verify_manifest(policies, d / MANIFEST)
+        if self.signed:
+            policies = self._verify_releases(policies, d)
         for p in policies:
             self.register(p)
         return len(policies)
+
+    def _verify_releases(self, policies: list[Policy], d: Path) -> list[Policy]:
+        trust = self._trust if self._trust is not None else policy_trust()
+        try:
+            book = ReleaseBook.load(d / RELEASES_FILE)
+        except ValueError as e:
+            raise PolicyIntegrityError(str(e)) from None
+        res = resolve(policies, book, trust, self._clock())
+        refused = [r for r in res.releases.values() if not r.verified]
+        if refused:
+            raise PolicyIntegrityError(
+                "policy versions without a verified release: "
+                + "; ".join(
+                    f"{r.policy_id}@v{r.version} {r.status.value} ({r.reason})" for r in refused
+                )
+            )
+        equivocation = [x for x in res.problems if "equivocation" in x]
+        if equivocation:
+            raise PolicyIntegrityError("; ".join(equivocation))
+        self._activations = res.activations
+        self.release_problems = res.problems
+        # file names only: /v1/system shows this, and paths on disk are not its business
+        self.release_origin = f"{Path(book.origin).name} verified against {Path(trust.origin).name}"
+        return [replace(p, release=res.releases[(p.policy_id, p.version)]) for p in policies]
+
+    def set_activation_floor(self, policy_id: str, sequence: int) -> None:
+        """The highest activation sequence already acted on (read from the audit chain):
+        an older activation is a rollback and is refused."""
+        self._floor[policy_id] = max(sequence, self._floor.get(policy_id, 0))
 
     def versions(self, policy_id: str) -> list[int]:
         self._ensure()
@@ -219,27 +301,101 @@ class PolicyRegistry:
     def get(self, policy_id: str, version: int | None = None) -> Policy:
         """``version=None`` is the active version. Naming a version is a historical lookup,
         which only replay and what-if runs make (``sentinel.decision.authority``)."""
+        if version is None:
+            return self.active(policy_id)
         versions = self.versions(policy_id)
         if not versions:
             raise KeyError(f"unknown policy {policy_id!r}")
-        v = version if version is not None else versions[-1]
         try:
-            return self._policies[(policy_id, v)]
+            return self._policies[(policy_id, version)]
         except KeyError:
-            raise KeyError(f"policy {policy_id!r} has no version {v}; have {versions}") from None
+            raise KeyError(
+                f"policy {policy_id!r} has no version {version}; have {versions}"
+            ) from None
 
     def active(self, policy_id: str) -> Policy:
-        """The configured active version: the highest version shipped. Authoritative
-        evaluation always uses it; no request parameter selects another."""
-        return self.get(policy_id)
+        """The active version. Unsigned registry: the highest version shipped. Signed
+        registry: the version named by the highest-sequence verified activation in effect
+        now -- explicit, never before the document's effective_from, and never older than
+        an activation already acted on. Authoritative evaluation always uses it; no
+        request parameter selects another."""
+        versions = self.versions(policy_id)
+        if not versions:
+            raise KeyError(f"unknown policy {policy_id!r}")
+        if not self.signed:
+            return self._policies[(policy_id, versions[-1])]
+        now = self._clock()
+        acts = [a for a in self._activations.get(policy_id, []) if a.effective_from <= now]
+        if not acts:
+            raise PolicyIntegrityError(f"{policy_id} has no signed activation in effect")
+        a = acts[0]  # highest sequence first
+        floor = self._floor.get(policy_id, 0)
+        if a.sequence < floor:
+            raise PolicyIntegrityError(
+                f"{policy_id}: activation {a.sequence} is older than activation {floor}, "
+                "already acted on (rollback)"
+            )
+        p = self._policies[(policy_id, a.version)]
+        assert p.release is not None
+        return replace(
+            p,
+            release=replace(
+                p.release,
+                activation_sequence=a.sequence,
+                effective_from=format_ts(a.effective_from),
+            ),
+        )
 
     def historical(self, policy_id: str) -> list[int]:
         """Versions kept only so recorded decisions can be replayed and compared."""
-        return self.versions(policy_id)[:-1]
+        active = self.active(policy_id).version
+        return [v for v in self.versions(policy_id) if v != active]
 
     def all(self) -> list[Policy]:
         self._ensure()
         return sorted(self._policies.values(), key=lambda p: (p.policy_id, p.version))
 
+    def release_report(self) -> dict[str, Any]:
+        """Per policy: the active version and what establishes it; and every refused
+        statement -- for ``/v1/system`` and ``sentinel policy verify``."""
+        out: dict[str, Any] = {
+            "signed": self.signed,
+            "origin": self.release_origin,
+            "problems": list(self.release_problems),
+            "policies": {},
+        }
+        for pid in sorted({p.policy_id for p in self.all()}):
+            try:
+                a = self.active(pid)
+                active: dict[str, Any] = a.release.to_dict() if a.release else {}
+            except PolicyIntegrityError as e:
+                active = {"status": "NO_ACTIVE_VERSION", "reason": str(e)}
+            out["policies"][pid] = {
+                "active": active,
+                "versions": {
+                    str(p.version): p.release.status.value if p.release else "UNSIGNED"
+                    for p in self.all()
+                    if p.policy_id == pid
+                },
+            }
+        return out
 
-DEFAULT_REGISTRY = PolicyRegistry(autoload=POLICY_DIR)
+
+def require_signed_policy() -> bool:
+    """Signed policy releases are required unless ``SENTINEL_REQUIRE_SIGNED_POLICY=0``."""
+    return os.environ.get("SENTINEL_REQUIRE_SIGNED_POLICY", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+    )
+
+
+def policy_trust() -> TrustStore:
+    """The policy trust root: ``SENTINEL_POLICY_TRUST`` (an operator's trust store holding
+    ``policy-release`` keys), else the root shipped with Sentinel. Never the policy
+    directory."""
+    path = os.environ.get("SENTINEL_POLICY_TRUST")
+    return TrustStore.load(path) if path else TrustStore.load(SHIPPED_POLICY_ROOT)
+
+
+DEFAULT_REGISTRY = PolicyRegistry(autoload=POLICY_DIR, signed=require_signed_policy())

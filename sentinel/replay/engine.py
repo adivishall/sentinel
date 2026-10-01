@@ -101,6 +101,9 @@ class ReplayResult:
     # The recorded facts' provenance, and the signed statement verified again against the
     # current trust store (a key revoked since the decision shows here).
     facts: dict[str, Any] = field(default_factory=dict)
+    # The policy release the decision recorded, and the release of the artifact replay ran
+    # (verified again now against the policy trust root).
+    policy_release: dict[str, Any] = field(default_factory=dict)
 
     @property
     def engine_drift(self) -> bool:
@@ -130,6 +133,7 @@ class ReplayResult:
             "record_verified": self.record_verified,
             "record_issues": list(self.record_issues),
             "facts": self.facts,
+            "policy_release": self.policy_release,
         }
 
 
@@ -276,6 +280,7 @@ class ReplayEngine:
         is the stored decision payload and ``audit`` its audit event. With ``verify`` the
         recorded side is anchored to the audit event (``anchor_to_audit``)."""
         inputs = restore(snapshot, self.policies, policy_version=overrides.policy_version)
+        policy_release = _policy_release(snapshot.get("policy", {}), inputs.policy)
         pinned = str(snapshot.get("policy", {}).get("content_hash") or "")
         policy_drift = bool(
             overrides.policy_version is None and pinned and pinned != inputs.policy.content_hash
@@ -351,6 +356,17 @@ class ReplayEngine:
                 f"time (hash {pinned} -> {inputs.policy.content_hash}); the replay used the "
                 "current content."
             )
+        if policy_release["artifact_matches_recorded"] is False:
+            expl += (
+                " WARNING: the policy artifact replayed is not the one the decision recorded "
+                f"(release digest {policy_release['recorded']['digest']} -> "
+                f"{policy_release['artifact']['digest']})."
+            )
+        if policy_release["artifact"]["status"] not in ("VERIFIED", None) and self.policies.signed:
+            expl += (
+                f" WARNING: the replayed policy's release is {policy_release['artifact']['status']}"
+                f" ({policy_release['artifact']['reason']})."
+            )
         if issues:
             expl = (
                 "WARNING: the stored record does not match its audit event ("
@@ -394,4 +410,36 @@ class ReplayEngine:
             },
             not issues,
             tuple(issues),
+            policy_release=policy_release,
         )
+
+
+def _policy_release(recorded: dict[str, Any], policy: Any) -> dict[str, Any]:
+    """What the decision recorded about its policy release beside the release of the
+    artifact replay runs. Snapshots from before signed releases recorded none."""
+    rel = policy.release
+    rec = (
+        {
+            "digest": recorded.get("digest"),
+            "release_status": recorded.get("release_status"),
+            "release_key_id": recorded.get("release_key_id"),
+            "activation_sequence": recorded.get("activation_sequence"),
+        }
+        if recorded.get("digest")
+        else None
+    )
+    art = {
+        "policy": policy.key,
+        "status": rel.status.value if rel is not None else None,
+        "digest": rel.digest if rel is not None else None,
+        "signer": rel.signer if rel is not None else None,
+        "key_id": rel.key_id if rel is not None else None,
+        "reason": rel.reason if rel is not None else "",
+    }
+    return {
+        "recorded": rec,
+        "artifact": art,
+        "artifact_matches_recorded": (
+            None if rec is None or art["digest"] is None else rec["digest"] == art["digest"]
+        ),
+    }

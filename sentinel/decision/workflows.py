@@ -484,6 +484,13 @@ def _finish(
                 "risk_model": risk.model_version if risk is not None else None,
                 "facts_source": str(inputs.facts_source),
                 "facts": inputs.provenance.audit_detail() if inputs.provenance else None,
+                "policy_release": {
+                    "digest": decision.policy.policy_digest,
+                    "status": decision.policy.release_status,
+                    "signer": decision.policy.release_signer,
+                    "key_id": decision.policy.release_key_id,
+                    "activation_sequence": decision.policy.activation_sequence,
+                },
                 # replay verifies the stored input snapshot against this
                 "snapshot_hash": snapshot_hash(snapshot(inputs)),
                 "engine_version": __version__,
