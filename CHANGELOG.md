@@ -4,7 +4,7 @@ All notable changes to Sentinel. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — 2.3.0
+## [2.3.0] — unreleased (on the pull-request stack; not yet merged to main)
 
 A trust audit asked why Sentinel should trust the facts it decides on. The answer was
 that nothing proved any of them: trust labels came from code paths, and request-body
@@ -344,12 +344,54 @@ can be trusted (roadmap issues #11–#20).
 - `sentinel audit checkpoint --sign-key --signer --anchor`, `audit verify --anchor
   [--require-anchored]`, `trust keygen --purpose audit-checkpoint`, `SENTINEL_AUDIT_ANCHOR`.
 
+### Decision lineage, risk-model provenance, the system-of-record boundary
+- **`GET /v1/decisions/{id}/lineage`** (`SentinelApp.decision_lineage`): one view of a
+  recorded decision -- what and when, fact provenance and payload digest, evidence,
+  risk (model version and digest), the AI recommendation (recorded, never
+  authoritative), the policy release (digest, signer, key, activation), the capability
+  authorization, the humans who acted on its case, the outcome, and the audit event
+  with its anchoring status.
+- **A risk assessment pins its model's configuration digest** (`RiskModel.digest`,
+  `RiskAssessment.model_digest`), recorded in the snapshot and the audit event. Replay
+  reports a model whose name and version are unchanged but whose weights or thresholds
+  are not (`risk_model_drift`).
+- **Replay names its drift**: `drift` lists every way the replay differs from the
+  decision as recorded (`policy_content`, `risk_model_configuration`, `engine`,
+  `record_vs_audit`, `policy_release_artifact`, `audit_anchor`, `fact_signature`), and
+  `drift_class` is `none`, `override` (only the replay's own overrides changed the
+  outcome), the one named drift, or `multiple`.
+- **`sentinel/data/providers.py`**: `RecordProvider`, `FactProvider` and
+  `RiskContextProvider`, the three interfaces between the decision logic and a system of
+  record. The shipped SQLite store over synthetic data is the only implementation;
+  `tests/test_providers_boundary.py` checks that the store satisfies all three and that
+  the decision, risk, evidence, policy and security packages never import it.
+
+### Console
+- The decision view shows the policy release (version, signer, key, activation) and the
+  fact provenance; replay shows ORIGINAL vs RECOMPUTED with the drift and the anchoring
+  status; the audit view reports anchoring; the system view lists the trust roots
+  (policy releases, fact trust store, audit anchor) -- public keys only; the
+  evaluation view adds the model benchmark, the red team and the frozen
+  claims set. The console still renders only what the engine returns.
+
+### CI
+- CI verifies the shipped policy releases (`sentinel policy verify`), runs the red-team
+  suite, and signs and verifies an anchored audit checkpoint with a throwaway key.
+
 ### Evaluation
 - The corpora's ledgers and acquirer records are signed by an ephemeral evaluation
   issuer and verified in every case, so the suites measure text and model influence on
   verified facts. The integrity suite adds F: the same claim-supporting ledgers sent
   unsigned (expected 0 executions). The benchmark adds `fact_verify`, and the e2e
   pipeline now includes verification.
+- **Temporal benchmark**: four seeds (42, 7, 11, 23), 497 stratified transactions, nine
+  kinds, 9,443 decisions compared at four future offsets -- 0 leaks (95% upper bound
+  0.03% per decision). A tested property over synthetic worlds, not a proof.
+- **A frozen claims set** (`evaluation/attacks/claims_frozen.json`, 40 phrasings),
+  written and committed before the classifier first ran on it, and never to be tuned
+  against. Labelled *partially informed*: its author maintains the classifier. First
+  run: 24/40; 14 of 28 claims missed, every one abstained to a human, 0 misread as
+  another claim type, 0 of 12 controls read as a claim.
 
 ### Docs
 - Corrected: the audit chain does **not** detect a consistent rewrite of the events
