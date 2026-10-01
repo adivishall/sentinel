@@ -171,7 +171,7 @@ seeds, method and limitations.
 | **Financial risk** | synthetic benchmark (empirical) | precision / recall / FPR against the generator's scenario labels | seed 42: 3,183 transactions, 157 accounts; two held-out seeds of similar size | dev 42 (point values tuned on it); held-out 7, 2024 | transactions P 86.7% R 67.2% FPR 0.19%; accounts P 90.0% R 90.0% | [§G](docs/EVALUATION.md#g-financial-risk-on-labelled-synthetic-data-resultsfinancialjson) |
 | **Temporal correctness** | synthetic invariant check (empirical; not a proof) | a record dated after T changing a decision at T | 497 transactions; 9 kinds of future record at 4 offsets; 9,443 checks | seeds 42, 7, 11, 23 | **0 observed leaks** (95% upper bound 0.032% per check, 0.60% per sampled transaction) | [§I](docs/EVALUATION.md#i-temporal-correctness-resultstemporaljson) |
 | **Claim classifier** | synthetic, same author; defence in depth, not the foundation | legitimate claims read as their type; the rest held for a human | 117 phrasings; 21 held-out unusual phrasings | hand-authored | held-out: first (blind) run 7/21; 17/21 after the patterns were extended by an author who had seen the misses; FN 4/56, FP 0/28 | [§L](docs/EVALUATION.md#l-claim-classifier-resultsclaimsjson) |
-| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.2396 ms | [PERFORMANCE.md](docs/PERFORMANCE.md) |
+| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.3237 ms | [PERFORMANCE.md](docs/PERFORMANCE.md) |
 | **Live LLM** | live-model evaluation | the same suites against a real model | -- | `claude-opus-5-5/effort-low, claude-sonnet-5-5/effort-low` | **NOT RUN** -- no live number is quoted anywhere | [§K](docs/EVALUATION.md#k-model--provider-evaluation-resultsmodelsjson) |
 <!-- /gen:evaluation-categories -->
 
@@ -253,7 +253,7 @@ engine output over the synthetic demo dataset, nothing drawn by hand.
 |:---:|:---:|
 | [![AI Security: the flagship attack WITHOUT vs WITH Sentinel](docs/img/ai-security.png)](docs/img/ai-security.png) | [![Case review packet](docs/img/case-review.png)](docs/img/case-review.png) |
 | **AI Security** -- what the attacker claimed, what the AI recommended, what the records say, what was allowed with and without Sentinel | **Case review packet** -- the claim checked against the record, the model's recommendation beside (not inside) the decision, and who may approve |
-| [![Replay: a v3 denial re-run under v1](docs/img/replay.png)](docs/img/replay.png) | [![Transaction risk drawer](docs/img/transaction-risk.png)](docs/img/transaction-risk.png) |
+| [![Replay: a recorded denial re-run under policy v1](docs/img/replay.png)](docs/img/replay.png) | [![Transaction risk drawer](docs/img/transaction-risk.png)](docs/img/transaction-risk.png) |
 | **Replay** -- a recorded denial re-run under policy v1, which would have paid a second refund; the recorded decision is unchanged | **Transaction risk** -- every point is a named factor; the account timeline greys out what came after the decision |
 
 ## Quickstart
@@ -317,9 +317,9 @@ are `{error, code, request_id}`; no stack trace ever leaves the server.
 <!-- gen:performance -->
 ### Performance (offline, own overhead)
 
-Full protected dispute pipeline: **p50 0.228 ms · p95 0.2396 ms · 4,343/s**
-sequential single-thread; policy evaluation 0.0178 ms p95 over the composer's real
-27-field context; gateway inspection 0.235 ms p95 ([all components](docs/PERFORMANCE.md)).
+Full protected dispute pipeline: **p50 0.3089 ms · p95 0.3237 ms · 3,213/s**
+sequential single-thread; policy evaluation 0.0187 ms p95 over the composer's real
+27-field context; gateway inspection 0.2347 ms p95 ([all components](docs/PERFORMANCE.md)).
 <!-- /gen:performance -->
 
 ## Limitations
