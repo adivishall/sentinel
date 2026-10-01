@@ -58,9 +58,11 @@ HEADER_FIELDS = (
     "payload_sha256",
 )
 ENVELOPE_FIELDS = frozenset(HEADER_FIELDS) | {"payload", "signature"}
-_HEX64 = re.compile(r"^[0-9a-f]{64}$")
+# Every grammar is applied with ``fullmatch``: ``$`` alone also matches before a final
+# newline, so ``"dispute:DSP-1\n"`` would pass a ``match``.
+_HEX64 = re.compile(r"[0-9a-f]{64}")
 # <kind prefix>:<record id>; the id becomes a decision's subject, so it is bounded
-_SUBJECT = re.compile(r"^[a-z]+:[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_SUBJECT = re.compile(r"[a-z]+:[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 
 
 class SequenceLedger(Protocol):
@@ -204,12 +206,12 @@ def verify_fact(
         return result(invalid, f"malformed envelope: {e}")
     env_digest = sha256_hex(header_bytes)
     # ---- 2. payload bound to the header -------------------------------------------------
-    if not _HEX64.match(d["payload_sha256"]) or payload_digest != d["payload_sha256"]:
+    if not _HEX64.fullmatch(d["payload_sha256"]) or payload_digest != d["payload_sha256"]:
         return result(invalid, "the payload does not match its signed digest (altered)")
     # ---- 3. what the statement is about -----------------------------------------------
     if d["kind"] != kind.value:
         return result(invalid, f"a {d['kind']!r} statement cannot be used as {kind.value}")
-    if not _SUBJECT.match(d["subject"]):
+    if not _SUBJECT.fullmatch(d["subject"]):
         return result(invalid, "malformed subject (expected <kind>:<record id>, id <= 64 chars)")
     if not d["subject"].startswith(kind.subject_prefix + ":"):
         return result(invalid, f"subject {d['subject']!r} is not a {kind.subject_prefix}")

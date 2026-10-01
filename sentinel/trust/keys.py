@@ -36,8 +36,9 @@ PURPOSES = frozenset({FACTS, POLICY_RELEASE})
 FORMAT = "sentinel.trust-store/1"
 DEFAULT_MAX_VALIDITY_DAYS = 30
 
-_TS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
-_ISSUER = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+# Applied with ``fullmatch`` (``$`` alone also matches before a final newline).
+_TS = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+_ISSUER = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
 
 
 class TrustStoreError(ValueError):
@@ -47,7 +48,7 @@ class TrustStoreError(ValueError):
 def parse_ts(value: object, what: str) -> datetime:
     """Exactly ``YYYY-MM-DDTHH:MM:SSZ`` (UTC). One format, so no two spellings of an
     instant compare differently as strings or parse to different times."""
-    if not isinstance(value, str) or not _TS.match(value):
+    if not isinstance(value, str) or not _TS.fullmatch(value):
         raise ValueError(f"{what} must be YYYY-MM-DDTHH:MM:SSZ, got {value!r}")
     return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
 
@@ -124,7 +125,7 @@ def _key_from_json(d: object, where: str) -> TrustedKey:
         if kid != crypto.key_id(pub):
             raise ValueError(f"key_id {kid} is not the fingerprint of its public key")
         issuer = str(d["issuer"])
-        if not _ISSUER.match(issuer):
+        if not _ISSUER.fullmatch(issuer):
             raise ValueError(f"issuer {issuer!r} is not a lowercase identifier")
         purpose = str(d["purpose"])
         if purpose not in PURPOSES:
