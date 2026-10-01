@@ -699,3 +699,40 @@ def test_a_trailing_newline_never_satisfies_a_grammar():
     router.add("GET", "/v1/system", lambda: None)
     assert router.match("GET", "/v1/system") is not None
     assert router.match("GET", "/v1/system\n") is None
+
+
+def test_a_kyb_statement_must_name_its_application():
+    """Found by the release audit: the statement fields did not require ``application_id``,
+    so an issuer-signed KYB payload naming no application verified, and onboarded a
+    merchant against any application text. It is now INVALID, as is a non-string id."""
+    app = SentinelApp.demo(seed=42, customers=60, merchants=12, transactions=900)
+    clean = {
+        "registration_status": "verified",
+        "domain_age_days": 900,
+        "business_age_days": 1600,
+        "prior_flags": 0,
+        "mcc_risk": "low",
+    }
+    for i, payload in enumerate((clean, {**clean, "application_id": 7})):
+        env = app.issuer.sign(FactKind.KYB_RECORD, f"MER-AUD-{i}", payload)
+        b = app.evaluate_merchant("We sell books online.", envelope=env)
+        assert b.decision.provenance.status is ProvenanceStatus.INVALID, payload
+        assert not b.decision.executed
+    env = app.issuer.sign(
+        FactKind.KYB_RECORD, "MER-AUD-9", {**clean, "application_id": "APP-AUD-9"}
+    )
+    ok = app.evaluate_merchant("We sell books online.", envelope=env)
+    assert ok.decision.provenance.status is ProvenanceStatus.VERIFIED_EXTERNAL
+
+
+def test_the_submission_alias_is_not_dropped_on_the_stored_dispute_route():
+    """Found by the release audit: by id, a different ``narrative`` was refused but a
+    different ``submission`` (its alias) was silently ignored."""
+    from sentinel.api.server import build_routes
+
+    app = SentinelApp.demo(seed=7, customers=40, merchants=10, transactions=600)
+    fn, params = build_routes(app).match("POST", "/v1/disputes/evaluate")
+    d = app.store.all_disputes()[0]
+    with pytest.raises(ValueError, match="recorded"):
+        fn({}, {"dispute_id": d.dispute_id, "submission": "totally different text"}, params)
+    assert fn({}, {"dispute_id": d.dispute_id}, params)["subject_id"] == d.dispute_id

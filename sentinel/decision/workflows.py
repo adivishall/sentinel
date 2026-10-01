@@ -208,7 +208,14 @@ STATEMENT_FIELDS: dict[FactKind, frozenset[str]] = {
         }
     ),
     FactKind.KYB_RECORD: frozenset(
-        {"registration_status", "domain_age_days", "business_age_days", "prior_flags", "mcc_risk"}
+        {
+            "application_id",  # a statement names its application (one cannot stand in for another)
+            "registration_status",
+            "domain_age_days",
+            "business_age_days",
+            "prior_flags",
+            "mcc_risk",
+        }
     ),
     FactKind.TRANSACTION: frozenset(
         {
@@ -290,6 +297,14 @@ def _resolve_facts(
                     status=ProvenanceStatus.INVALID,
                     reason=f"the signed statement omits {missing}; an unstated field is not "
                     "the issuer's word",
+                )
+            elif kind is FactKind.KYB_RECORD and not (
+                isinstance(v.payload["application_id"], str) and v.payload["application_id"]
+            ):
+                prov = replace(
+                    prov,
+                    status=ProvenanceStatus.INVALID,
+                    reason="the signed statement does not name its application",
                 )
             elif source is FactsSource.SYSTEM_OF_RECORD and record:
                 diff = sorted(

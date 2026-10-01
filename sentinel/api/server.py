@@ -239,9 +239,12 @@ def build_routes(app: SentinelApp) -> Router:
             )
             return {**to_dict(b.decision), "adjudication": _adjudication(b)}
         if d.get("dispute_id") and "ledger" not in d:
+            # "submission" is the narrative's alias here too: new text sent with a stored
+            # dispute's id is refused, never silently dropped
+            text = S.opt_str(d, "narrative")
             return to_dict(
                 app.evaluate_dispute(
-                    S.opt_str(d, "narrative", "") or "",
+                    (text if text is not None else S.opt_str(d, "submission", "")) or "",
                     dispute_id=S.req_str(d, "dispute_id", max_len=64),
                     documents=docs,
                     options=opts,
