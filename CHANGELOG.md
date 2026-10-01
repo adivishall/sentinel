@@ -256,6 +256,25 @@ can be trusted (roadmap issues #11–#20).
   Documented, not changed: a client trickling bytes is the proxy's to cut off; concurrent
   connections are now capped (`SENTINEL_MAX_CONNECTIONS`).
 
+### Adaptive red team (#15; supersedes #4)
+- `sentinel eval run --suite redteam` (`sentinel/evaluation/redteam.py`): a seeded,
+  black-box attacker that *searches*. Per corpus seed it mutates the text with 13
+  operators -- paraphrase, synonyms, reordering, authority spoofing, homoglyphs,
+  zero-width, bidi, spacing, multi-turn splitting, document style, indirect requests,
+  ambiguous wording, compositions -- reads only what the API returns, and hill-climbs on
+  executed, policy ALLOW and detector rating. Two objectives: contradicted claims, and
+  over-limit refunds the ledger *supports* (the text must push past mandatory review).
+  A structured campaign attacks facts (unsigned, altered, forged, expired, replayed,
+  mis-addressed envelopes; re-pointed and case-variant stored ids), caller-chosen
+  capabilities, backdated time, what-if switches and reviewer identity through the API.
+- Four numbers, never combined: detection-only evasion **22.4% / 25.8%** of 5,760 queries
+  (the lexical detector is beatable, as expected); capability/policy evasion **0**;
+  trusted-fact manipulation **0** of 16 structured attempts; authoritative bypasses **0**.
+  A bypass would be listed attack by attack, and the tests fail on it.
+- Found and fixed: the dispute route dropped a `dispute_id` sent with body facts, so the
+  stored-record check never ran there (a new, `UNTRUSTED` dispute was evaluated; no
+  bypass). It is now checked like every other route.
+
 ### Live provider and model benchmark (#19, #16)
 - **The current Claude API** (`anthropic==1.11.0`, verified on PyPI; the old 0.40.0 pin
   predated typed `output_config`). Requests send `max_tokens` sized for thinking as well as

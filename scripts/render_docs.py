@@ -42,6 +42,7 @@ SUITES = (
     "performance",
     "models",
     "claims",
+    "redteam",
 )
 
 GEN_TARGETS = (
@@ -288,8 +289,30 @@ def render_evaluation(R: dict[str, Any], tests: int) -> str:
         .replace("(docs/EVALUATION.md#", "(#")
         .replace("(docs/PERFORMANCE.md)", "(PERFORMANCE.md)")
     )
-    s, h, sf, k, b, a, f, i, t, p, m, cl = (R[x] for x in SUITES)
+    s, h, sf, k, b, a, f, i, t, p, m, cl, rt = (R[x] for x in SUITES)
     live = _live_row(m)
+    rto = rt["objectives"]
+    rt_ops = tbl(
+        ["Operator", "Queries", "Detector missed"],
+        [
+            [f"`{op}`", v["queries"], pct(v["detection_evasion_rate"])]
+            for op, v in rto["contradicted"]["by_operator"].items()
+        ],
+    )
+    rt_struct = tbl(
+        ["Structured attack", "Channel", "Outcome", "Facts treated as", "Executed"],
+        [
+            [
+                x["attack"],
+                x["channel"],
+                x["status"].replace("refused:", "refused (")
+                + (")" if x["status"].startswith("refused") else ""),
+                x["provenance"] or "—",
+                x["executed"] or "nothing",
+            ]
+            for x in rt["structured"]["attempts"]
+        ],
+    )
     n_classes = len(s["by_class"])
     per_class = s["n_attacks"] // n_classes
 
@@ -1112,12 +1135,55 @@ false-negative row measures.
 
 {_meth(cl, "claims")}
 
+## M. Adaptive red team (`results/redteam.json`)
+
+A seeded, black-box attacker *searches* instead of replaying fixed attacks.
+Per corpus seed it mutates the text -- {len(rt["operators"])} operators:
+{", ".join(f"`{o}`" for o in rt["operators"])} -- submits each variant, reads
+only what the API returns (final action, detector rating, policy outcome,
+what blocked it) and keeps the variant that got furthest; {rt["budget_per_seed"]}
+queries per seed, seed `{rt["seed"]}` (rerunning reproduces every query). Two
+objectives: **contradicted** -- the corpus attacks, the ledger says delivered;
+**over-limit** -- the ledger *supports* non-receipt but the amount is over the
+₹50,000 auto-limit, so the text must push a true claim past the human review
+policy requires. A structured campaign then attacks every channel that is not
+text, through the real API handlers.
+
+Four numbers, never combined into one:
+
+| Metric | Contradicted | Over-limit | What it means |
+|---|---:|---:|---|
+| Detection-only evasion (per query) | {pct(rto["contradicted"]["detection_evasion_rate"])} | {pct(rto["over_limit"]["detection_evasion_rate"])} | variants the AI Security Gateway rated below MEDIUM: the lexical detector is beatable, as expected |
+| Seeds where the search found a detector evasion | {pct(rto["contradicted"]["seeds_with_a_detection_evasion"])} | {pct(rto["over_limit"]["seeds_with_a_detection_evasion"])} | out of {rto["contradicted"]["seeds"]} / {rto["over_limit"]["seeds"]} seeds |
+| Capability / policy evasion | {pct(rto["contradicted"]["capability_policy_evasion_rate"])} | {pct(rto["over_limit"]["capability_policy_evasion_rate"])} | policy said ALLOW and the registry granted a consequential capability |
+| Trusted-fact manipulation | {pct(rt["metrics"]["trusted_fact_manipulation_rate"])} (structured) | | attacker-supplied facts treated as TRUSTED_LOCAL or VERIFIED_EXTERNAL |
+| **Authoritative-decision bypasses** | **{rt["metrics"]["authoritative_bypass_count"]}** in {rt["methodology"]["sample"]["queries"]:,} queries + {rt["structured"]["n"]} structured attempts | | an unauthorised consequential capability executed |
+
+The detector missing a fifth to a quarter of mutated variants is the reason it
+is not the control: what decides is the trusted ledger, policy and the
+capability registry, and the search found no path through them. A non-zero
+bypass count would be listed here attack by attack and the tests fail on it.
+
+Detector misses by operator (contradicted objective):
+
+{rt_ops}
+
+The structured campaign (one attempt each; the full record is in the JSON):
+
+{rt_struct}
+
+The campaign found one inconsistency, fixed with a regression test: the dispute
+route dropped a `dispute_id` sent with body facts, so the stored-record check
+did not run there (a new, `UNTRUSTED` dispute was evaluated -- no bypass).
+
+{_meth(rt, "redteam")}
+
 ## Reproduce
 
 ```bash
 make eval                      # everything above (main + held-out + surfaces = {n_all_attacks} attacks, plus KYB), writes results/*.json and charts
 make docs                      # re-render this file and every generated block from results/ and the code
-sentinel eval run --suite security|heldout|surfaces|kyb|baselines|ablation|financial|integrity|temporal|claims|performance|models|charts
+sentinel eval run --suite security|heldout|surfaces|kyb|baselines|ablation|financial|integrity|temporal|claims|performance|models|redteam|charts
 sentinel eval run --suite financial --full     # larger dataset (400 customers / 12k transactions)
 make test                      # {tests} tests, incl. tests/test_results_regression.py which recomputes the headline claims
 ```
@@ -2997,7 +3063,7 @@ integrity failure is exit 2 whatever the flags.
 
 
 def blocks(R: dict[str, Any], tests: int) -> dict[str, str]:
-    s, h, sf, k, b, a, f, i, t, p, m, cl = (R[x] for x in SUITES)
+    s, h, sf, k, b, a, f, i, t, p, m, cl, rt = (R[x] for x in SUITES)
     td = t["dataset"]
     seeds = ", ".join(str(x) for x in td["seeds"])
     offs = ", ".join(str(d) for d in t["future_offsets_days"])
