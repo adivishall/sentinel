@@ -146,6 +146,8 @@ def _risk(r: dict[str, Any] | None) -> RiskAssessment | None:
         r.get("model_version", ""),
         dict(r.get("features", {})),
         r.get("computed_at", ""),
+        components=dict(r.get("components", {})),
+        model_digest=r.get("model_digest", ""),
     )
 
 

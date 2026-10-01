@@ -12,7 +12,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 from sentinel.domain.enums import RiskLevel
-from sentinel.domain.ids import new_id, now_iso
+from sentinel.domain.ids import content_hash, new_id, now_iso
 from sentinel.domain.risk import RiskAssessment, RiskFactor
 
 Features = Mapping[str, object]
@@ -31,6 +31,14 @@ class RiskModel:
     weights: dict[str, int]
     thresholds: dict[str, float] = field(default_factory=dict)
     description: str = ""
+
+    @property
+    def digest(self) -> str:
+        """SHA-256 of the configuration -- version, weights and thresholds. A version is a
+        label an edit could reuse; this is what an assessment and a replay pin."""
+        return content_hash(
+            {"version": self.version, "weights": self.weights, "thresholds": self.thresholds}, 64
+        )
 
     def w(self, code: str) -> int:
         return self.weights.get(code, 0)
@@ -321,4 +329,5 @@ def build_assessment(
         features=dict(plain),
         computed_at=now_iso(),
         components=components,
+        model_digest=model.digest,
     )
