@@ -432,14 +432,30 @@ the operator controls is that thing. A request body, a label and a stored row ar
 - **Session evidence.** A requested account capability must be evidenced by the session
   record.
 
+- **Idempotent execution.** One capability executes once per (workflow, subject,
+  capability). The system claims the key when it executes and a human approval claims
+  it when a case resolves; a repeat is `DENY` "already executed", recorded in the
+  snapshot as `prior_execution` and restored by replay.
+- **A decisive BLOCK outranks a context error.** The engine fails closed on a missing,
+  mistyped or out-of-vocabulary field, as before -- unless a BLOCK rule whose own fields
+  are present and valid matches. Then the policy's BLOCK stands (with a `[fail-closed]`
+  explanation). A statement that failed verification is therefore `DENY`, not a review
+  nobody may approve.
+- **Every vocabulary value is named.** A test fails when an active policy reads a
+  closed-vocabulary field and a value of it is neither named by a rule nor explicitly
+  accepted with a reason.
+
 **Why.** The trust audit found three authoritative bypasses through structured fields:
 - `FREEZE_ACCOUNT` requested on stored sessions executed (17 of 20);
 - `refund_state: "REFUNDED"` made every rule on the field false, so the BLOCK became an
   ALLOW and a double refund executed;
 - a backdated transaction slipped past an account freeze.
 
-Provenance also needed to reach a place where it decides. The floor keeps an old or
-misconfigured policy from undoing it.
+The adversarial review of the branch then found `closed` and `unknown` -- in the
+vocabularies, named by no rule, allowed -- and a failed signature parked as a dead case.
+Naming every value and letting a decisive BLOCK stand close both without putting policy
+logic in code. Provenance also needed to reach a place where it decides; the floor keeps
+an old or misconfigured policy from undoing it.
 
 **Trade-off.**
 - The tiers are Sentinel's demo values.
@@ -447,3 +463,5 @@ misconfigured policy from undoing it.
   cost of not being able to prove where facts came from.
 - A legitimate customer "freeze my card" request also goes to a human until the
   authentication service records it.
+- The decisive-BLOCK rule means a context error is not always a review: when the policy
+  can already say BLOCK, it does. A review is still the answer to every other error.

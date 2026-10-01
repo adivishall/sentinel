@@ -95,9 +95,11 @@ computes it (`workflows._resolve_facts`); no request field can set it.
   (equivocation).
 - **Stored records are evaluated by id.** A caller cannot send body facts or a
   statement for a dispute, application, transaction or session the store
-  holds, on any route (the multi-turn conversation route included); that is a
-  400. Its recorded submission, its account's context and its
-  stored statement decide. A KYB statement names its application, so a
+  holds -- under its exact id or an ASCII-case variant of it -- on any route
+  (the multi-turn conversation route included); that is a 400. A caller-named
+  id must be in the one record-id grammar (ASCII letters, digits, `. _ -`), so
+  a Unicode look-alike cannot be a second subject. Its recorded submission,
+  its account's context and its stored statement decide. A KYB statement names its application, so a
   statement about one of a merchant's applications cannot stand in for
   another. `sentinel trust ingest` verifies issuers' statements and stores
   them beside the records.
@@ -108,8 +110,18 @@ computes it (`workflows._resolve_facts`); no request field can set it.
   tampered row to `TRUSTED_LOCAL`.
 - **Asymmetry.** Unverified records can make an outcome stricter (a refunded
   ledger still denies) but never support one. Reconciliation turns what they
-  would support into `INSUFFICIENT`, which goes to human review, so they never
-  execute a capability.
+  would support into `INSUFFICIENT`, which goes to human review, so the system
+  never executes a capability on them; only an authenticated reviewer's
+  recorded decision can act on what they claim.
+- **A failed statement is decisive.** A statement whose signature, key or
+  binding failed (`INVALID`, `REVOKED`) is a tamper signal: the policy's BLOCK
+  on it outranks the fact that the facts it carried cannot be evaluated
+  (DENY, no case), rather than a fail-safe review nobody may ever approve.
+- **Execution is idempotent.** A consequential capability executes once per
+  (workflow, subject, capability): the system claims the key when it executes,
+  a human approval claims it when it resolves a case, and a repeat evaluation
+  of an executed subject is `DENY` ("already executed"). The claim is recorded
+  in the decision's input snapshot (`prior_execution`) and restored by replay.
 
 **What `VERIFIED_EXTERNAL` proves.** The holder of a key the operator trusts
 for this issuer and this kind of fact signed exactly this payload about this

@@ -120,7 +120,8 @@ block.
     A caller-supplied (unsigned) transaction or session no longer chooses the
     moment it is assessed as of. It is evaluated at the system's time, so
     backdating it past a freeze or before a burst changes nothing. Being
-    `UNTRUSTED`, it cannot execute either way. A signed statement's timestamp
+    `UNTRUSTED`, the system never executes on it; only an authenticated
+    reviewer's recorded approval can (item 27). A signed statement's timestamp
     is the issuer's and is used as stated.
 
     Rollback protection is as strong as the audit chain. A database writer

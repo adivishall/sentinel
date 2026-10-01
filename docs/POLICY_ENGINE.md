@@ -37,6 +37,18 @@ string where a number is expected raises, it is not "false".
   turns that into a fail-safe `REQUIRE_HUMAN_REVIEW`. A missing input can
   therefore never silently switch a BLOCK rule off (v2.0.0 had that fail-open
   behaviour; the review found it).
+- **A decisive BLOCK outranks a context error.** When the context is missing,
+  mistyped or outside a vocabulary, a BLOCK rule whose own fields are all
+  present and valid, and which matches, still decides: the policy said BLOCK,
+  and nothing the context lacks could have said anything stronger. The
+  decision carries a `[fail-closed]` explanation naming the problem. (A
+  statement that failed verification is blocked even though the facts it
+  carried cannot be evaluated.)
+- **Every vocabulary value a policy reads is named.** A test
+  (`tests/test_policy_provenance.py`) fails when an active policy reads a
+  closed-vocabulary field and some value of it is named by no rule and not
+  explicitly accepted with a reason: `closed` accounts and `unknown` merchant
+  categories were such values.
 - **Content hash.** Every policy carries a SHA-256 over its full document,
   computed at construction. Decisions and input snapshots pin it; replay
   reports `policy_drift` when the served version no longer has the content the
@@ -145,17 +157,17 @@ scenario runs are **what-ifs** and are never recorded as decisions.
 | Policy | Version | Workflow | Rules | Default | Required fields | Effective from | Content hash | Lint |
 |---|---:|---|---:|---|---|---|---|---|
 | `account-security` | 1 | account_security | 7 | ALLOW | `risk_level`, `security_severity`, `payout_change`, `new_device` | 2026-09-01 | `4e8a7c54b806` | clean |
-| `account-security` | 2 | account_security | 9 | ALLOW | `risk_level`, `security_severity`, `payout_change`, `new_device` | 2026-09-29 | `1c9723c6c1d6` | clean |
+| `account-security` | 2 | account_security | 9 | ALLOW | `risk_level`, `security_severity`, `payout_change`, `new_device` | 2026-09-29 | `d54c955d85af` | clean |
 | `dispute-refund` | 1 | dispute | 8 | ALLOW | `amount`, `evidence_verdict`, `security_severity`, `risk_score`, `policy_auto_limit`, `prior_disputes_90d` | 2026-09-01 | `a856d00b4987` | clean |
 | `dispute-refund` | 2 | dispute | 9 | ALLOW | `amount`, `evidence_verdict`, `security_severity`, `risk_score`, `policy_auto_limit`, `prior_disputes_90d` | 2026-09-20 | `3cd95f7fa9b6` | clean |
 | `dispute-refund` | 3 | dispute | 14 | ALLOW | `amount`, `evidence_verdict`, `security_severity`, `risk_score`, `policy_auto_limit`, `prior_disputes_90d`, `refund_state`, `transaction_status`, `merchant_response`, `auth_strength` | 2026-09-25 | `1c37ac159eab` | clean |
-| `dispute-refund` | 4 | dispute | 17 | ALLOW | `amount`, `evidence_verdict`, `security_severity`, `risk_score`, `policy_auto_limit`, `prior_disputes_90d`, `refund_state`, `transaction_status`, `merchant_response`, `auth_strength` | 2026-09-29 | `d93318062e3c` | clean |
+| `dispute-refund` | 4 | dispute | 17 | ALLOW | `amount`, `evidence_verdict`, `security_severity`, `risk_score`, `policy_auto_limit`, `prior_disputes_90d`, `refund_state`, `transaction_status`, `merchant_response`, `auth_strength` | 2026-09-29 | `5c2839ef5ac4` | clean |
 | `investigation` | 1 | investigation | 4 | ALLOW | `risk_level`, `security_severity` | 2026-09-01 | `80f52ddf4bdd` | clean |
 | `merchant-onboarding` | 1 | merchant_onboarding | 8 | ALLOW | `evidence_verdict`, `security_severity`, `registration_status`, `prior_flags`, `mcc_risk` | 2026-09-01 | `199f8087247b` | clean |
-| `merchant-onboarding` | 2 | merchant_onboarding | 11 | ALLOW | `evidence_verdict`, `security_severity`, `registration_status`, `prior_flags`, `mcc_risk` | 2026-09-29 | `665b7d991908` | clean |
+| `merchant-onboarding` | 2 | merchant_onboarding | 12 | ALLOW | `evidence_verdict`, `security_severity`, `registration_status`, `prior_flags`, `mcc_risk` | 2026-09-29 | `9b4c9b5c2834` | clean |
 | `transaction-authorization` | 1 | transaction | 8 | ALLOW | `amount`, `risk_score`, `risk_level`, `security_severity`, `account_status`, `merchant_risk_level` | 2026-09-01 | `36ca2e834433` | clean |
 | `transaction-authorization` | 2 | transaction | 8 | ALLOW | `amount`, `risk_score`, `risk_level`, `security_severity`, `account_status`, `merchant_risk_level` | 2026-09-20 | `64b50c9ae7ce` | clean |
-| `transaction-authorization` | 3 | transaction | 11 | ALLOW | `amount`, `risk_score`, `risk_level`, `security_severity`, `account_status`, `merchant_risk_level` | 2026-09-29 | `d3d829774c69` | clean |
+| `transaction-authorization` | 3 | transaction | 12 | ALLOW | `amount`, `risk_score`, `risk_level`, `security_severity`, `account_status`, `merchant_risk_level` | 2026-09-29 | `c408816022a1` | clean |
 
 ### `account-security` v1 -- Account security: protective holds are cheap and reversible; unfreezing and payout changes are human-only.
 
@@ -174,7 +186,7 @@ scenario runs are **what-ifs** and are never recorded as decisions.
 | Rule | When (all conditions) | Outcome | Reason |
 |---|---|---|---|
 | `block-failed-fact-provenance` | `facts_provenance in ['INVALID', 'REVOKED']` | BLOCK | The record's signed statement failed verification or its key was revoked: a tamper signal, never a basis for action. |
-| `review-unverified-facts` | `facts_provenance in ['UNTRUSTED', 'EXPIRED', 'SUPERSEDED']` | REQUIRE_HUMAN_REVIEW | Nothing establishes these facts (request-body, expired or superseded): a human must, before anything executes. |
+| `review-unverified-facts` | `facts_provenance in ['UNTRUSTED', 'EXPIRED', 'SUPERSEDED', 'NONE']` | REQUIRE_HUMAN_REVIEW | Nothing establishes these facts (request-body, expired or superseded, or none recorded): a human must, before anything executes. |
 | `block-critical-ai-security` | `security_severity == 'CRITICAL'` | BLOCK | Critical AI-security finding on the untrusted input. |
 | `block-capability-escalation` | `capability_escalation is_true` | BLOCK | The model requested a capability outside its surface. |
 | `hold-critical` | `risk_level == 'CRITICAL'` | TEMPORARY_HOLD | Login risk is CRITICAL; hold the account pending review. |
@@ -234,7 +246,7 @@ scenario runs are **what-ifs** and are never recorded as decisions.
 | Rule | When (all conditions) | Outcome | Reason |
 |---|---|---|---|
 | `block-failed-fact-provenance` | `facts_provenance in ['INVALID', 'REVOKED']` | BLOCK | The record's signed statement failed verification or its key was revoked: a tamper signal, never a basis for action. |
-| `review-unverified-facts` | `facts_provenance in ['UNTRUSTED', 'EXPIRED', 'SUPERSEDED']` | REQUIRE_HUMAN_REVIEW | Nothing establishes these facts (request-body, expired or superseded): a human must, before anything executes. |
+| `review-unverified-facts` | `facts_provenance in ['UNTRUSTED', 'EXPIRED', 'SUPERSEDED', 'NONE']` | REQUIRE_HUMAN_REVIEW | Nothing establishes these facts (request-body, expired or superseded, or none recorded): a human must, before anything executes. |
 | `review-high-value-unsigned-facts` | `amount > 25000` AND `facts_provenance == 'TRUSTED_LOCAL'` | REQUIRE_HUMAN_REVIEW | A refund above 25,000 needs the issuer's signed statement (VERIFIED_EXTERNAL); an unsigned stored record goes to a human. |
 | `block-already-refunded` | `refund_state == 'refunded'` | BLOCK | The ledger shows this transaction was already refunded; a second refund is a double payment. |
 | `block-reversed-transaction` | `transaction_status == 'reversed'` | BLOCK | The transaction was reversed; there is nothing to refund. |
@@ -278,7 +290,7 @@ scenario runs are **what-ifs** and are never recorded as decisions.
 | Rule | When (all conditions) | Outcome | Reason |
 |---|---|---|---|
 | `block-failed-fact-provenance` | `facts_provenance in ['INVALID', 'REVOKED']` | BLOCK | The record's signed statement failed verification or its key was revoked: a tamper signal, never a basis for action. |
-| `review-unverified-facts` | `facts_provenance in ['UNTRUSTED', 'EXPIRED', 'SUPERSEDED']` | REQUIRE_HUMAN_REVIEW | Nothing establishes these facts (request-body, expired or superseded): a human must, before anything executes. |
+| `review-unverified-facts` | `facts_provenance in ['UNTRUSTED', 'EXPIRED', 'SUPERSEDED', 'NONE']` | REQUIRE_HUMAN_REVIEW | Nothing establishes these facts (request-body, expired or superseded, or none recorded): a human must, before anything executes. |
 | `review-unsigned-acquirer-record` | `facts_provenance == 'TRUSTED_LOCAL'` | REQUIRE_HUMAN_REVIEW | Onboarding is irreversible and its facts are the acquirer's: approving needs the acquirer's signed record, not a stored copy. |
 | `block-critical-ai-security` | `security_severity == 'CRITICAL'` | BLOCK | Critical AI-security finding on the untrusted input. |
 | `block-capability-escalation` | `capability_escalation is_true` | BLOCK | The model requested a capability outside its surface. |
@@ -287,6 +299,7 @@ scenario runs are **what-ifs** and are never recorded as decisions.
 | `block-contradicted` | `evidence_verdict == 'CONTRADICTED'` | BLOCK | Acquirer records contradict the application. |
 | `review-incomplete` | `evidence_verdict in ['INSUFFICIENT', 'UNSUPPORTED']` | REQUIRE_HUMAN_REVIEW | Verification incomplete. |
 | `review-high-mcc` | `mcc_risk == 'high'` | REQUIRE_HUMAN_REVIEW | High-risk merchant category. |
+| `review-unknown-mcc` | `mcc_risk == 'unknown'` | REQUIRE_HUMAN_REVIEW | The acquirer did not classify the merchant category: a human decides what it is. |
 | `review-high-ai-security` | `security_severity == 'HIGH'` | REQUIRE_HUMAN_REVIEW | High-severity AI-security finding in the application. |
 
 ### `transaction-authorization` v1 -- Payment authorisation: deterministic risk bands and an auto-approval limit.
@@ -320,11 +333,12 @@ scenario runs are **what-ifs** and are never recorded as decisions.
 | Rule | When (all conditions) | Outcome | Reason |
 |---|---|---|---|
 | `block-failed-fact-provenance` | `facts_provenance in ['INVALID', 'REVOKED']` | BLOCK | The record's signed statement failed verification or its key was revoked: a tamper signal, never a basis for action. |
-| `review-unverified-facts` | `facts_provenance in ['UNTRUSTED', 'EXPIRED', 'SUPERSEDED']` | REQUIRE_HUMAN_REVIEW | Nothing establishes these facts (request-body, expired or superseded): a human must, before anything executes. |
+| `review-unverified-facts` | `facts_provenance in ['UNTRUSTED', 'EXPIRED', 'SUPERSEDED', 'NONE']` | REQUIRE_HUMAN_REVIEW | Nothing establishes these facts (request-body, expired or superseded, or none recorded): a human must, before anything executes. |
 | `review-high-value-unsigned-facts` | `amount > 100000` AND `facts_provenance == 'TRUSTED_LOCAL'` | REQUIRE_HUMAN_REVIEW | A payment above 100,000 needs the issuer's signed statement (VERIFIED_EXTERNAL); an unsigned stored record goes to a human. |
 | `block-critical-ai-security` | `security_severity == 'CRITICAL'` | BLOCK | Critical AI-security finding on the untrusted input. |
 | `block-capability-escalation` | `capability_escalation is_true` | BLOCK | The model requested a capability outside its surface. |
 | `block-frozen-account` | `account_status == 'frozen'` | BLOCK | Account is frozen. |
+| `block-closed-account` | `account_status == 'closed'` | BLOCK | The account is closed: nothing is authorised on it. |
 | `review-over-auto-limit` | `amount > 150000` | REQUIRE_HUMAN_REVIEW | Amount exceeds the ₹1,50,000 auto-approval limit. |
 | `review-critical-merchant` | `merchant_risk_level == 'CRITICAL'` | REQUIRE_HUMAN_REVIEW | Merchant risk is CRITICAL. |
 | `block-risk-70` | `risk_score >= 70` | BLOCK | Transaction risk >= 70. |
