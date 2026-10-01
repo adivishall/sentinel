@@ -69,6 +69,11 @@ def _app(args: argparse.Namespace) -> Any:
     else:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         app = SentinelApp.open(path, trust=trust, reviewers=reviewers)
+    # a reload (SIGHUP) re-reads the files this process was started with
+    if getattr(args, "trust_store", None):
+        app.trust_source = args.trust_store
+    if getattr(args, "reviewers_file", None):
+        app.reviewers_source = args.reviewers_file
     if app.store.count("transactions") == 0 and getattr(args, "command", "") not in ("data",):
         print(
             "[sentinel] empty store -> generating the default demo dataset (seed 42)",
@@ -916,8 +921,21 @@ def cmd_bench(args: argparse.Namespace) -> int:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
+    from sentinel.api.server import InsecureBindError, check_bind, is_loopback, serve
+
+    insecure = bool(args.insecure_demo) or os.environ.get("SENTINEL_INSECURE_DEMO", "") in (
+        "1",
+        "true",
+        "yes",
+    )
+    try:  # before anything is loaded: an open network bind is refused up front
+        check_bind(args.host, insecure_demo=insecure)
+    except InsecureBindError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     app = _app(args)
-    if not app.reviewers.reviewers() and app.store.path == ":memory:":
+    demo_ok = is_loopback(args.host) or insecure
+    if not app.reviewers.reviewers() and app.store.path == ":memory:" and demo_ok:
         # the in-memory demo gets two demo reviewers; their credentials exist only in this
         # process and are printed once, for the console's case-review form
         from sentinel.cases.identity import ReviewerRegistry
@@ -939,9 +957,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         app.analyze()
-    from sentinel.api.server import serve
-
-    serve(app, args.host, args.port)
+    serve(app, args.host, args.port, insecure_demo=insecure)
     return 0
 
 
@@ -1420,6 +1436,12 @@ def build_parser() -> argparse.ArgumentParser:
     sv.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
     sv.add_argument(
         "--analyze", action="store_true", help="run analyze first if the store has no decisions"
+    )
+    sv.add_argument(
+        "--insecure-demo",
+        action="store_true",
+        help="serve on a network address WITHOUT authentication (throwaway demos only; "
+        "logged and audited). Without it a non-loopback bind needs SENTINEL_API_KEY.",
     )
 
     ui = (

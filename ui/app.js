@@ -5,10 +5,27 @@
 "use strict";
 
 // ---------- data access ----------------------------------------------------------------
+// API key (SENTINEL_API_KEY): asked for once, kept for this tab only (sessionStorage).
+const KEY_SLOT = "sentinel.apiKey";
+const keyHeaders = () => { try { const k = sessionStorage.getItem(KEY_SLOT); return k ? {Authorization: "Bearer " + k} : {}; } catch (e) { return {}; } };
+async function call(path, opts = {}) {
+  const go = () => fetch(path, {cache: "no-store", ...opts, headers: {...(opts.headers || {}), ...keyHeaders()}});
+  let r = await go();
+  if (r.status === 401 && !(opts.headers || {})["X-Reviewer-Token"]) {
+    const k = window.prompt("This Sentinel API needs its API key (kept for this browser tab only):");
+    if (k) { try { sessionStorage.setItem(KEY_SLOT, k.trim()); } catch (e) { /* storage blocked */ } r = await go(); }
+  }
+  return r;
+}
 const API = {
-  live: null, snap: null,
+  live: null, snap: null, insecure: false,
   async init() {
-    try { const r = await fetch("/v1/system", {cache: "no-store"}); if (!r.ok) throw 0; this.live = await r.json(); return "live"; }
+    try {
+      const r = await call("/v1/system"); if (!r.ok) throw 0; this.live = await r.json();
+      this.insecure = r.headers.get("X-Sentinel-Insecure-Demo") === "1";
+      if (this.insecure) { const b = document.createElement("div"); b.className = "insecure-banner"; b.textContent = "INSECURE DEMO: this server accepts requests from the network without authentication. Synthetic data only."; document.body.prepend(b); }
+      return "live";
+    }
     catch (e) {
       const r = await fetch("snapshot.json", {cache: "no-store"}); if (!r.ok) throw new Error("no API and no snapshot");
       this.snap = await r.json(); return "snapshot";
@@ -16,11 +33,11 @@ const API = {
   },
   isLive() { return !!this.live; },
   async get(path) {
-    if (this.live) { const r = await fetch(path, {cache: "no-store"}); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j; }
+    if (this.live) { const r = await call(path); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j; }
     return this.fromSnapshot("GET", path);
   },
   async post(path, body, extra = {}) {
-    if (this.live) { const r = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json", ...extra}, body: JSON.stringify(body || {})}); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j; }
+    if (this.live) { const r = await call(path, {method: "POST", headers: {"Content-Type": "application/json", ...extra}, body: JSON.stringify(body || {})}); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j; }
     return this.fromSnapshot("POST", path, body);
   },
   fromSnapshot(method, path, body) {

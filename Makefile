@@ -36,8 +36,8 @@ attack:           ## the flagship attack, WITH Sentinel only (stage by stage)
 attack-compare:   ## the same attack WITHOUT (simulated agent, no controls) and WITH Sentinel, side by side
 	$(PY) -m sentinel --db :memory: security attack --scenario document_injection --compare
 
-api:              ## API + console on :8000 (in-memory demo dataset, analysed on start)
-	$(PY) -m sentinel --db :memory: serve --host 0.0.0.0 --port 8000 --analyze
+api:              ## API + console on 127.0.0.1:8000 (in-memory demo dataset, analysed on start)
+	$(PY) -m sentinel --db :memory: serve --host 127.0.0.1 --port 8000 --analyze
 
 ui: api           ## alias: the console is served by the API
 
@@ -78,8 +78,8 @@ live-check:       ## one Claude call to verify the key + model (needs ANTHROPIC_
 docker-build:     ## build the container image
 	docker build -t sentinel .
 
-docker-run:       ## run the API + console container on :8000
-	docker run --rm -p 8000:8000 sentinel
+docker-run:       ## run the demo container, published on 127.0.0.1:8000 only (an insecure demo: no API key)
+	docker run --rm -p 127.0.0.1:8000:8000 -e SENTINEL_INSECURE_DEMO=1 sentinel
 
 clean:
 	rm -rf data/*.db results/*.png .coverage .pytest_cache .mypy_cache .ruff_cache
