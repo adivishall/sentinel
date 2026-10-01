@@ -174,24 +174,26 @@ def _policy_release(args: argparse.Namespace) -> int:
     path = d / RELEASES_FILE
     book = ReleaseBook.load(path)
     now = utc_now()
+    trust = TrustStore.load(args.trust) if args.trust else policy_trust()
     if args.policy_command == "sign":
         book.releases.append(
             sign_release(private, signer=args.signer, policy=policy, released_at=now)
         )
         msg = f"released {policy.key} (digest of the document as it is now) -> {path}"
     else:
-        last = max(
-            (
-                a.get("sequence", 0)
-                for a in book.activations
-                if isinstance(a, dict) and a.get("policy_id") == policy.policy_id
-            ),
-            default=0,
+        from sentinel.policy.release import resolve
+
+        # the latest activation that VERIFIES: an unsigned entry in the book cannot push
+        # the sequence (a junk entry near 2**53 would end all future activations)
+        res = resolve(
+            [load_policy(f) for f in sorted(d.glob(f"{args.policy}.v*.json"))], book, trust, now
         )
+        last = max((a.sequence for a in res.activations.get(args.policy, [])), default=0)
         seq = args.sequence if args.sequence is not None else last + 1
-        if seq <= last:
+        if not last < seq <= last + 1:
             raise ValueError(
-                f"activation sequence must exceed {last}, the latest for {args.policy}"
+                f"activation sequence must be {last + 1} (the latest verified for "
+                f"{args.policy} is {last})"
             )
         effective = (
             parse_ts(args.effective_from, "--effective-from") if args.effective_from else now
@@ -1355,6 +1357,9 @@ def build_parser() -> argparse.ArgumentParser:
         ps2.add_argument("--policy", required=True)
         ps2.add_argument("--version", type=int, required=True)
         ps2.add_argument("--dir", help="policy directory (default: the shipped policies)")
+        ps2.add_argument(
+            "--trust", help="policy trust store (default: SENTINEL_POLICY_TRUST or shipped)"
+        )
         if name == "activate":
             ps2.add_argument("--sequence", type=int, help="default: one more than the latest")
             ps2.add_argument("--effective-from", help="YYYY-MM-DDTHH:MM:SSZ (default: now)")

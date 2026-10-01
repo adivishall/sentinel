@@ -1,17 +1,19 @@
 """Signed policy releases: why Sentinel may trust the policy that decides.
 
 A policy version is **released** when a key the operator trusts for policy releases signs
-its exact content -- the full SHA-256 of the canonical document -- as that version
+its content -- the full SHA-256 of the parsed document (JSON values only, sorted keys; a
+document with duplicate keys or a non-JSON value does not load) -- as that version
 (``sentinel.policy-release/1``). It is **active** when such a key signs an activation for
 it (``sentinel.policy-activation/1``) that is in effect now: explicit, sequenced, never
 before the document's own ``effective_from``. A higher version number activates nothing.
 
 The policy directory is not the trust root. Its files, ``MANIFEST.json`` and
 ``RELEASES.json`` are statements anyone who can write the directory can write; only a
-signature from a ``policy-release`` key in the policy trust store -- operator
-configuration kept outside the directory (``SENTINEL_POLICY_TRUST``, or the shipped root
-``sentinel/trust/policy_root.json``) -- makes one count. So editing a policy and
-recomputing the manifest, adding an unsigned version, or forging an activation fails.
+signature from a ``policy-release`` key in the policy trust store makes one count:
+``SENTINEL_POLICY_TRUST`` (a root the operator controls), or else the root shipped in the
+package (``sentinel/trust/policy_root.json``), which stops a writer confined to the policy
+directory but not one who can rewrite the package. So editing a policy and recomputing the
+manifest, adding an unsigned version, or forging an activation fails.
 
 What a VERIFIED release proves: the holder of a trusted policy-release key, scoped to this
 policy, approved exactly this document as this version. It does not prove that the policy
@@ -419,6 +421,12 @@ def resolve(
             best = sorted(results, key=lambda r: r.status is not ReleaseStatus.REVOKED)[0]
         releases[(p.policy_id, p.version)] = best
     floors = {p.key: f for p in policies if (f := document_effective_from(p)) is not None}
+    for p in policies:
+        if p.effective_from.strip() and p.key not in floors:
+            problems.append(
+                f"{p.key}: effective_from {p.effective_from!r} is unreadable (YYYY-MM-DD or "
+                "YYYY-MM-DDTHH:MM:SSZ): its activation floor cannot be enforced"
+            )
     activations: dict[str, list[Activation]] = {}
     for i, stmt in enumerate(book.activations):
         act, why = verify_activation(

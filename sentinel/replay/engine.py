@@ -38,7 +38,7 @@ from sentinel.decision.snapshot import restore, snapshot_hash
 from sentinel.domain.decisions import AIRecommendation, Decision
 from sentinel.domain.enums import Capability
 from sentinel.domain.ids import new_id, now_iso
-from sentinel.policy.loader import PolicyRegistry
+from sentinel.policy.loader import PolicyRegistry, policy_digest
 from sentinel.policy.models import Condition, Policy, Rule
 from sentinel.risk import scoring
 from sentinel.risk.transaction import rescore
@@ -280,13 +280,27 @@ class ReplayEngine:
         is the stored decision payload and ``audit`` its audit event. With ``verify`` the
         recorded side is anchored to the audit event (``anchor_to_audit``)."""
         inputs = restore(snapshot, self.policies, policy_version=overrides.policy_version)
-        policy_release = _policy_release(snapshot.get("policy", {}), inputs.policy)
+        # the recorded release: from the audit event when there is one (the snapshot is
+        # checked against it separately), else the snapshot
+        audited = ((audit or {}).get("detail") or {}).get("policy_release")
+        recorded_rel = (
+            {
+                "digest": audited.get("digest"),
+                "release_status": audited.get("status"),
+                "release_key_id": audited.get("key_id"),
+                "activation_sequence": audited.get("activation_sequence"),
+            }
+            if isinstance(audited, dict) and audited.get("digest")
+            else snapshot.get("policy", {})
+        )
         pinned = str(snapshot.get("policy", {}).get("content_hash") or "")
         policy_drift = bool(
             overrides.policy_version is None and pinned and pinned != inputs.policy.content_hash
         )
         if overrides.rule_values:
             inputs = replace(inputs, policy=_with_rule_values(inputs.policy, overrides.rule_values))
+        # the artifact replay actually runs (an override is not a released document)
+        policy_release = _policy_release(recorded_rel, inputs.policy)
         risk = inputs.risk
         if overrides.risk_model and risk is not None:
             model = scoring.get_model(overrides.risk_model)
@@ -431,7 +445,9 @@ def _policy_release(recorded: dict[str, Any], policy: Any) -> dict[str, Any]:
     art = {
         "policy": policy.key,
         "status": rel.status.value if rel is not None else None,
-        "digest": rel.digest if rel is not None else None,
+        # the document replay ran, hashed now (not the digest its release names)
+        "digest": policy_digest(policy),
+        "release_digest": rel.digest if rel is not None else None,
         "signer": rel.signer if rel is not None else None,
         "key_id": rel.key_id if rel is not None else None,
         "reason": rel.reason if rel is not None else "",
