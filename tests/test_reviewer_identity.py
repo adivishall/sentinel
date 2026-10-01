@@ -94,6 +94,17 @@ def test_a_malformed_registry_fails_closed(change):
         ReviewerRegistry.from_json(doc)
 
 
+@pytest.mark.parametrize("field", ["reviewer_id", "credential_id", "token_sha256"])
+def test_a_trailing_newline_is_not_part_of_an_identifier(field):
+    """``$`` also matches before a final newline: ``"alice\\n"`` passed ``^...$`` with
+    ``match`` (the same defect reached a double refund through record ids)."""
+    reg, _ = ReviewerRegistry().add("alice", "Alice", "HUMAN_REVIEWER", 1)
+    doc = reg.to_json()
+    doc["reviewers"][0][field] += "\n"
+    with pytest.raises(ReviewerRegistryError):
+        ReviewerRegistry.from_json(doc)
+
+
 def test_ids_and_credentials_are_unique():
     reg, _ = registry(("alice", "HUMAN_REVIEWER", 1), ("bob", "HUMAN_REVIEWER", 1))
     doc = reg.to_json()
