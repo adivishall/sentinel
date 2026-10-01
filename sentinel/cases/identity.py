@@ -37,9 +37,10 @@ RESERVED_IDS = frozenset(
     {"sentinel", "system", "automation", "auto", "agent", "ai", "model", "llm", "bot", "human"}
 )
 MODEL_NAMES = frozenset({"claude", "anthropic", "gpt", "openai", "gemini", "llama", "copilot"})
-_ID = re.compile(r"^[a-z][a-z0-9._-]{1,39}$")
-_HEX64 = re.compile(r"^[0-9a-f]{64}$")
-_CREDENTIAL_ID = re.compile(r"^cred-[0-9a-f]{12}$")
+# Applied with ``fullmatch``: ``$`` alone also matches before a final newline.
+_ID = re.compile(r"[a-z][a-z0-9._-]{1,39}")
+_HEX64 = re.compile(r"[0-9a-f]{64}")
+_CREDENTIAL_ID = re.compile(r"cred-[0-9a-f]{12}")
 
 
 class ReviewerRegistryError(ValueError):
@@ -196,7 +197,7 @@ class ReviewerRegistry:
                     )
                 )
                 digest = e["token_sha256"]
-                if not _HEX64.match(digest):
+                if not _HEX64.fullmatch(digest):
                     raise ReviewerRegistryError("token_sha256 must be 64 hex characters")
                 if r.credential_id != credential_id(digest):
                     # derived from the digest: it cannot be blank, shared or the token itself
@@ -223,12 +224,12 @@ class ReviewerRegistry:
 
 
 def _validate(r: Reviewer) -> Reviewer:
-    if not _ID.match(r.reviewer_id) or reserved(r.reviewer_id):
+    if not _ID.fullmatch(r.reviewer_id) or reserved(r.reviewer_id):
         raise ReviewerRegistryError(
             f"reviewer id {r.reviewer_id!r} must be a lowercase identifier that names neither "
             "the system nor a model"
         )
-    if not _CREDENTIAL_ID.match(r.credential_id):
+    if not _CREDENTIAL_ID.fullmatch(r.credential_id):
         raise ReviewerRegistryError("credential_id must be cred- and 12 hex characters")
     if not r.name or len(r.name) > 80 or any(ord(c) < 32 for c in r.name):
         raise ReviewerRegistryError("name must be 1-80 printable characters")

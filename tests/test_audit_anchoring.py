@@ -520,3 +520,17 @@ def test_r12_a_relabelled_sequence_breaks_the_chain(setup):
     a = anchoring(_records(log), anchor, trust)
     assert a.for_event(0) == ANCHORED  # event #0 is genuinely covered
     assert a.unanchored_events == 2  # the relabelled one is not "covered" by its claim
+
+
+@pytest.mark.parametrize("field", ["head_hash", "chain_id"])
+def test_the_anchor_refuses_a_digest_with_a_trailing_newline(tmp_path, field):
+    """``$`` also matches before a final newline; digests are full matches."""
+    log = tmp_path / "audit.jsonl"
+    _chain(log, 3)
+    private, _ = _key()
+    stmt = sign_checkpoint_statement(
+        private, signer="audit-notary", records=_records(log), previous=None, issued_at=NOW
+    )
+    stmt[field] += "\n"
+    with pytest.raises(AnchorError, match="SHA-256"):
+        DirectoryAnchor(tmp_path / "anchor").publish(stmt)

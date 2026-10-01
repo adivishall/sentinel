@@ -66,7 +66,7 @@ ACTIVATION_FIELDS = (
     "effective_from",
     "issued_at",
 )
-_HEX64 = re.compile(r"^[0-9a-f]{64}$")
+_HEX64 = re.compile(r"[0-9a-f]{64}")  # fullmatch: "$" alone also matches before a final "\n"
 
 
 class ReleaseStatus(StrEnum):
@@ -202,7 +202,7 @@ def _signer_check(
     v = d["version"]
     if not isinstance(v, int) or isinstance(v, bool) or v < 1:
         return "INVALID", "version is not a positive integer"
-    if not _HEX64.match(d["digest"]):
+    if not _HEX64.fullmatch(d["digest"]):
         return "INVALID", "digest is not a full SHA-256"
     try:
         header = canonical_json({k: d[k] for k in fields})
