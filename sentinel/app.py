@@ -1708,7 +1708,13 @@ class SentinelApp:
     def audit_anchoring(self) -> Anchoring:
         """The chain checked against every signed checkpoint the anchor holds
         (``sentinel.audit.anchor``): anchored | not_anchored | anchor_mismatch."""
-        return anchoring(self.runtime.audit.backend.read_all(), self.anchor, self.runtime.trust)
+        return anchoring(
+            self.runtime.audit.backend.read_all(),
+            self.anchor,
+            self.runtime.trust,
+            now=utc_now(),
+            require_publication=True,  # this application always records the publication
+        )
 
     def publish_checkpoint(self, private: Any, signer: str) -> dict[str, Any]:
         """Sign the chain's head with an audit-checkpoint key and publish it to the
@@ -1717,6 +1723,14 @@ class SentinelApp:
         discarded; a server never holds it."""
         if self.anchor is None:
             raise ValueError("no audit anchor configured (SENTINEL_AUDIT_ANCHOR / --anchor)")
+        current = self.audit_anchoring()
+        if current.status == "anchor_mismatch":
+            # a checkpoint over a chain that disagrees with its anchor would bless the
+            # disagreement: find out why first
+            raise ValueError(
+                "the chain and its anchor disagree; refusing to checkpoint: "
+                + "; ".join(current.reasons)
+            )
         held = self.anchor.all()
         previous = held[-1] if held and "_unreadable" not in held[-1] else None
         stmt = sign_checkpoint_statement(
@@ -1859,9 +1873,10 @@ class SentinelApp:
                 "keys": self.runtime.trust.summary(),
                 "demo_issuer": self.issuer.key.key_id if self.issuer is not None else None,
             },
+            # anchoring re-reads the whole chain and the anchor: GET /v1/audit/verify runs it
             "audit": {
                 **to_dict(self.verify_audit()),
-                "anchoring": self.audit_anchoring().to_dict(),
+                "anchor": self.anchor.name if self.anchor is not None else None,
             },
             "metrics": METRICS.snapshot(),
             # the file name only: where it lives on disk is not the API's business

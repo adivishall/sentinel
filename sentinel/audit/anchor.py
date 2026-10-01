@@ -11,7 +11,9 @@ with Ed25519 by a key whose trust-store purpose is ``audit-checkpoint`` (a facts
 policy-release key is refused). The verifier holds only the public key, so verifying
 cannot forge (the HMAC checkpoint could). Checkpoints link to each other, so a dropped or
 substituted one is a visible gap, and each publication is itself recorded in the chain
-(``CHECKPOINT_PUBLISHED``), so deleting the newest anchored checkpoint is visible too.
+(``CHECKPOINT_PUBLISHED``), so deleting the newest anchored checkpoint is visible -- unless
+the same party can also rewrite the chain's unanchored tail, where that record lies; only
+an anchor nobody can delete from (WORM, a transparency log) closes that.
 
 What ``anchored`` proves for an event: a checkpoint signed by a trusted audit-checkpoint
 key, held by the anchor, covers it, and the chain from genesis to that checkpoint
@@ -88,7 +90,14 @@ def sign_checkpoint_statement(
     the head is recomputed, not read from the last record's stored field."""
     if not records:
         raise AnchorError("an empty chain has nothing to checkpoint")
-    head = _recomputed_heads(records)[-1]
+    heads = _recomputed_heads(records)
+    if heads[-1] is None:
+        broken = heads.index(None)
+        raise AnchorError(
+            f"the chain does not verify from event #{broken}: refusing to sign a checkpoint "
+            "over it (run `sentinel audit verify`)"
+        )
+    head = heads[-1]
     header = {
         "format": FORMAT,
         "signer": signer,
@@ -104,9 +113,8 @@ def sign_checkpoint_statement(
     return {**header, "signature": crypto.b64e(sig)}
 
 
-def verify_statement(stmt: object, trust: TrustStore) -> tuple[bool, str]:
-    """The statement's own validity: shape, a trusted audit-checkpoint key, signature,
-    revocation, the key's window. (Whether the chain agrees is ``anchoring``.)"""
+def _shape(stmt: object) -> tuple[bool, str]:
+    """Shape only: fields, types, digests, timestamp format."""
     if not isinstance(stmt, dict):
         return False, "not a JSON object"
     want = set(HEADER_FIELDS) | {"signature"}
@@ -130,10 +138,29 @@ def verify_statement(stmt: object, trust: TrustStore) -> tuple[bool, str]:
     if not _HEX64.match(stmt["head_hash"]) or not _HEX64.match(stmt["chain_id"]):
         return False, "head_hash / chain_id is not a SHA-256"
     try:
-        header = canonical_json({k: stmt[k] for k in HEADER_FIELDS})
-        issued = parse_ts(stmt["issued_at"], "issued_at")
+        canonical_json({k: stmt[k] for k in HEADER_FIELDS})
+        parse_ts(stmt["issued_at"], "issued_at")
     except (CanonicalError, ValueError) as e:
         return False, f"malformed: {e}"
+    return True, ""
+
+
+RETIRED = "retired"  # signed by a key revoked since: proves nothing, but not tampering
+
+
+def verify_statement(
+    stmt: object, trust: TrustStore, now: datetime | None = None
+) -> tuple[bool | str, str]:
+    """The statement's own validity: shape, a trusted audit-checkpoint key, signature,
+    the key's window, not issued in the future. Returns (True, why), (False, why), or
+    (RETIRED, why) for a genuine statement whose key has been revoked since -- it no
+    longer covers anything, and it is not evidence of tampering either."""
+    ok, why = _shape(stmt)
+    if not ok:
+        return False, why
+    assert isinstance(stmt, dict)
+    header = canonical_json({k: stmt[k] for k in HEADER_FIELDS})
+    issued = parse_ts(stmt["issued_at"], "issued_at")
     key = trust.get(stmt["key_id"])
     if key is None:
         return False, f"unknown signer {stmt['key_id']} (not in the trust store)"
@@ -147,10 +174,15 @@ def verify_statement(stmt: object, trust: TrustStore) -> tuple[bool, str]:
         return False, f"malformed signature: {e}"
     if not crypto.verify(key.public_key, sig, DOMAIN + header):
         return False, "the signature does not verify"
-    if key.revoked:
-        return False, f"signed by {key.key_id}, revoked ({key.revocation_reason or 'no reason'})"
     if issued < key.not_before or (key.not_after is not None and issued > key.not_after):
         return False, "signed outside the key's validity window"
+    if now is not None and issued.timestamp() > now.timestamp() + 300:
+        return False, "issued in the future"
+    if key.revoked:
+        return RETIRED, (
+            f"signed by {key.key_id}, revoked since ({key.revocation_reason or 'no reason'}): "
+            "no longer counts; re-anchor with a current key"
+        )
     return True, f"signed by {stmt['signer']} ({key.key_id})"
 
 
@@ -169,6 +201,11 @@ class Anchor(Protocol):
 
 
 def _check_append(existing: list[dict[str, Any]], stmt: dict[str, Any]) -> None:
+    ok, why = _shape(stmt)
+    if not ok:
+        raise AnchorError(f"not a checkpoint statement: {why}")
+    if existing and "_unreadable" in existing[-1]:
+        raise AnchorError("the anchor's latest entry is unreadable; repair the anchor first")
     last = existing[-1] if existing else None
     want = (last["checkpoint_sequence"] + 1) if last else 1
     if stmt.get("checkpoint_sequence") != want:
@@ -210,7 +247,9 @@ class DirectoryAnchor:
         for f in sorted(self.path.glob("cp-*.json")):
             try:
                 out.append(strict_loads(f.read_bytes()))
-            except (OSError, CanonicalError) as e:
+            except OSError as e:  # the reason, never the path on disk
+                out.append({"_unreadable": f"{f.name}: {e.strerror or type(e).__name__}"})
+            except CanonicalError as e:
                 out.append({"_unreadable": f"{f.name}: {e}"})
         return out
 
@@ -239,13 +278,13 @@ class JsonlAnchor:
         if not self.path.exists():
             return []
         out = []
-        for i, line in enumerate(self.path.read_text(encoding="utf-8").splitlines()):
-            if not line.strip():
+        for i, raw in enumerate(self.path.read_bytes().splitlines()):
+            if not raw.strip():
                 continue
             try:
-                out.append(strict_loads(line))
-            except CanonicalError as e:
-                out.append({"_unreadable": f"line {i + 1}: {e}"})
+                out.append(strict_loads(raw))
+            except (CanonicalError, UnicodeDecodeError) as e:
+                out.append({"_unreadable": f"line {i + 1}: {type(e).__name__}"})
         return out
 
 
@@ -263,7 +302,7 @@ def _recomputed_heads(records: list[dict[str, Any]]) -> list[str | None]:
     out: list[str | None] = []
     prev = GENESIS
     broken = False
-    for r in records:
+    for i, r in enumerate(records):
         if broken:
             out.append(None)
             continue
@@ -274,7 +313,7 @@ def _recomputed_heads(records: list[dict[str, Any]]) -> list[str | None]:
             broken = True
             out.append(None)
             continue
-        if ev.previous_hash != prev or ev.event_hash != h:
+        if ev.sequence != i or ev.previous_hash != prev or ev.event_hash != h:
             broken = True  # the stored chain diverges here: nothing after it is the chain
             out.append(None)
             continue
@@ -291,10 +330,9 @@ class Anchoring:
     length: int
     latest: dict[str, Any] | None = None
     reasons: tuple[str, ...] = ()
-
-    @property
-    def unanchored_events(self) -> int:
-        return max(0, self.length - self.covered_length)
+    # events after the covered prefix, not counting the record of publishing a checkpoint
+    unanchored_events: int = 0
+    notes: tuple[str, ...] = ()  # e.g. checkpoints signed by a key revoked since
 
     def for_event(self, sequence: int | None) -> str:
         """The status of one event (a decision's)."""
@@ -313,35 +351,51 @@ class Anchoring:
             "length": self.length,
             "latest_checkpoint": self.latest,
             "reasons": list(self.reasons),
+            "notes": list(self.notes),
         }
 
 
-def anchoring(records: list[dict[str, Any]], anchor: Anchor | None, trust: TrustStore) -> Anchoring:
-    """Check the chain against every checkpoint the anchor holds."""
+def _is_publication(r: dict[str, Any]) -> bool:
+    return r.get("kind") == "system" and r.get("action") == "CHECKPOINT_PUBLISHED"
+
+
+def anchoring(
+    records: list[dict[str, Any]],
+    anchor: Anchor | None,
+    trust: TrustStore,
+    *,
+    now: datetime | None = None,
+    require_publication: bool = False,
+) -> Anchoring:
+    """Check the chain against every checkpoint the anchor holds.
+
+    ``require_publication``: the latest checkpoint's publication must be recorded in the
+    chain (the application always records it), so removing that record is a mismatch."""
     n = len(records)
     if anchor is None:
-        return Anchoring(NOT_ANCHORED, None, 0, n, None, ("no anchor configured",))
+        return Anchoring(NOT_ANCHORED, None, 0, n, None, ("no anchor configured",), n)
     stmts = anchor.all()
-    published = [
-        r
-        for r in records
-        if r.get("kind") == "system" and r.get("action") == "CHECKPOINT_PUBLISHED"
-    ]
+    published = [r for r in records if _is_publication(r)]
     if not stmts and not published:
-        return Anchoring(NOT_ANCHORED, anchor.name, 0, n, None, ("the anchor holds no checkpoint",))
+        return Anchoring(
+            NOT_ANCHORED, anchor.name, 0, n, None, ("the anchor holds no checkpoint",), n
+        )
     heads = _recomputed_heads(records)
     cid = chain_id(records)
     reasons: list[str] = []
+    notes: list[str] = []
     covered = 0
+    latest: dict[str, Any] | None = None
     prev: dict[str, Any] | None = None
     for i, s in enumerate(stmts):
         if "_unreadable" in s:
             reasons.append(f"checkpoint unreadable ({s['_unreadable']})")
             break
-        ok, why = verify_statement(s, trust)
-        if not ok:
+        ok, why = verify_statement(s, trust, now)
+        if ok is False:
             reasons.append(f"checkpoint {s.get('checkpoint_sequence', i + 1)}: {why}")
             break
+        # continuity holds for every statement, retired or not: the anchor is one log
         if s["checkpoint_sequence"] != i + 1:
             reasons.append(f"checkpoint {i + 1} missing (found {s['checkpoint_sequence']})")
             break
@@ -356,28 +410,61 @@ def anchoring(records: list[dict[str, Any]], anchor: Anchor | None, trust: Trust
                 f"checkpoint {i + 1} attests {s['length']} events; the chain has {n} (truncated)"
             )
             break
+        prev = s
+        if ok == RETIRED:
+            notes.append(f"checkpoint {i + 1}: {why}")
+            continue
         if heads[s["length"] - 1] != s["head_hash"]:
             reasons.append(
                 f"checkpoint {i + 1}: event #{s['length'] - 1} does not recompute to the signed "
                 "head (history before it was rewritten)"
             )
             break
-        covered, prev = s["length"], s
-    held = {s.get("checkpoint_sequence") for s in stmts if "_unreadable" not in s}
+        # every checkpoint attests the whole prefix from genesis: the latest valid one is
+        # the coverage
+        covered, latest = s["length"], s
+    held = {
+        checkpoint_digest(s): s.get("checkpoint_sequence")
+        for s in stmts
+        if "_unreadable" not in s and _shape(s)[0]
+    }
+    recorded = {(r.get("detail") or {}).get("digest") for r in published}
     for r in published:
-        seq = (r.get("detail") or {}).get("checkpoint_sequence")
-        if seq not in held:
+        d = r.get("detail") or {}
+        if d.get("digest") not in held:
             reasons.append(
-                f"the chain records publishing checkpoint {seq}, which the anchor does not hold"
+                f"the chain records publishing checkpoint {d.get('checkpoint_sequence')}, "
+                "which the anchor does not hold"
             )
-    latest = (
+    if require_publication and latest is not None and checkpoint_digest(latest) not in recorded:
+        reasons.append(
+            f"the chain does not record publishing checkpoint {latest['checkpoint_sequence']} "
+            "(its publication record is missing)"
+        )
+    unanchored = sum(
+        1
+        for r in records[covered:]
+        if not (_is_publication(r) and (r.get("detail") or {}).get("digest") in held)
+    )
+    summary = (
         {
-            k: prev[k]
+            k: latest[k]
             for k in ("checkpoint_sequence", "length", "head_hash", "issued_at", "signer", "key_id")
         }
-        if prev
+        if latest
         else None
     )
     if reasons:
-        return Anchoring(MISMATCH, anchor.name, covered, n, latest, tuple(reasons))
-    return Anchoring(ANCHORED if covered else NOT_ANCHORED, anchor.name, covered, n, latest, ())
+        return Anchoring(
+            MISMATCH, anchor.name, covered, n, summary, tuple(reasons), unanchored, tuple(notes)
+        )
+    return Anchoring(
+        ANCHORED if covered else NOT_ANCHORED,
+        anchor.name,
+        covered,
+        n,
+        summary,
+        (),
+        unanchored,
+        tuple(notes),
+    )
