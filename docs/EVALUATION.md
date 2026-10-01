@@ -27,7 +27,7 @@ hostile document.
 | **AI security** | synthetic, offline simulated agent (not a live LLM) | an unauthorised consequential capability actually executed | main corpus 150 attacks / 15 classes; held-out 20; other surfaces 30; KYB 47 applications (24 hostile) | hand-authored corpora (same author as the gateway) | main corpus: simulated agent 90.0% → Sentinel **0.0%**; held-out, surfaces, KYB: 0.0%; false positives 0.0% (10 deserved refunds) | [§A–F](#a-ai-security----development-corpus-resultssecurityjson) |
 | **Decision integrity** | structural (0 by construction; a regression check) | attacker text or model output loosening a protected decision | 170 attacks (main 150 + held-out 20); 360 model-recommendation replays (60 main-corpus attacks × 6 recommendations) | the security corpora | **0.0%** (no controls: 83.5%) | [§H](#h-decision-integrity-resultsintegrityjson) |
 | **Financial risk** | synthetic benchmark (empirical) | precision / recall / FPR against the generator's scenario labels | seed 42: 3,183 transactions, 157 accounts; two held-out seeds of similar size | dev 42 (point values tuned on it); held-out 7, 2024 | transactions P 86.7% R 67.2% FPR 0.19%; accounts P 90.0% R 90.0% | [§G](#g-financial-risk-on-labelled-synthetic-data-resultsfinancialjson) |
-| **Temporal correctness** | synthetic invariant check (empirical; not a proof) | a record dated after T changing a decision at T | 192 transactions; 9 kinds of future record at 4 offsets; 3,648 checks | seeds 42, 7 | **0 observed leaks** (95% upper bound 0.082% per check, 1.55% per sampled transaction) | [§I](#i-temporal-correctness-resultstemporaljson) |
+| **Temporal correctness** | synthetic invariant check (empirical; not a proof) | a record dated after T changing a decision at T | 497 transactions; 9 kinds of future record at 4 offsets; 9,443 checks | seeds 42, 7, 11, 23 | **0 observed leaks** (95% upper bound 0.032% per check, 0.60% per sampled transaction) | [§I](#i-temporal-correctness-resultstemporaljson) |
 | **Claim classifier** | synthetic, same author; defence in depth, not the foundation | legitimate claims read as their type; the rest held for a human | 117 phrasings; 21 held-out unusual phrasings | hand-authored | held-out: first (blind) run 7/21; 17/21 after the patterns were extended by an author who had seen the misses; FN 4/56, FP 0/28 | [§L](#l-claim-classifier-resultsclaimsjson) |
 | **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.2396 ms | [PERFORMANCE.md](PERFORMANCE.md) |
 | **Live LLM** | live-model evaluation | the same suites against a real model | -- | `claude-opus-5-5` | **NOT RUN** -- no live number is quoted anywhere | [§K](#k-model--provider-evaluation-resultsmodelsjson) |
@@ -486,17 +486,17 @@ readable false claim is denied, and nothing executes.
 ## I. Temporal correctness (`results/temporal.json`)
 
 The invariant: **data available after T must never influence a decision made
-at T.** Two generator worlds (seeds 42, 7; 5,191 transactions), a stratified sample
-of 192 transactions (half fraud-labelled, half legitimate, spread over the timeline).
+at T.** Two generator worlds (seeds 42, 7, 11, 23; 10,342 transactions), a stratified sample
+of 497 transactions (half fraud-labelled, half legitimate, spread over the timeline).
 Every sampled transaction is re-scored with records truncated to its own
 timestamp, then again with one kind of future record appended at every offset
-(1, 7, 30, 90 days later) -- 9 kinds, 1,728 perturbation runs over 19,392 future
+(1, 7, 30, 90 days later) -- 9 kinds, 4,473 perturbation runs over 50,197 future
 records -- and each time both the transaction assessment and the account
-monitor at T1 must be byte-identical. **0 observed leaks in 3,648 checks
+monitor at T1 must be byte-identical. **0 observed leaks in 9,443 checks
 across the tested synthetic benchmark.** Rates are exact counts, not rounded; with zero leaks the one-sided
-95% (Clopper-Pearson) upper bound on the per-decision leak rate is 0.082%.
+95% (Clopper-Pearson) upper bound on the per-decision leak rate is 0.032%.
 Comparisons from one sample are correlated, so the conservative reading is
-per sample: 0 of 192, upper bound 1.55%.
+per sample: 0 of 497, upper bound 0.60%.
 
 The 2.2.0 extension added `account_status`, `payout_change` and
 `security_event`, and its first run found two leaks: a freeze after T1 and a
@@ -517,22 +517,22 @@ would not be visible as a change at all.
 
 | Check | Changed / tested | Rate (exact) | kind |
 |---|---:|---:|---|
-| truncation: a transaction's risk assessment differs when records after it are removed (seeds 42, 7, 5,191 transactions) | 0 / 192 | 0.000000 | tested invariant |
-| perturbation: records added 1, 7, 30, 90 days after T1 change the T1 transaction assessment | 0 / 1,728 | 0.000000 | tested invariant |
-| perturbation: the same future records change the T1 account-monitor assessment | 0 / 1,728 | 0.000000 | tested invariant |
-| **every check above** | **0 / 3,648** | **0.000000** | 95% upper bound 0.082% |
+| truncation: a transaction's risk assessment differs when records after it are removed (seeds 42, 7, 11, 23, 10,342 transactions) | 0 / 497 | 0.000000 | tested invariant |
+| perturbation: records added 1, 7, 30, 90 days after T1 change the T1 transaction assessment | 0 / 4,473 | 0.000000 | tested invariant |
+| perturbation: the same future records change the T1 account-monitor assessment | 0 / 4,473 | 0.000000 | tested invariant |
+| **every check above** | **0 / 9,443** | **0.000000** | 95% upper bound 0.032% |
 
 | Future record kind | What is appended (at every offset) | records | transaction changed | monitoring changed | leaks / tested |
 |---|---|---:|---:|---:|---:|
-| `dispute` | a dispute filed on the account's latest earlier purchase | 768 | 0 / 192 | 0 / 192 | 0 / 384 |
-| `device_burst` | a new device and an eight-purchase burst abroad on it | 6,912 | 0 / 192 | 0 / 192 | 0 / 384 |
-| `merchant` | a new flagged high-risk merchant and five purchases there | 4,608 | 0 / 192 | 0 / 192 | 0 / 384 |
-| `graph` | a new account on the same payout instrument and a circular transfer through it | 2,304 | 0 / 192 | 0 / 192 | 0 / 384 |
-| `session` | a login with credential and payout changes that failed MFA | 768 | 0 / 192 | 0 / 192 | 0 / 384 |
-| `account_status` | the account frozen after T1 (a current-state field) | 192 | 0 / 192 | 0 / 192 | 0 / 384 |
-| `payout_change` | new bank accounts added after T1 and the payout moved to one of them | 768 | 0 / 192 | 0 / 192 | 0 / 384 |
-| `risk_assessment` | stored HIGH risk assessments for the account, the merchant and a future transaction | 2,304 | 0 / 192 | 0 / 192 | 0 / 384 |
-| `security_event` | stored CRITICAL AI-security events dated after T1 | 768 | 0 / 192 | 0 / 192 | 0 / 384 |
+| `dispute` | a dispute filed on the account's latest earlier purchase | 1,988 | 0 / 497 | 0 / 497 | 0 / 994 |
+| `device_burst` | a new device and an eight-purchase burst abroad on it | 17,892 | 0 / 497 | 0 / 497 | 0 / 994 |
+| `merchant` | a new flagged high-risk merchant and five purchases there | 11,928 | 0 / 497 | 0 / 497 | 0 / 994 |
+| `graph` | a new account on the same payout instrument and a circular transfer through it | 5,964 | 0 / 497 | 0 / 497 | 0 / 994 |
+| `session` | a login with credential and payout changes that failed MFA | 1,988 | 0 / 497 | 0 / 497 | 0 / 994 |
+| `account_status` | the account frozen after T1 (a current-state field) | 497 | 0 / 497 | 0 / 497 | 0 / 994 |
+| `payout_change` | new bank accounts added after T1 and the payout moved to one of them | 1,988 | 0 / 497 | 0 / 497 | 0 / 994 |
+| `risk_assessment` | stored HIGH risk assessments for the account, the merchant and a future transaction | 5,964 | 0 / 497 | 0 / 497 | 0 / 994 |
+| `security_event` | stored CRITICAL AI-security events dated after T1 | 1,988 | 0 / 497 | 0 / 497 | 0 / 994 |
 
 Expected: all counts 0: a decision at T1 reads only records at or before T1. `tests/test_temporal_leakage.py` and
 `tests/test_entity_pointintime.py` pin the same property per feature (baselines,
@@ -540,7 +540,7 @@ device knowledge, entity profiles, graph edges, monitoring windows). This is a
 deterministic check over the generator's world: "0 observed temporal leaks
 across the tested synthetic benchmark", not a proof over every record.
 
-> **Methodology** (`results/temporal.json`): structural (synthetic data). *Dataset:* two seeded synthetic worlds (seeds 42 and 7), a stratified transaction sample (half fraud-labelled). *Method:* truncation equivalence, then nine kinds of future record at +1/7/30/90 days, one kind at a time; the transaction assessment and the account monitor at T1 must be byte-identical; exact counts with a one-sided 95% Clopper-Pearson bound when zero. *Limitations:* a deterministic check over two generator worlds, not a proof over every record; comparisons from one sample are correlated (read the per-sample bound); a current-state field with no recorded start (legacy account status) cannot be point-in-time. *Sample:* comparisons=1728, decisions_tested=3648, dataset_transactions=5191, dataset_sample=192.
+> **Methodology** (`results/temporal.json`): structural (synthetic data). *Dataset:* two seeded synthetic worlds (seeds 42 and 7), a stratified transaction sample (half fraud-labelled). *Method:* truncation equivalence, then nine kinds of future record at +1/7/30/90 days, one kind at a time; the transaction assessment and the account monitor at T1 must be byte-identical; exact counts with a one-sided 95% Clopper-Pearson bound when zero. *Limitations:* a deterministic check over two generator worlds, not a proof over every record; comparisons from one sample are correlated (read the per-sample bound); a current-state field with no recorded start (legacy account status) cannot be point-in-time. *Sample:* comparisons=4473, decisions_tested=9443, dataset_transactions=10342, dataset_sample=497.
 
 ## J. Performance (`results/performance.json`)
 
@@ -631,6 +631,18 @@ extended against: a fit, reported apart and excluded from the error rates.
 | Misclassification | 0.0% | messages read as a type other than the labelled one |
 | Adversarial wrong type | 0.0% | attack prose read as a claim it does not assert |
 | Abstain rate | 22.2% | all messages held for a human (100% of the ambiguous and contradictory sets by design) |
+
+**A frozen set (2026-10-01).** 40 further phrasings (Hinglish,
+long-winded, terse, indirect, plus ambiguous messages and non-claims) were
+written, labelled and committed *before* the classifier first ran on them, and
+are never to be used to change it. Their author has seen the classifier, so
+the set is **partially informed, not blind**. First run: **24 / 40**
+correct; 14 of 28 legitimate claims not
+recognised (0 misread as another type -- every miss abstained, i.e. a
+human reads it); 0 of 12 ambiguous or non-claim messages
+read as a claim. That is the estimate to quote for unfamiliar wording: about
+half of honest claims phrased in ways the patterns have not seen go to a
+human, and none is read as the wrong claim.
 
 The composer's guarantee does not depend on any of this: whatever the
 classifier reads, a consequential capability executes only when the ledger
