@@ -36,6 +36,7 @@ def test_the_table_names_every_invariant():
         "INV-POLICY-1",
         "INV-REVIEW-1",
         "INV-REVIEW-2",
+        "INV-REVIEW-3",
         "INV-CAP-1",
         "INV-TEMP-1",
         "INV-REPLAY-1",
@@ -43,6 +44,7 @@ def test_the_table_names_every_invariant():
         "INV-AUDIT-2",
         "INV-API-1",
         "INV-DEMO-1",
+        "INV-DEPLOY-1",
     ):
         assert inv in names, inv
 

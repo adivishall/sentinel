@@ -11,8 +11,8 @@ _STATIC: dict[str, dict[str, str]] = {
     "redteam": {
         "kind": "synthetic (seeded black-box search against the offline simulated agent); the bypass count is structural, detector evasion is empirical",
         "dataset": "every development-corpus attack as a seed (contradicted objective) and its over-limit variants with a supporting ledger (over-limit objective), plus a structured-channel campaign through the API handlers",
-        "method": "per seed, a hill-climbing attacker applies seeded mutation operators and keeps the variant scoring best on what the API returns (executed, policy ALLOW, lower detector rating); four metrics are reported separately",
-        "limitations": "the operators and the detector share an author; the victim agent is the offline simulator (it always complies), so the search pressure is on the deterministic layers, not a real model's judgement; a hand-written operator set is not an exhaustive attacker",
+        "method": "per seed, the unmutated text is submitted first (the baseline), then a hill-climbing attacker submits distinct mutated variants (no repeats, no unchanged text) and keeps the one scoring best on what the API returns (executed, policy ALLOW, lower detector rating); detector evasion is counted on seeds the detector caught unmutated; each operator's own effect is measured by applying it once to those seeds; four metrics are reported separately",
+        "limitations": "text reaches only the claim type and the detector's rating -- the amount, ledger and capability come from signed facts the search cannot change -- so the search pressures the detector, not the layers that decide, and its zero bypasses are structural (the facts are attacked by the structured campaign instead); the operators and the detector share an author; the victim agent is the offline simulator (it always complies), not a real model's judgement; a hand-written operator set is not an exhaustive attacker",
     },
     "security": {
         "kind": "synthetic (hand-authored corpus, offline simulated agent); guarded attack success is structural",
