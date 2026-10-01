@@ -259,8 +259,8 @@ can be trusted (roadmap issues #11–#20).
 ### Live provider and model benchmark (#19, #16)
 - **The current Claude API** (`anthropic==1.11.0`, verified on PyPI; the old 0.40.0 pin
   predated typed `output_config`). Requests send `max_tokens` sized for thinking as well as
-  the reply (agents ask for 4,096), `output_config.effort`, no sampling parameters and no
-  thinking budget. Every completion records requested and served model, SDK version,
+  the reply (agents ask for 4,096; current models may think on any request),
+  `output_config.effort`, no sampling parameters and no thinking budget. Every completion records requested and served model, SDK version,
   request id, stop reason (and a refusal's category), latency, tokens including cache
   tokens, and the settings sent.
 - **Only `end_turn` is parsed.** A truncated reply (even one that looks like complete
@@ -276,6 +276,15 @@ can be trusted (roadmap issues #11–#20).
   repository: the offline simulator ran; `claude-opus-5-5/effort-low` and
   `claude-sonnet-5-5/effort-low` are NOT RUN (no key). `scripts/live_check.py` records
   `results/live_check.json` -- `not_run` here.
+- **Adversarial review of this branch.** Every non-`end_turn` ending (19 kinds, 6 agent
+  specs) fell back safely; no fallback is a denial or consequential; the request shape is
+  right for both configured models; offline numbers are unchanged. Fixed, with tests: a
+  row with no controls measured reported FP 0% (rates over nothing are now `None`, a row
+  with failed cases is `partial`, and §K shows attacks / controls / errors); the
+  "no live number" wording was fixed text (it now follows the live rows); provenance did
+  not cover the rendered prompt, every agent-spec field or the code version (it does);
+  `SENTINEL_MODEL` + `SENTINEL_EFFORT` could skip the operator's configuration; stop
+  reasons counted calls of failed cases; error rows dropped their spend.
 
 ### Security — asymmetric, anchored audit checkpoints (#17)
 - `sentinel.audit-checkpoint/1`: the chain's head (recomputed from genesis), length, chain

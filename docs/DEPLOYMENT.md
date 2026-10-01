@@ -54,12 +54,12 @@ make live-check                       # one call; writes results/live_check.json
 SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models   # one row per configuration
 ```
 
-Agents call the current Messages API: `max_tokens` 4,096 (current models think
-on every request and thinking counts toward it), `output_config.effort`
+Agents call the current Messages API: `max_tokens` 4,096 (current models may
+think on any request, and thinking counts toward it), `output_config.effort`
 (`SENTINEL_EFFORT`, default `low`), no sampling parameters, a 60-second timeout
 and the SDK's two retries. Only an `end_turn` answer is parsed: a truncated
 reply, a refusal, an empty reply or any other stop becomes the agent's
-fallback recommendation (escalate / review) with a label saying which --
+fallback recommendation (escalate / manual_review / review) with a label saying which --
 never a denial and never an approval. The benchmark's configurations are in
 `sentinel/evaluation/models.py` (`CONFIGS`); `SENTINEL_MODEL` adds one.
 

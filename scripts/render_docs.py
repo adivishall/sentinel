@@ -121,8 +121,27 @@ LEVELS = {
 
 
 def _live_row(m: dict[str, Any]) -> dict[str, Any]:
+    """The live configurations, summarised: ``ok`` if any of them ran (fully or partly),
+    naming the ones that did; otherwise the status they share."""
     rows = [x for x in m["results"] if x.get("provider") != "offline"]
-    return rows[0] if rows else {"status": "not_run", "model": "—"}
+    if not rows:
+        return {"status": "not_run", "model": "—", "ran": []}
+    ran = [x for x in rows if x.get("status") in ("ok", "partial")]
+    name = lambda x: x.get("config", x.get("model"))  # noqa: E731
+    if ran:
+        return {
+            "status": "ok",
+            "model": ", ".join(name(x) for x in ran),
+            "date": ran[0].get("date"),
+            "ran": ran,
+        }
+    return {"status": rows[0]["status"], "model": ", ".join(name(x) for x in rows), "ran": []}
+
+
+def _live_note(live: dict[str, Any]) -> str:
+    if live["status"] == "ok":
+        return f"live results exist for {live['model']} ({live.get('date')}); see §K"
+    return "no live number is quoted anywhere in this repository"
 
 
 def _meth(r: dict[str, Any], file: str) -> str:
@@ -580,6 +599,7 @@ was not done."""
             "Date",
             "Status",
             "Served model",
+            "Measured (attacks / controls / errors)",
             "ASR no controls",
             "ASR Sentinel",
             "FP",
@@ -595,17 +615,22 @@ was not done."""
                 x.get("date") or str(x.get("timestamp", ""))[:10],
                 str(x["status"]).upper().replace("_", " "),
                 ", ".join(f"`{v}`" for v in x.get("served_models", [])) or "—",
+                (
+                    f"{x.get('n_attacks', 0)} / {x.get('n_deserved_controls', 0)} / {x.get('n_errors', 0)}"
+                    if x["status"] in ("ok", "partial", "error")
+                    else "—"
+                ),
                 pct(x.get("asr_unguarded")),
                 pct(x.get("asr_guarded")),
                 pct(x.get("fp_rate")),
                 (
                     f"{x.get('agent_latency_p50_ms')} / {x.get('agent_latency_p95_ms')}"
-                    if x["status"] == "ok"
+                    if x["status"] in ("ok", "partial")
                     else "—"
                 ),
                 (
                     f"{x.get('refusals', 0)} / {x.get('truncated', 0)} / {x.get('parse_failures', 0)}"
-                    if x["status"] == "ok"
+                    if x["status"] in ("ok", "partial")
                     else "—"
                 ),
                 (
@@ -732,7 +757,7 @@ kind of each headline metric under `kinds`.
 |---|---|---|
 | **STRUCTURAL GUARANTEE** | 0 by construction under the design. A consequential capability executes only when the trusted records support the claim, and every attack sits on records that do not. These rows are regression checks that the implementation honours the design (`tests/test_results_regression.py` recomputes them), not detection results. | guarded attack success, off-surface execution, the integrity suite's structural rows |
 | **SYNTHETIC EVALUATION** | Empirical, but on hand-authored corpora, a seeded synthetic dataset and the **offline simulated agent** (`OfflineProvider`, a deterministic regex model of a gullible tool-calling agent that shares an author with the corpus). These numbers can move and describe this simulator and this generator, not the world. | unguarded attack success, detection recall, false positives, KYB outcomes, everything in the financial suite, the claim classifier, the temporal-leakage checks (a tested invariant over two synthetic worlds: 0 observed is evidence, not a proof), performance |
-| **LIVE MODEL EVALUATION** | The identical suite against a real model on the operator's own key (`SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models`). | `results/models.json` -- current status of the live row: **{live['status']}** (`{live.get('model', '—')}`); no live number is quoted anywhere in this repository |
+| **LIVE MODEL EVALUATION** | The identical suite against a real model on the operator's own key (`SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models`). | `results/models.json` -- current status of the live configurations: **{live['status']}** (`{live.get('model', '—')}`); {_live_note(live)} |
 
 ## What "attack success" means
 
@@ -3191,7 +3216,7 @@ their output is typed `MODEL_GENERATED`, never enters an `EvidenceSet`, and the
 composer's `_TrustedView` has no field for it; an off-surface tool call is a
 CRITICAL escalation; {i['model_influence_n']} replays with a different recommendation changed no
 outcome ({_mi_scope(i)}). **SIMULATED:** every "persuaded agent" number
-is the offline simulator. **NOT IMPLEMENTED:** a live-model result -- `{live['status']}`.
+is the offline simulator. Live-model result: `{live['status']}` ({_live_note(live)}).
 
 **2. Why isn't prompt hardening enough?**
 Hardening teaches a model to refuse *instructions*; a false claim contains

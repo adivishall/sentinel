@@ -10,7 +10,7 @@
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 ![Runs offline](https://img.shields.io/badge/runs_offline-no_API_key-2e8b57)
 ![Runtime deps](https://img.shields.io/badge/runtime_deps-1_(cryptography)-2e6da4)
-![Tests](https://img.shields.io/badge/tests-930_passing-2e8b57)
+![Tests](https://img.shields.io/badge/tests-934_passing-2e8b57)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
 [Console (static snapshot)](https://adivishall.github.io/sentinel/) · [Screenshots](#screenshots) · [Evaluation](docs/EVALUATION.md) · [Security model](docs/SECURITY_MODEL.md) · [Limitations](docs/LIMITATIONS.md) · [Interview guide](docs/INTERVIEW.md)
@@ -170,7 +170,7 @@ seeds, method and limitations.
 | **Temporal correctness** | synthetic invariant check (empirical; not a proof) | a record dated after T changing a decision at T | 192 transactions; 9 kinds of future record at 4 offsets; 3,648 checks | seeds 42, 7 | **0 observed leaks** (95% upper bound 0.082% per check, 1.55% per sampled transaction) | [§I](docs/EVALUATION.md#i-temporal-correctness-resultstemporaljson) |
 | **Claim classifier** | synthetic, same author; defence in depth, not the foundation | legitimate claims read as their type; the rest held for a human | 117 phrasings; 21 held-out unusual phrasings | hand-authored | held-out: first (blind) run 7/21; 17/21 after the patterns were extended by an author who had seen the misses; FN 4/56, FP 0/28 | [§L](docs/EVALUATION.md#l-claim-classifier-resultsclaimsjson) |
 | **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.2396 ms | [PERFORMANCE.md](docs/PERFORMANCE.md) |
-| **Live LLM** | live-model evaluation | the same suites against a real model | -- | `claude-opus-5-5` | **NOT RUN** -- no live number is quoted anywhere | [§K](docs/EVALUATION.md#k-model--provider-evaluation-resultsmodelsjson) |
+| **Live LLM** | live-model evaluation | the same suites against a real model | -- | `claude-opus-5-5/effort-low, claude-sonnet-5-5/effort-low` | **NOT RUN** -- no live number is quoted anywhere | [§K](docs/EVALUATION.md#k-model--provider-evaluation-resultsmodelsjson) |
 <!-- /gen:evaluation-categories -->
 
 <!-- gen:results -->
@@ -259,7 +259,7 @@ engine output over the synthetic demo dataset, nothing drawn by hand.
 ```bash
 git clone https://github.com/adivishall/sentinel.git && cd sentinel
 make install          # dev tooling + the `sentinel` command; the one runtime dependency is pyca/cryptography
-make test             # 930 tests, offline
+make test             # 934 tests, offline
 make attack-compare   # the flagship demo, no key needed
 make api              # API + console at http://localhost:8000 (in-memory demo dataset)
 ```

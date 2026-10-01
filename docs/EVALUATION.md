@@ -30,7 +30,7 @@ hostile document.
 | **Temporal correctness** | synthetic invariant check (empirical; not a proof) | a record dated after T changing a decision at T | 192 transactions; 9 kinds of future record at 4 offsets; 3,648 checks | seeds 42, 7 | **0 observed leaks** (95% upper bound 0.082% per check, 1.55% per sampled transaction) | [§I](#i-temporal-correctness-resultstemporaljson) |
 | **Claim classifier** | synthetic, same author; defence in depth, not the foundation | legitimate claims read as their type; the rest held for a human | 117 phrasings; 21 held-out unusual phrasings | hand-authored | held-out: first (blind) run 7/21; 17/21 after the patterns were extended by an author who had seen the misses; FN 4/56, FP 0/28 | [§L](#l-claim-classifier-resultsclaimsjson) |
 | **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.2396 ms | [PERFORMANCE.md](PERFORMANCE.md) |
-| **Live LLM** | live-model evaluation | the same suites against a real model | -- | `claude-opus-5-5` | **NOT RUN** -- no live number is quoted anywhere | [§K](#k-model--provider-evaluation-resultsmodelsjson) |
+| **Live LLM** | live-model evaluation | the same suites against a real model | -- | `claude-opus-5-5/effort-low, claude-sonnet-5-5/effort-low` | **NOT RUN** -- no live number is quoted anywhere | [§K](#k-model--provider-evaluation-resultsmodelsjson) |
 
 ## Three kinds of numbers
 
@@ -41,7 +41,7 @@ kind of each headline metric under `kinds`.
 |---|---|---|
 | **STRUCTURAL GUARANTEE** | 0 by construction under the design. A consequential capability executes only when the trusted records support the claim, and every attack sits on records that do not. These rows are regression checks that the implementation honours the design (`tests/test_results_regression.py` recomputes them), not detection results. | guarded attack success, off-surface execution, the integrity suite's structural rows |
 | **SYNTHETIC EVALUATION** | Empirical, but on hand-authored corpora, a seeded synthetic dataset and the **offline simulated agent** (`OfflineProvider`, a deterministic regex model of a gullible tool-calling agent that shares an author with the corpus). These numbers can move and describe this simulator and this generator, not the world. | unguarded attack success, detection recall, false positives, KYB outcomes, everything in the financial suite, the claim classifier, the temporal-leakage checks (a tested invariant over two synthetic worlds: 0 observed is evidence, not a proof), performance |
-| **LIVE MODEL EVALUATION** | The identical suite against a real model on the operator's own key (`SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models`). | `results/models.json` -- current status of the live row: **not_run** (`claude-opus-5-5`); no live number is quoted anywhere in this repository |
+| **LIVE MODEL EVALUATION** | The identical suite against a real model on the operator's own key (`SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models`). | `results/models.json` -- current status of the live configurations: **not_run** (`claude-opus-5-5/effort-low, claude-sonnet-5-5/effort-low`); no live number is quoted anywhere in this repository |
 
 ## What "attack success" means
 
@@ -571,11 +571,11 @@ orders of magnitude; Sentinel's own controls are not the bottleneck.
 
 ## K. Model / provider evaluation (`results/models.json`)
 
-| Configuration | Date | Status | Served model | ASR no controls | ASR Sentinel | FP | Latency p50 / p95 ms | Refusals / truncated / parse failures | Tokens in / out | Cost (USD) | Note |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| `offline-simulator` | 2026-10-01 | OK | — | 90.0% | 0.0% | 0.0% | 0.068 / 0.141 | 0 / 0 / 0 | — | — |  |
-| `claude-opus-5-5/effort-low` | 2026-10-01 | NOT RUN | — | — | — | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
-| `claude-sonnet-5-5/effort-low` | 2026-10-01 | NOT RUN | — | — | — | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
+| Configuration | Date | Status | Served model | Measured (attacks / controls / errors) | ASR no controls | ASR Sentinel | FP | Latency p50 / p95 ms | Refusals / truncated / parse failures | Tokens in / out | Cost (USD) | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `offline-simulator` | 2026-10-01 | OK | — | 150 / 10 / 0 | 90.0% | 0.0% | 0.0% | 0.068 / 0.139 | 0 / 0 / 0 | — | — |  |
+| `claude-opus-5-5/effort-low` | 2026-10-01 | NOT RUN | — | — | — | — | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
+| `claude-sonnet-5-5/effort-low` | 2026-10-01 | NOT RUN | — | — | — | — | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
 
 One row per exact configuration (provider, requested model, effort,
 `max_tokens`), all measured against the same prompts, corpus, policy and risk
@@ -586,7 +586,7 @@ models -- identified by digest in `results/models.json` (`provenance`): prompt
 records the served model, SDK version, stop reasons, refusals, truncations and
 parse failures (each a fail-safe recommendation, never a denial), latency
 p50/p95, tokens and, where a dated list price is known
-(2026-09-25), its cost. A row that did not run stays
+(2026-10-01), its cost. A row that did not run stays
 **NOT RUN** with the reason. There is no score across rows: each describes
 one configuration on one date (`results/models_rows.json` has every call's
 request id). Run with `sentinel eval run --suite models --provider anthropic`.
@@ -647,5 +647,5 @@ make eval                      # everything above (main + held-out + surfaces = 
 make docs                      # re-render this file and every generated block from results/ and the code
 sentinel eval run --suite security|heldout|surfaces|kyb|baselines|ablation|financial|integrity|temporal|claims|performance|models|charts
 sentinel eval run --suite financial --full     # larger dataset (400 customers / 12k transactions)
-make test                      # 930 tests, incl. tests/test_results_regression.py which recomputes the headline claims
+make test                      # 934 tests, incl. tests/test_results_regression.py which recomputes the headline claims
 ```
