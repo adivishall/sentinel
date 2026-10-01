@@ -634,3 +634,15 @@ def test_r8_an_unreadable_effective_from_is_refused_in_signed_mode(signed_dir):
     (d / RELEASES_FILE).write_text(book.dumps())
     with pytest.raises(PolicyIntegrityError, match="unreadable"):
         _registry(d, trust)
+
+
+def test_a_digest_with_a_trailing_newline_is_not_a_digest():
+    """``$`` also matches before a final newline; the digest grammar is a full match."""
+    private, key = _key()
+    policy = DEFAULT_REGISTRY.get("dispute-refund", 4)
+    doc = sign_release(private, signer=key.issuer, policy=policy, released_at=NOW)
+    trust = TrustStore.empty().with_key(key)
+    assert verify_release(doc, policy=policy, trust=trust, now=NOW).status is ReleaseStatus.VERIFIED
+    doc["digest"] += "\n"
+    r = verify_release(doc, policy=policy, trust=trust, now=NOW)
+    assert r.status is ReleaseStatus.INVALID and "full SHA-256" in r.reason
