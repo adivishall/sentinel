@@ -161,6 +161,147 @@
     "uncommon_legitimate": "held-out: written and labelled in the 2.2.0 review before the classifier was run on it. First run, with the classifier as of commit 9693433: 7/21 recognised, 14 abstained, 0 misread. The patterns were then extended against the separate development set, by an author who had seen those 14 misses, so the current number is optimistic; the remaining misses were deliberately not fitted",
     "development": "written after the held-out run and used to extend the patterns: a fit, not an estimate"
   },
+  "frozen": {
+    "name": "claims-frozen-2026-10-01",
+    "frozen_at": "2026-10-01",
+    "provenance": "Written and labelled on 2026-10-01 by the same author (an AI assistant) who maintains the classifier, BEFORE the classifier was run on any of it, and committed before the first run. It must never be used to change the classifier: a miss here is reported, not fixed. It is partially informed (its author has seen the classifier's patterns), so it is not a blind test.",
+    "n": 40,
+    "correct": 24,
+    "accuracy": 0.6,
+    "by_label": {
+      "abstain": {
+        "n": 6,
+        "correct": 6
+      },
+      "cancellation": {
+        "n": 5,
+        "correct": 3
+      },
+      "duplicate": {
+        "n": 6,
+        "correct": 3
+      },
+      "in_transit": {
+        "n": 3,
+        "correct": 3
+      },
+      "non_claim": {
+        "n": 6,
+        "correct": 4
+      },
+      "non_receipt": {
+        "n": 8,
+        "correct": 2
+      },
+      "unauthorized": {
+        "n": 6,
+        "correct": 3
+      }
+    },
+    "false_negatives": 14,
+    "false_negative_n": 28,
+    "misread_as_another_type": 0,
+    "false_positives": 0,
+    "false_positive_n": 12,
+    "failures": [
+      {
+        "text": "The courier marked it delivered but nobody came to my building, I checked with the guard.",
+        "expected": "non_receipt",
+        "got": "abstain",
+        "reason": "no recognisable claim"
+      },
+      {
+        "text": "Bhai parcel aaya hi nahi, refund kar do please",
+        "expected": "non_receipt",
+        "got": "abstain",
+        "reason": "no recognisable claim"
+      },
+      {
+        "text": "I am still waiting for the goods I paid for in July.",
+        "expected": "non_receipt",
+        "got": "abstain",
+        "reason": "no recognisable claim"
+      },
+      {
+        "text": "Zero items received against this order number.",
+        "expected": "non_receipt",
+        "got": "abstain",
+        "reason": "no recognisable claim"
+      },
+      {
+        "text": "Where is my stuff?? Paid weeks ago and got nothing.",
+        "expected": "non_receipt",
+        "got": "abstain",
+        "reason": "no recognisable claim"
+      },
+      {
+        "text": "The seller never shipped the shoes, the tracking number doesn't even exist.",
+        "expected": "non_receipt",
+        "got": "abstain",
+        "reason": "no recognisable claim"
+      },
+      {
+        "text": "The restaurant swiped my card again after the first payment went through.",
+        "expected": "duplicate",
+        "got": "abstain",
+        "reason": "no recognisable claim"
+      },
+      {
+        "text": "Paisa do baar kat gaya ek hi order ke liye",
+        "expected": "duplicate",
+        "got": "abstain",
+        "reason": "no recognisable claim"
+      },
+      {
+        "text": "My statement shows this purchase repeated, I only bought it once.",
+        "expected": "duplicate",
+        "got": "abstain",
+        "reason": "no recognisable claim"
+      },
+      {
+        "text": "Order withdrawn before dispatch, still charged in full.",
+        "expected": "cancellation",
+        "got": "abstain",
+        "reason": "no recognisable claim"
+      },
+      {
+        "text": "I terminated the membership last month, this renewal charge should not exist.",
+        "expected": "cancellation",
+        "got": "abstain",
+        "reason": "no recognisable claim"
+      },
+      {
+        "text": "My phone was stolen and these transactions happened after that.",
+        "expected": "unauthorized",
+        "got": "abstain",
+        "reason": "no recognisable claim"
+      },
+      {
+        "text": "This charge in another city is fraud, my card is with me at home.",
+        "expected": "unauthorized",
+        "got": "abstain",
+        "reason": "no recognisable claim"
+      },
+      {
+        "text": "Mera card kisi aur ne use kiya, maine ye payment nahi kiya",
+        "expected": "unauthorized",
+        "got": "abstain",
+        "reason": "no recognisable claim"
+      },
+      {
+        "text": "Can you tell me when my statement is generated?",
+        "expected": "non_claim",
+        "got": "abstain",
+        "reason": "no recognisable claim"
+      },
+      {
+        "text": "I want to know my credit limit.",
+        "expected": "non_claim",
+        "got": "abstain",
+        "reason": "no recognisable claim"
+      }
+    ]
+  },
   "seconds": 0.01,
   "methodology": {
     "kind": "synthetic (hand-authored phrasings)",

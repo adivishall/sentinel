@@ -305,6 +305,53 @@ def _correct(expected: object, kind: str, claim_type: ClaimType) -> bool:
     return kind == "claim" and claim_type is expected
 
 
+def frozen() -> dict[str, Any]:
+    """The fixture frozen on 2026-10-01 (``attacks/claims_frozen.json``): committed before
+    the classifier first ran on it and never used to change it. Reported apart from every
+    other number, misses included."""
+    import json
+    from pathlib import Path
+
+    doc = json.loads((Path(__file__).parent / "attacks" / "claims_frozen.json").read_text())
+    by: dict[str, Counter[str]] = {}
+    failures: list[dict[str, Any]] = []
+    fn = fp = misread = 0
+    for text, label in doc["items"]:
+        c = classify(text)
+        expected: object = label if label in ("abstain", "non_claim") else ClaimType(label)
+        ok = _correct(expected, c.kind, c.claim_type)
+        cnt = by.setdefault(label, Counter())
+        cnt["n"] += 1
+        cnt["correct"] += int(ok)
+        is_type = isinstance(expected, ClaimType)
+        if is_type and not ok:
+            fn += 1
+            misread += int(c.kind == "claim")
+        if not is_type and c.kind == "claim":
+            fp += 1
+        if not ok:
+            got = c.claim_type.value if c.kind == "claim" else c.kind
+            failures.append({"text": text, "expected": label, "got": got, "reason": c.reason})
+    n_pos = sum(v["n"] for k, v in by.items() if k not in ("abstain", "non_claim"))
+    n_neg = sum(v["n"] for k, v in by.items() if k in ("abstain", "non_claim"))
+    n = n_pos + n_neg
+    return {
+        "name": doc["name"],
+        "frozen_at": doc["frozen_at"],
+        "provenance": doc["provenance"],
+        "n": n,
+        "correct": sum(v["correct"] for v in by.values()),
+        "accuracy": round(sum(v["correct"] for v in by.values()) / max(1, n), 3),
+        "by_label": {k: {"n": v["n"], "correct": v["correct"]} for k, v in sorted(by.items())},
+        "false_negatives": fn,
+        "false_negative_n": n_pos,
+        "misread_as_another_type": misread,
+        "false_positives": fp,
+        "false_positive_n": n_neg,
+        "failures": failures,
+    }
+
+
 def run() -> dict[str, Any]:
     t0 = time.time()
     rows: list[dict[str, Any]] = []
@@ -412,6 +459,7 @@ def run() -> dict[str, Any]:
             ),
             "development": "written after the held-out run and used to extend the patterns: a fit, not an estimate",
         },
+        "frozen": frozen(),
         "seconds": round(time.time() - t0, 2),
     }
 

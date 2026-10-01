@@ -1127,6 +1127,18 @@ extended against: a fit, reported apart and excluded from the error rates.
 | Adversarial wrong type | {pct(cl['adversarial_wrong_type_rate'])} | attack prose read as a claim it does not assert |
 | Abstain rate | {pct(cl['abstain_rate'])} | all messages held for a human (100% of the ambiguous and contradictory sets by design) |
 
+**A frozen set (2026-10-01).** {cl['frozen']['n']} further phrasings (Hinglish,
+long-winded, terse, indirect, plus ambiguous messages and non-claims) were
+written, labelled and committed *before* the classifier first ran on them, and
+are never to be used to change it. Their author has seen the classifier, so
+the set is **partially informed, not blind**. First run: **{cl['frozen']['correct']} / {cl['frozen']['n']}**
+correct; {cl['frozen']['false_negatives']} of {cl['frozen']['false_negative_n']} legitimate claims not
+recognised ({cl['frozen']['misread_as_another_type']} misread as another type -- every miss abstained, i.e. a
+human reads it); {cl['frozen']['false_positives']} of {cl['frozen']['false_positive_n']} ambiguous or non-claim messages
+read as a claim. That is the estimate to quote for unfamiliar wording: about
+half of honest claims phrased in ways the patterns have not seen go to a
+human, and none is read as the wrong claim.
+
 The composer's guarantee does not depend on any of this: whatever the
 classifier reads, a consequential capability executes only when the ledger
 supports the claim. What the classifier changes is the *cost* side -- how
