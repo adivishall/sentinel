@@ -498,3 +498,23 @@ no expiry, and anyone who can write the registry file can mint a reviewer.
 The demo prints two in-memory credentials so the console can act. The
 thresholds are demo values. Account-security cases carry no amount, so an
 authority limit cannot bound them; role and four eyes do.
+
+## D36 — Audit checkpoints are signed with a key of their own and kept in an anchor
+
+**Decision.** A checkpoint is a `sentinel.audit-checkpoint/1` statement signed with
+Ed25519 by a key whose only purpose is `audit-checkpoint`, linked to the previous
+checkpoint, and published to an append-only anchor out of the audit-store writer's reach
+(a directory or a JSONL file today; `Anchor` is the interface a WORM store or a
+transparency log implements). Each publication is also recorded in the chain. The chain,
+`/v1/system` and every replay report `anchored`, `not_anchored` or `anchor_mismatch`.
+
+**Why.** The chain proves self-consistency only: a storage attacker who can recompute
+SHA-256 rewrites a suffix and `verify` passes. The HMAC checkpoint fixed a prefix but its
+key verifies and forges alike, it had no sequence (an older genuine checkpoint could be
+substituted) and it lived wherever the key did -- usually the store's host.
+
+**Trade-off.** Anchoring protects from the moment of anchoring: events after the latest
+checkpoint are `not_anchored` until the next one, and the report says so rather than
+calling them verified. The anchors shipped are as strong as where the operator keeps
+them; no external transparency log is integrated. The HMAC checkpoint remains for
+compatibility.

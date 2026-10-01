@@ -202,6 +202,24 @@ can be trusted (roadmap issues #11–#20).
   policy release, audit checkpoint) and why none lives on the Sentinel host, issuer and
   policy-release keys, reviewer credentials, reload, rotation and revocation.
 
+### Security — asymmetric, anchored audit checkpoints (#17)
+- `sentinel.audit-checkpoint/1`: the chain's head (recomputed from genesis), length, chain
+  id, checkpoint sequence and the previous checkpoint's digest, signed with Ed25519 by a key
+  whose only purpose is `audit-checkpoint` (a facts or policy-release key is refused). The
+  verifier holds the public key, so verifying cannot forge; the HMAC checkpoint could.
+- **Anchors** (`sentinel.audit.anchor`): an exclusive-create directory (one file per
+  checkpoint, never overwritten) and an append-only JSONL file; `Anchor` is the interface
+  for a WORM store or a transparency log (none integrated). Checkpoints link to each other,
+  and each publication is recorded in the chain (`CHECKPOINT_PUBLISHED`), so a dropped,
+  substituted or deleted checkpoint is visible.
+- `anchored` | `not_anchored` | `anchor_mismatch` for the chain (`audit verify --anchor`,
+  `/v1/audit/verify`, `/v1/system`) and for each decision (replay; a mismatch makes
+  `record_verified` false). INV-AUDIT-2 is tested in both directions: a consistent rewrite
+  before an anchored checkpoint is a mismatch; one after it is reported as `not_anchored`,
+  never as anchored.
+- `sentinel audit checkpoint --sign-key --signer --anchor`, `audit verify --anchor
+  [--require-anchored]`, `trust keygen --purpose audit-checkpoint`, `SENTINEL_AUDIT_ANCHOR`.
+
 ### Evaluation
 - The corpora's ledgers and acquirer records are signed by an ephemeral evaluation
   issuer and verified in every case, so the suites measure text and model influence on

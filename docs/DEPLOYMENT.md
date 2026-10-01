@@ -78,7 +78,8 @@ SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models   # same corpus, real 
 | `ANTHROPIC_API_KEY` | — | enables live mode when offline is not forced; never committed or logged |
 | `SENTINEL_MODEL` | `claude-opus-5-5` | live model id |
 | `SENTINEL_RATE_LIMIT` | `600` | requests per minute per client (0 = off) |
-| `SENTINEL_AUDIT_KEY` | unset | if set, `sentinel audit checkpoint` signs the exported checkpoint with HMAC-SHA256 and `audit verify --checkpoint` authenticates it; keep the key and the checkpoint outside the audit store |
+| `SENTINEL_AUDIT_ANCHOR` | unset | where signed audit checkpoints are anchored: a directory (one file per checkpoint, never overwritten) or a `.jsonl` append-only file, outside the audit store writer's reach |
+| `SENTINEL_AUDIT_KEY` | unset | legacy HMAC checkpoint (`audit checkpoint` without `--sign-key`); a shared secret that verifies and forges alike |
 | `SENTINEL_TRUST_STORE` | unset (nothing trusted) | trust store JSON: the public keys of the issuers whose signed fact envelopes Sentinel accepts |
 | `SENTINEL_REQUIRE_SIGNED_FACTS` | off (on for the in-memory demo) | every record read by id must come with its issuer's signed statement; a missing one is `INVALID` |
 | `SENTINEL_POLICY_TRUST` | the shipped root (`sentinel/trust/policy_root.json`) | trust store holding the `policy-release` keys whose signed releases and activations Sentinel accepts |
@@ -118,7 +119,7 @@ for another. Keep them on independent schedules.
 |---|---|---|
 | Fact issuer (`purpose: facts`) | each system of record, ideally in an HSM/KMS | public keys in `SENTINEL_TRUST_STORE` |
 | Policy release (`purpose: policy-release`) | the policy release pipeline | public keys in `SENTINEL_POLICY_TRUST` |
-| Audit checkpoint (`SENTINEL_AUDIT_KEY`, HMAC today) | the operator who verifies checkpoints, off the store host | nothing (see LIMITATIONS: an HMAC key verifies and forges alike) |
+| Audit checkpoint (`purpose: audit-checkpoint`) | the operator's checkpointing job, off the store host | public keys in `SENTINEL_TRUST_STORE`; the anchor is read-only for the server |
 
 **Private signing keys never live on the Sentinel application host.** The
 trust stores hold public keys only; deploy them read-only and root-owned,
@@ -134,6 +135,18 @@ sentinel trust sign --key /secure/core-ledger.pem --issuer core-ledger \
 sentinel --trust-store /etc/sentinel/trust.json trust verify envelope.json --kind dispute_ledger
 sentinel --trust-store /etc/sentinel/trust.json trust ingest envelope.json   # store it beside the record
 sentinel --trust-store /etc/sentinel/trust.json trust revoke <key_id> --reason compromised
+```
+
+### Audit checkpoints
+
+```bash
+sentinel trust keygen --issuer audit-notary --purpose audit-checkpoint \
+    --key-out /secure/audit-checkpoint.pem --trust-out /etc/sentinel/trust.json
+# a scheduled job, off the store host, with the anchor on storage the store writer cannot reach
+sentinel --db /data/sentinel.db --trust-store /etc/sentinel/trust.json audit checkpoint \
+    --sign-key /secure/audit-checkpoint.pem --signer audit-notary --anchor /mnt/worm/sentinel-anchor
+sentinel --db /data/sentinel.db --trust-store /etc/sentinel/trust.json audit verify \
+    --anchor /mnt/worm/sentinel-anchor --require-anchored
 ```
 
 ### Policy releases
