@@ -229,6 +229,7 @@ case open ("approvals 1 of 2").
 | 400 | malformed JSON (including a duplicated key), missing/invalid field, unknown option, invalid policy document, `facts_envelope` together with the facts it replaces, new text on a stored dispute or application |
 | 401 | an API key is configured and no valid `Authorization: Bearer` / `X-API-Key` (compared in constant time); a case action without an active reviewer credential (`X-Reviewer-Token`) |
 | 415 | a POST whose `Content-Type` is not `application/json` |
+| 421 | a loopback server addressed under another host name (DNS rebinding), unless the name is in `SENTINEL_ALLOWED_HOSTS` |
 | 403 | a cross-site POST (`Origin` not this host, `Origin: null`, `Sec-Fetch-Site: cross-site`); a what-if switch (`unguarded`, `options.controls`, `options.policy_version`, `options.risk_model`, investigation `as_of`) on an evaluate route; a reviewer that is not a human actor or lacks the case's required level |
 | 404 | unknown route / id |
 | 409 | invalid case transition; a human decision on an OPEN or RESOLVED case |

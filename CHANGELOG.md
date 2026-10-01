@@ -201,6 +201,23 @@ can be trusted (roadmap issues #11–#20).
 - `docs/DEPLOYMENT.md` is a runbook: TLS termination, the three key purposes (facts,
   policy release, audit checkpoint) and why none lives on the Sentinel host, issuer and
   policy-release keys, reviewer credentials, reload, rotation and revocation.
+- **Adversarial review of this branch.** Bind parsing failed closed for every odd address,
+  no GET wrote anything, traversal and symlinks were refused, and no secret reached a
+  response, log or audit event. Found and fixed, each with a regression test:
+  - **DNS rebinding** defeated the Origin check (a rebound page is same-origin with
+    itself): a loopback server now answers only loopback names or `SENTINEL_ALLOWED_HOSTS`
+    (421 otherwise);
+  - **two SIGHUPs** 0.2 ms apart deadlocked the server, and a reload raising anything but
+    ValueError/OSError killed it: the handler only wakes a reloader thread, which catches
+    everything and audits `CONFIG_RELOAD_FAILED`;
+  - rotating the key file did nothing until a restart; a whitespace key passed the bind
+    check; `SERVER_START` carried an unsalted key-hash prefix (a guessing oracle);
+  - `snapshot.json` was served without the key; a malformed `Origin` dropped the
+    connection; a TLS proxy rewriting `Host` had its console POSTs refused; the console
+    prompted for the API key on a blank reviewer credential; `::1` could not be bound;
+    trust-store paths reached `/v1/system` and reload failures.
+  Documented, not changed: a client trickling bytes is the proxy's to cut off; concurrent
+  connections are now capped (`SENTINEL_MAX_CONNECTIONS`).
 
 ### Evaluation
 - The corpora's ledgers and acquirer records are signed by an ephemeral evaluation
