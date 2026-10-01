@@ -32,7 +32,9 @@ from sentinel.trust.canonical import CanonicalError, strict_loads
 
 FACTS = "facts"
 POLICY_RELEASE = "policy-release"
-PURPOSES = frozenset({FACTS, POLICY_RELEASE})
+AUDIT_CHECKPOINT = "audit-checkpoint"
+# one purpose per key: a fact issuer cannot sign a policy release or an audit checkpoint
+PURPOSES = frozenset({FACTS, POLICY_RELEASE, AUDIT_CHECKPOINT})
 FORMAT = "sentinel.trust-store/1"
 DEFAULT_MAX_VALIDITY_DAYS = 30
 
