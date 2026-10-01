@@ -242,7 +242,10 @@ block.
     - anyone who can write the registry file can mint a reviewer, so keep it
       outside the data directory;
     - Sentinel does not know which subjects a reviewer is conflicted on (for
-      example their own account).
+      example their own account);
+    - account-security cases (payout changes, fund releases, risk overrides)
+      carry no amount, so authority limits do not bound them; their role
+      requirement and four eyes do.
 28. **The claim classifier's held-out score is optimistic after the change.**
     The held-out set scored 7/21 on the first run; the patterns were then
     extended against a separate development set by an author who had seen the

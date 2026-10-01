@@ -472,7 +472,9 @@ an old or misconfigured policy from undoing it.
 - **The registry.** Human case actions take a `Reviewer` that an
   operator-configured registry authenticated from a bearer credential. The
   credential is random, 256-bit, stored only as SHA-256 and matched in
-  constant time. The registry refuses system and model names as ids.
+  constant time. The registry refuses an id with a system word or a model
+  name as any component (hygiene for the audit trail; the credential is the
+  control).
 - **The request.** A body that names a reviewer or role is refused, not
   ignored.
 - **Approving** also checks the reviewer's authority limit against the case
@@ -487,7 +489,12 @@ an old or misconfigured policy from undoing it.
 name blacklist let `claude` and a Cyrillic `ѕentinel` through. "A senior
 approved it" meant "someone said so".
 
+- **Escalation is one-way.** Once a case is escalated, by decision or by
+  status change, only a SENIOR_REVIEWER moves or decides it, and pending
+  approvals restart; a deactivated reviewer's pending approval stops counting.
+
 **Trade-off.** A Sentinel-issued token is not the institution's SSO. It has
 no expiry, and anyone who can write the registry file can mint a reviewer.
 The demo prints two in-memory credentials so the console can act. The
-thresholds are demo values.
+thresholds are demo values. Account-security cases carry no amount, so an
+authority limit cannot bound them; role and four eyes do.

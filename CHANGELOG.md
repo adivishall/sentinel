@@ -157,6 +157,25 @@ can be trusted (roadmap issues #11–#20).
   limit, never the credential.
 - **Console.** The case-review form takes a reviewer credential (kept for the tab only), and
   the in-memory demo prints two demo credentials at start.
+- **Adversarial review of this branch.** Identity came only from the credential, tokens
+  never leaked (responses, audit, logs, 1,410 malformed requests → no 500), and one
+  identity could not approve a four-eyes case. Found and fixed, each with a regression
+  test:
+  - a HUMAN_REVIEWER undid an escalation (ESCALATED → INVESTIGATING by transition) and
+    approved alone; an escalated case is moved on and decided only by a senior, and stays
+    handed up;
+  - escalating by status transition did not restart the four-eyes count;
+  - a case stored before amounts were recorded loaded with amount 0 and one approval, so a
+    1,000-limit reviewer resolved a 900,000 refund alone; a missing amount is read from
+    the decision, else unbounded, and a case needs never fewer approvals than the registry
+    asks;
+  - a deactivated reviewer's earlier approval still counted;
+  - `claude`, `gpt-4o`, `sentinel-bot`, `ai-reviewer` were accepted as reviewer ids;
+    `credential_id` and `name` were untyped and unchecked;
+  - case routes ignored unknown body fields (`Role`, `by`) rather than refusing them, and a
+    duplicated `X-Reviewer-Token` header picked the first.
+  Documented, not changed: account-security cases carry no amount, so authority limits do
+  not bound them (role and four eyes do).
 
 ### Evaluation
 - The corpora's ledgers and acquirer records are signed by an ephemeral evaluation
