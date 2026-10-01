@@ -3568,32 +3568,37 @@ positives {cl['false_positives']} / {cl['false_positive_n']} (`docs/EVALUATION.m
         + ", ".join(f"`{pid}` " + "/".join(f"v{v}" for v in vs) for pid, vs in by_id.items())
         + f" ({len(pols)} versions, all lint-clean; every rule is listed in `docs/POLICY_ENGINE.md`)."
     )
+    rto = rt["objectives"]
     out[
         "resume"
     ] = f"""- **Financial decision-security architecture.** Designed and built Sentinel, a
-  Python system (standard library plus one cryptography dependency) between LLM agents and consequential financial
-  actions (refunds, payment authorisation, merchant onboarding, account
-  security): agents may recommend, but only trusted records, versioned
-  fail-closed policy and a capability registry can authorize, and the
-  authoritative decision is computed from a view with no field for untrusted
-  text or model output. Across {i['n_attacks']} attacks (main and held-out corpora), attacker
-  text loosened {pct(i['text_influence_permissive_protected'])} of protected decisions, against {pct(i['text_influence_permissive_unguarded'])} with no controls.
-- **Point-in-time risk engineering.** Built an explainable, versioned risk
-  engine -- as-of behavioural baselines, a time-aware relationship graph,
-  entity profiles and account monitoring -- and a temporal-leakage benchmark
-  ({t['decisions_tested']:,} checks, {len(t['kinds'])} kinds of later record) that found two current-state
-  reads; {t['leakage_count']} observed leaks after the fix. On the synthetic development seed:
-  transaction precision {pct(tl['precision'])} / recall {pct(tl['recall'])} at {pct(tl['false_positive_rate'], 2)} FPR, account-level
-  {pct(al['precision'])} / {pct(al['recall'])}, with held-out seeds reported and early-burst misses
-  explained rather than tuned away.
-- **Adversarial evaluation, policy and authorization.** Built a {n_classes}-class
-  adversarial evaluation ({s['n_attacks']}-attack main corpus, {h['n_attacks']} held-out, {sf['n_attacks']} on three
-  other surfaces, a {kc['cases']}-application KYB benchmark) with ablations: against a
-  simulated naive agent, prompt hardening still leaked {pct(b['hardened_prompt'])} and detection
-  alone {pct(a['detection_only']['asr'])}, while trusted-evidence adjudication, digest-pinned
-  policy-as-code and workflow-scoped authorization held unauthorised execution
-  at {pct(a['full']['asr'])} with {pct(a['full']['fp'])} false positives; every decision replays against a
-  tamper-evident, hash-chained audit log."""
+  Python system (standard library plus one cryptography dependency) between LLM
+  agents and consequential financial actions (refunds, payment authorisation,
+  merchant onboarding, account security): agents may recommend, but only
+  verified facts, a signed and activated policy and a capability registry can
+  authorize, and the authoritative decision is computed from a view with no
+  field for untrusted text or model output. Across {i['n_attacks']} attacks (main and
+  held-out corpora), attacker text loosened {pct(i['text_influence_permissive_protected'])} of protected decisions, against
+  {pct(i['text_influence_permissive_unguarded'])} with no controls.
+- **Cryptographic provenance and accountable review.** Made every decision state
+  what establishes its facts: Ed25519-signed issuer statements verified against
+  a trust store (scopes, rotation, revocation, expiry, anti-rollback), signed
+  and explicitly activated policy releases with a trust root outside the policy
+  directory, authenticated reviewers with authority limits and four-eyes
+  approval, and signed audit checkpoints in an append-only anchor, so a rewrite
+  of history is detectable wherever a checkpoint covers it. An adversarial
+  review of every change found real defects -- among them a record-id spelling
+  that let a refunded dispute be paid twice -- each fixed with a regression test.
+- **Adversarial and temporal evaluation.** Built a {n_classes}-class adversarial
+  evaluation ({s['n_attacks']}-attack main corpus, {h['n_attacks']} held-out, {sf['n_attacks']} on three other
+  surfaces, a {kc['cases']}-application KYB benchmark) and a seeded black-box red team
+  ({rt['methodology']['sample']['queries']:,} distinct mutated queries, {rt['structured']['n']} structured attacks on facts, ids,
+  capabilities, time, identity and policy): the lexical detector missed
+  {pct(rto['contradicted']['detection_evasion_rate'])} / {pct(rto['over_limit']['detection_evasion_rate'])} of mutated variants of attacks it caught unmutated, while capability /
+  policy evasion was {pct(max(rt['metrics']['capability_policy_evasion_rate'].values()))}, trusted-fact manipulation {pct(rt['metrics']['trusted_fact_manipulation_rate'])} and authoritative bypasses
+  {rt['metrics']['authoritative_bypass_count']} (structural: text never reaches the facts that decide). A temporal-leakage
+  benchmark ({t['decisions_tested']:,} checks over {len(t['dataset']['seeds'])} seeds) found two current-state reads; {t['leakage_count']}
+  observed leaks after the fix."""
     out["interview-pitch"] = f"""## The 60-second pitch
 
 "Banks and fintechs are putting AI agents into decision paths -- refunds,
@@ -3603,10 +3608,11 @@ defences look for injected instructions. The harder attack has none: the
 customer simply lies about a fact and a persuadable model approves; a hardened
 prompt doesn't help against a lie. Sentinel's answer is architectural: the
 model may recommend, but the authoritative decision is computed from a view
-that has no field for the prose or the model's opinion. The institution's own
-records decide whether the claim is supported, versioned fail-closed policy
-decides the outcome, a capability registry decides who may execute it, and a
-tamper-evident audit chain records why, so every decision replays. On
+that has no field for the prose or the model's opinion. Issuer-signed records
+decide whether the claim is supported, a signed and activated policy decides
+the outcome, a capability registry and authenticated reviewers decide who may
+execute it, and a tamper-evident audit chain with anchored checkpoints records
+why, so every decision replays. On
 synthetic corpora against a simulated naive agent, unauthorised execution
 goes from {pct(s['asr_unguarded'])} to {pct(s['asr_guarded'])} with {pct(s['fp_rate'])} false positives on deserved refunds -- and I can
 show you exactly what that does and doesn't prove.\""""

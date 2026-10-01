@@ -20,10 +20,11 @@ defences look for injected instructions. The harder attack has none: the
 customer simply lies about a fact and a persuadable model approves; a hardened
 prompt doesn't help against a lie. Sentinel's answer is architectural: the
 model may recommend, but the authoritative decision is computed from a view
-that has no field for the prose or the model's opinion. The institution's own
-records decide whether the claim is supported, versioned fail-closed policy
-decides the outcome, a capability registry decides who may execute it, and a
-tamper-evident audit chain records why, so every decision replays. On
+that has no field for the prose or the model's opinion. Issuer-signed records
+decide whether the claim is supported, a signed and activated policy decides
+the outcome, a capability registry and authenticated reviewers decide who may
+execute it, and a tamper-evident audit chain with anchored checkpoints records
+why, so every decision replays. On
 synthetic corpora against a simulated naive agent, unauthorised execution
 goes from 90.0% to 0.0% with 0.0% false positives on deserved refunds -- and I can
 show you exactly what that does and doesn't prove."
