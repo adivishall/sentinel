@@ -151,6 +151,22 @@ class Policy:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "content_hash", content_hash(self.to_dict()))
+        rel = self.release
+        if rel is not None and getattr(rel, "digest", None) != content_hash(self.to_dict(), 64):
+            # a release names one document: a copy whose content changed (a replay override,
+            # an in-process edit) no longer carries it
+            from dataclasses import replace as _replace
+
+            object.__setattr__(
+                self,
+                "release",
+                _replace(
+                    rel,
+                    status=type(rel.status)("INVALID"),
+                    activation_sequence=None,
+                    reason="the document differs from the one released (modified after release)",
+                ),
+            )
 
     @property
     def key(self) -> str:

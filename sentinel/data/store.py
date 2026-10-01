@@ -879,7 +879,18 @@ class SentinelStore:
             "FROM audit_events) WHERE json_extract(p, "
             "'$.detail.policy_release.activation_sequence') IS NOT NULL GROUP BY pid"
         )
-        return {str(r["pid"]): int(r["seq"]) for r in rows if r["pid"] is not None}
+        out = {str(r["pid"]): int(r["seq"]) for r in rows if r["pid"] is not None}
+        # and the activations recorded at each start (POLICY_ACTIVATIONS), so a policy no
+        # decision has used yet is covered too
+        for r in self._rows(
+            "SELECT payload FROM audit_events WHERE json_valid(payload) AND "
+            "json_extract(payload, '$.action') = 'POLICY_ACTIVATIONS'"
+        ):
+            acts = (json.loads(r["payload"]).get("detail") or {}).get("activations") or {}
+            for pid, seq in acts.items():
+                if isinstance(seq, int) and not isinstance(seq, bool):
+                    out[str(pid)] = max(seq, out.get(str(pid), 0))
+        return out
 
     def advance_fact_sequence(
         self, issuer: str, subject: str, sequence: int, envelope_digest: str

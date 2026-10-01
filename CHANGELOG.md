@@ -177,6 +177,43 @@ can be trusted (roadmap issues #11–#20).
   Documented, not changed: account-security cases carry no amount, so authority limits do
   not bound them (role and four eyes do).
 
+### Security — signed policy releases (#14)
+- A policy version decides only if a `policy-release` key the operator trusts signed its
+  exact content (`sentinel.policy-release/1`, Ed25519 over the full SHA-256 of the
+  document) and a signed activation in effect names it (`sentinel.policy-activation/1`:
+  explicit, sequenced, never before the document's own `effective_from`). A higher version
+  number activates nothing.
+- The trust root is `SENTINEL_POLICY_TRUST` or the shipped `sentinel/trust/policy_root.json`
+  (a public key), never the policy directory: an edited policy with a recomputed manifest,
+  an unsigned new version, a forged or edited activation, an unknown, wrong-purpose,
+  wrong-scope or revoked signer, a relabelled version, an early activation and two
+  activations with one sequence are each refused, named. An activation older than one a
+  store's decisions were made under (read from the audit chain) is a rollback and refused.
+- Every decision records the policy digest, release status, signer, key id and activation
+  sequence (decision, audit event, snapshot). The authority gate refuses to record a
+  decision under an unverified release, and replay reports the recorded release beside the
+  artifact it ran.
+- `sentinel policy sign | activate | verify`; `SENTINEL_REQUIRE_SIGNED_POLICY` (default on).
+- **Adversarial review of this branch.** Every edit-and-repin, unsigned version, forged
+  activation, relabel, revoked or wrong-purpose signer was refused. Found and fixed, each
+  with a regression test (`tests/test_policy_release.py::test_r*`):
+  - a release was not bound to its document: a replay rule override, or an in-process
+    edit, kept a VERIFIED stamp. A policy whose content differs from its release now
+    carries `INVALID`; the authority gate requires a verified, activated release of
+    exactly the document that ran; replay reports the artifact's own digest;
+  - the digest was not canonical for non-JSON values (a YAML date stringified like a
+    string): policy values must be JSON values, duplicate keys and non-integer versions
+    are refused, and signed policies are JSON only;
+  - an unreadable trust root left the shared registry usable but empty; it now stays
+    unusable and the start is refused;
+  - rollback was caught only for policies with a recorded decision: activations in effect
+    are now chained at every start (`POLICY_ACTIVATIONS`);
+  - one store's history set a floor on the process-wide registry and locked out every
+    other app; the check is per app, and "no trustworthy active policy" is a 503;
+  - `policy activate` took its next sequence from unverified book entries;
+  - an `effective_from` the verifier could not read silently skipped the effective-date
+    floor; it is refused.
+
 ### Security — secure-by-default deployment (#20)
 - **Loopback by default** (`serve`, `make_server`, `make api`). A network bind with no API
   key is refused before a socket opens (CLI exit 2); a key shorter than 16 characters does
@@ -201,6 +238,62 @@ can be trusted (roadmap issues #11–#20).
 - `docs/DEPLOYMENT.md` is a runbook: TLS termination, the three key purposes (facts,
   policy release, audit checkpoint) and why none lives on the Sentinel host, issuer and
   policy-release keys, reviewer credentials, reload, rotation and revocation.
+- **Adversarial review of this branch.** Bind parsing failed closed for every odd address,
+  no GET wrote anything, traversal and symlinks were refused, and no secret reached a
+  response, log or audit event. Found and fixed, each with a regression test:
+  - **DNS rebinding** defeated the Origin check (a rebound page is same-origin with
+    itself): a loopback server now answers only loopback names or `SENTINEL_ALLOWED_HOSTS`
+    (421 otherwise);
+  - **two SIGHUPs** 0.2 ms apart deadlocked the server, and a reload raising anything but
+    ValueError/OSError killed it: the handler only wakes a reloader thread, which catches
+    everything and audits `CONFIG_RELOAD_FAILED`;
+  - rotating the key file did nothing until a restart; a whitespace key passed the bind
+    check; `SERVER_START` carried an unsalted key-hash prefix (a guessing oracle);
+  - `snapshot.json` was served without the key; a malformed `Origin` dropped the
+    connection; a TLS proxy rewriting `Host` had its console POSTs refused; the console
+    prompted for the API key on a blank reviewer credential; `::1` could not be bound;
+    trust-store paths reached `/v1/system` and reload failures.
+  Documented, not changed: a client trickling bytes is the proxy's to cut off; concurrent
+  connections are now capped (`SENTINEL_MAX_CONNECTIONS`).
+
+### Security — asymmetric, anchored audit checkpoints (#17)
+- `sentinel.audit-checkpoint/1`: the chain's head (recomputed from genesis), length, chain
+  id, checkpoint sequence and the previous checkpoint's digest, signed with Ed25519 by a key
+  whose only purpose is `audit-checkpoint` (a facts or policy-release key is refused). The
+  verifier holds the public key, so verifying cannot forge; the HMAC checkpoint could.
+- **Anchors** (`sentinel.audit.anchor`): an exclusive-create directory (one file per
+  checkpoint, never overwritten) and an append-only JSONL file; `Anchor` is the interface
+  for a WORM store or a transparency log (none integrated). Checkpoints link to each other,
+  and each publication is recorded in the chain (`CHECKPOINT_PUBLISHED`): a dropped or
+  substituted checkpoint is visible, and so is a deleted one unless the same party can also
+  rewrite the chain's unanchored tail (only WORM or an external log rules that out).
+- `anchored` | `not_anchored` | `anchor_mismatch` for the chain (`audit verify --anchor`,
+  `/v1/audit/verify`) and for each decision (replay; a mismatch makes `record_verified`
+  false). INV-AUDIT-2 is tested in both directions: a consistent rewrite before an anchored
+  checkpoint is a mismatch; one after it is reported as `not_anchored`, never as anchored.
+- **Adversarial review of this branch.** Rewrites before a checkpoint, from genesis, with
+  relinked hashes, swapped, inserted, symlinked or edited anchor entries were all detected.
+  Found and fixed, each with a regression test:
+  - **one corrupted record at checkpoint time disabled anchoring for good**: a checkpoint
+    with a null head was signed and written before the job crashed, and every later
+    rewrite then looked like the honest state. No checkpoint is signed over a chain that
+    does not verify or disagrees with its anchor, and the anchor refuses malformed
+    statements;
+  - **the scheduled checkpoint job broke the running server**: its `CHECKPOINT_PUBLISHED`
+    record, appended from another process, made every later decision a 500. The chain
+    adopts records another writer appended when they link to its head;
+  - `--require-anchored` was inverted (an honest chain always exited 3; removing the
+    publication record made it pass): the publication record is required and not counted
+    as a gap, and an integrity failure is exit 2 whatever the flags;
+  - revoking a checkpoint key was a permanent mismatch: its checkpoints now retire with a
+    note, and a current key re-anchors;
+  - `/v1/system` re-read and re-verified the whole chain twice per call (2.4 s at 100k
+    events): it names the anchor only; `/v1/audit/verify` checks it;
+  - `--json` omitted the anchoring; `--anchor` was ignored with `--file`; a non-UTF-8 byte in
+    a JSONL anchor was a 400; anchor errors named paths; a relabelled sequence could claim
+    coverage; a checkpoint issued in the future was accepted.
+- `sentinel audit checkpoint --sign-key --signer --anchor`, `audit verify --anchor
+  [--require-anchored]`, `trust keygen --purpose audit-checkpoint`, `SENTINEL_AUDIT_ANCHOR`.
 
 ### Evaluation
 - The corpora's ledgers and acquirer records are signed by an ephemeral evaluation

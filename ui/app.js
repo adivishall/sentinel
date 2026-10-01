@@ -11,7 +11,7 @@ const keyHeaders = () => { try { const k = sessionStorage.getItem(KEY_SLOT); ret
 async function call(path, opts = {}) {
   const go = () => fetch(path, {cache: "no-store", ...opts, headers: {...(opts.headers || {}), ...keyHeaders()}});
   let r = await go();
-  if (r.status === 401 && !(opts.headers || {})["X-Reviewer-Token"]) {
+  if (r.status === 401 && !("X-Reviewer-Token" in (opts.headers || {}))) {
     const k = window.prompt("This Sentinel API needs its API key (kept for this browser tab only):");
     if (k) { try { sessionStorage.setItem(KEY_SLOT, k.trim()); } catch (e) { /* storage blocked */ } r = await go(); }
   }

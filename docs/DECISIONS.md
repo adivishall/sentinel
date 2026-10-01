@@ -498,3 +498,44 @@ no expiry, and anyone who can write the registry file can mint a reviewer.
 The demo prints two in-memory credentials so the console can act. The
 thresholds are demo values. Account-security cases carry no amount, so an
 authority limit cannot bound them; role and four eyes do.
+
+## D34 — A policy decides only as a signed release, explicitly activated
+
+**Decision.** Every policy version needs a `sentinel.policy-release/1` statement: Ed25519
+by a `policy-release` key over the document's full SHA-256. The active version is the one
+a signed `sentinel.policy-activation/1` statement in effect names -- sequenced, never
+before the document's own `effective_from` -- not the highest version number. The trust
+root is `SENTINEL_POLICY_TRUST`, else a root shipped in the package; the policy directory
+holds statements, never trust. Activations in effect are chained at every start, so a
+removed activation is a refused rollback. Decisions record the digest, release status,
+signer, key and activation; the authority gate requires a verified, activated release of
+exactly the document that ran.
+
+**Why.** Pinned digests (D26) stopped an accidental in-place edit, but anyone who could
+edit a policy could recompute its manifest entry, and "the highest version is active"
+meant adding a file was activating it. The question an auditor asks -- who approved the
+rule that decided this, and was it in force? -- had no answer.
+
+**Trade-off.** Every policy change now needs the release key (shipped versions were
+signed with the maintainer's key, kept off the repository). The shipped root is as safe
+as the installed package; production supplies its own. A signature proves approval, not
+correctness.
+## D35 — Audit checkpoints are signed with a key of their own and kept in an anchor
+
+**Decision.** A checkpoint is a `sentinel.audit-checkpoint/1` statement signed with
+Ed25519 by a key whose only purpose is `audit-checkpoint`, linked to the previous
+checkpoint, and published to an append-only anchor out of the audit-store writer's reach
+(a directory or a JSONL file today; `Anchor` is the interface a WORM store or a
+transparency log implements). Each publication is also recorded in the chain. The chain,
+`/v1/system` and every replay report `anchored`, `not_anchored` or `anchor_mismatch`.
+
+**Why.** The chain proves self-consistency only: a storage attacker who can recompute
+SHA-256 rewrites a suffix and `verify` passes. The HMAC checkpoint fixed a prefix but its
+key verifies and forges alike, it had no sequence (an older genuine checkpoint could be
+substituted) and it lived wherever the key did -- usually the store's host.
+
+**Trade-off.** Anchoring protects from the moment of anchoring: events after the latest
+checkpoint are `not_anchored` until the next one, and the report says so rather than
+calling them verified. The anchors shipped are as strong as where the operator keeps
+them; no external transparency log is integrated. The HMAC checkpoint remains for
+compatibility.

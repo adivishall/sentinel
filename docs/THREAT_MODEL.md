@@ -89,7 +89,7 @@ closes them.
 | unknown / unverifiable claim | INSUFFICIENT → REQUIRE_HUMAN_REVIEW | invariant 4 |
 | malformed input | validation → fail-safe human review; a malformed or negative number in a trusted record (ledger amount, KYB flags) is a human review, never a coerced 0 | invariant 5, `test_policy_adversarial.py` |
 | high-value effect | policy thresholds + registry human-review thresholds | invariant 6 |
-| audit tampering | tamper-evident chain; verify names the first modified, deleted, inserted or reordered record; a signed checkpoint detects a consistent rewrite | invariant 7, `test_audit_chain.py`, `test_audit_indexing.py` |
+| audit tampering | tamper-evident chain; verify names the first modified, deleted, inserted or reordered record; a signed, anchored checkpoint detects a consistent rewrite of everything before it (INV-AUDIT-2) | invariant 7, `test_audit_chain.py`, `test_audit_indexing.py`, `test_audit_anchoring.py` |
 | text mimicking the model's own output | the parser reads only the provider's structured tool call; output-format mimicry is a gateway finding | `test_model_output_separation.py` |
 | fabricated records in prose | an untrusted channel cannot produce VERIFIED evidence (type system) | `test_evidence.py`, `test_trust_boundary.py` |
 | future data influencing a past decision | point-in-time baselines, as-of entity profiles, time-aware graph, bounded monitoring windows; the temporal suite | `test_temporal_leakage.py`, `test_entity_pointintime.py`, `test_graph_temporal.py` |
@@ -147,18 +147,23 @@ closes them.
   mechanism, not an external trust relationship.
 - Auth is optional, and the server only warns when it starts open on a
   non-loopback bind. What-if switches are refused on the evaluate routes.
-- Shipped policy versions are pinned by digest, so an in-place edit fails
-  closed; someone who can edit both the policy and the manifest can still
-  change it -- production needs signed, immutable policy artefacts.
+- Policy versions are signed releases, explicitly activated (D34): a writer
+  of the policy directory cannot make an edited or unsigned policy decide. The
+  shipped trust root lives in the package, so someone who can rewrite the
+  installed package can replace it; a deployment sets `SENTINEL_POLICY_TRUST`
+  to a root it controls. A signer can still release a bad policy: replay is
+  how one finds out.
 - The audit chain detects modification, deletion, insertion and reordering by
   anyone who cannot recompute it. A storage attacker **can** recompute it: a
   consistent rewrite of the events after the last checkpoint passes both
   `verify` and checkpoint verification (verified in the 2.3 trust audit).
   Only events up to a checkpoint the operator holds outside the store are
-  protected. The checkpoint is HMAC-signed (`SENTINEL_AUDIT_KEY`), so anyone
-  who can verify it can also forge one. Asymmetric, externally anchored
-  checkpoints are issue #17. The chain is a tamper-evident application audit
-  chain, not a blockchain and not an immutable ledger.
+  protected. A signed, anchored checkpoint (Ed25519, an `audit-checkpoint`
+  key, an append-only anchor) is verifiable without the ability to forge, and
+  replay reports each decision as `anchored`, `not_anchored` or
+  `anchor_mismatch`; the legacy HMAC checkpoint (`SENTINEL_AUDIT_KEY`) can be
+  forged by anyone who can verify it. The chain is a tamper-evident
+  application audit chain, not a blockchain and not an immutable ledger.
 - A clean merchant whose upload carries a HIGH or CRITICAL injection is held
   or blocked rather than approved (5 of the 12 such applications in the KYB
   suite); lower-severity text does not stop an approval the records support

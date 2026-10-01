@@ -12,7 +12,7 @@ make api                          # API + console on http://127.0.0.1:8000, in-m
 # or with a persistent store:
 make data && make analyze && sentinel --db data/sentinel.db serve
 make audit-verify                 # verify the tamper-evident audit chain
-make audit-checkpoint             # export (and, with SENTINEL_AUDIT_KEY, sign) the chain head
+make audit-checkpoint             # legacy HMAC export; signed, anchored checkpoints: see "Audit checkpoints"
 ```
 
 The in-memory demo prints two demo reviewer credentials (alice, sam) for the
@@ -60,11 +60,12 @@ SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models   # same corpus, real 
 | Bind | loopback by default (`serve`, `make_server`, `sentinel serve`, `make api`). A non-loopback bind with no API key is refused before a socket opens (CLI exit 2). An API key shorter than 16 characters does not count. |
 | `--insecure-demo` | the only way to serve the network without a key (`SENTINEL_INSECURE_DEMO=1` for Docker). Logged at ERROR, printed as a warning, recorded in the `SERVER_START` audit event, and marked on every response (`X-Sentinel-Insecure-Demo: 1`); the console shows a red banner. |
 | Authentication | `Authorization: Bearer <key>` or `X-API-Key`; compared in constant time over SHA-256 digests (no length leak). `/health` and `/version` (name and version only) stay open. The console asks for the key once and keeps it for the tab (`sessionStorage`). |
-| Browser requests | a POST must be `application/json` (415 otherwise: a page elsewhere cannot send JSON without a preflight this server never answers); an `Origin` that is not this host, `Origin: null` or `Sec-Fetch-Site: cross-site` is a 403. This protects the loopback default from the operator's own browser. |
+| Browser requests | a POST must be `application/json` (415 otherwise: a page elsewhere cannot send JSON without a preflight this server never answers); an `Origin` that is not this host (or a name in `SENTINEL_ALLOWED_HOSTS`), `Origin: null`, an unparseable `Origin` or `Sec-Fetch-Site: cross-site` is a 403. |
+| Host | a loopback server answers only requests addressed to a loopback name (`127.0.0.1`, `localhost`, `[::1]`) or to a name in `SENTINEL_ALLOWED_HOSTS`; anything else is a 421. This is what stops DNS rebinding: a page whose own name resolves to 127.0.0.1 is same-origin with itself, but its requests still name its host. A network bind behind a proxy should list its public name. |
 | Headers | `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `nosniff` on every response; a CSP on the console (`script-src 'self'`, `connect-src 'self'`, `frame-ancestors 'none'`). |
-| Limits | 256 KiB bodies (413), negative `Content-Length` (400), a 30-second socket timeout, a per-client rate limit. |
-| Disclosure | `/v1/system` names the store's file, never its path; no stack traces; no key, token or credential in any response, log line or audit event. |
-| Start | a `SERVER_START` event in the audit chain: version, bind, auth mode, the API key's SHA-256 prefix, insecure-demo, mode, signed-facts and signed-policy settings, and fingerprints of the trust store and reviewer registry (file SHA-256, key ids, active reviewer ids, credential ids). |
+| Limits | 256 KiB bodies (413), negative `Content-Length` (400), a 30-second socket timeout (a fully stalled client is dropped), at most `SENTINEL_MAX_CONNECTIONS` (64) connections at once, a per-client rate limit. A client that trickles a byte every few seconds is the TLS proxy's to cut off: `http.server` has no request deadline. |
+| Disclosure | `/v1/system` names files (store, trust store), never paths; no stack traces; no key, key fingerprint, token or credential in any response, log line or audit event. With a key set, data files (`snapshot.json`) need it too; only the console's code is public. |
+| Start | a `SERVER_START` event in the audit chain: version, bind, auth mode, where the API key came from (environment or file -- never a fingerprint of it), insecure-demo, mode, signed-facts and signed-policy settings, and fingerprints of the trust store and reviewer registry (file SHA-256, key ids, active reviewer ids, credential ids). |
 
 ## Configuration
 
@@ -74,11 +75,14 @@ SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models   # same corpus, real 
 | `SENTINEL_API_KEY` | unset | the API's bearer token (16+ characters to serve a network address) |
 | `SENTINEL_API_KEY_FILE` | unset | read the API key from this file (a mounted secret) |
 | `SENTINEL_INSECURE_DEMO` | unset | `1` = serve a network address without a key (throwaway demos; audited) |
+| `SENTINEL_ALLOWED_HOSTS` | unset | comma-separated public names the API may be addressed as (behind a TLS proxy); requests and `Origin`s naming other hosts are refused |
+| `SENTINEL_MAX_CONNECTIONS` | `64` | concurrent connections; past it a new connection is closed at once |
 | `SENTINEL_FORCE_OFFLINE` | `1` in Make/Docker | force the deterministic offline agent |
 | `ANTHROPIC_API_KEY` | — | enables live mode when offline is not forced; never committed or logged |
 | `SENTINEL_MODEL` | `claude-opus-5-5` | live model id |
 | `SENTINEL_RATE_LIMIT` | `600` | requests per minute per client (0 = off) |
-| `SENTINEL_AUDIT_KEY` | unset | if set, `sentinel audit checkpoint` signs the exported checkpoint with HMAC-SHA256 and `audit verify --checkpoint` authenticates it; keep the key and the checkpoint outside the audit store |
+| `SENTINEL_AUDIT_ANCHOR` | unset | where signed audit checkpoints are anchored: a directory (one file per checkpoint, never overwritten) or a `.jsonl` append-only file, outside the audit store writer's reach |
+| `SENTINEL_AUDIT_KEY` | unset | legacy HMAC checkpoint (`audit checkpoint` without `--sign-key`); a shared secret that verifies and forges alike |
 | `SENTINEL_TRUST_STORE` | unset (nothing trusted) | trust store JSON: the public keys of the issuers whose signed fact envelopes Sentinel accepts |
 | `SENTINEL_REQUIRE_SIGNED_FACTS` | off (on for the in-memory demo) | every record read by id must come with its issuer's signed statement; a missing one is `INVALID` |
 | `SENTINEL_POLICY_TRUST` | the shipped root (`sentinel/trust/policy_root.json`) | trust store holding the `policy-release` keys whose signed releases and activations Sentinel accepts |
@@ -103,7 +107,11 @@ production-shaped boundaries (see "Honest scope" below).
   timeouts, a body limit no larger than Sentinel's 256 KiB. Bearer tokens and
   reviewer credentials never cross a network unencrypted.
 - Behind a proxy every client shares one address, so Sentinel's per-client
-  rate limit becomes a global one; rate-limit per client at the proxy.
+  rate limit becomes a global one; rate-limit per client at the proxy, and give
+  the proxy request deadlines (slow clients are its job).
+- Set `SENTINEL_ALLOWED_HOSTS` to the public name, or have the proxy keep the
+  client's `Host` (`proxy_set_header Host $http_host;`): otherwise the console's
+  POSTs are refused as cross-origin.
 - Start with `SENTINEL_API_KEY_FILE`, `SENTINEL_TRUST_STORE`,
   `SENTINEL_REVIEWERS`, `SENTINEL_REQUIRE_SIGNED_FACTS=1` and the policy trust
   root. Check the `SERVER_START` event (`sentinel audit list`): `auth=api_key`,
@@ -118,7 +126,7 @@ for another. Keep them on independent schedules.
 |---|---|---|
 | Fact issuer (`purpose: facts`) | each system of record, ideally in an HSM/KMS | public keys in `SENTINEL_TRUST_STORE` |
 | Policy release (`purpose: policy-release`) | the policy release pipeline | public keys in `SENTINEL_POLICY_TRUST` |
-| Audit checkpoint (`SENTINEL_AUDIT_KEY`, HMAC today) | the operator who verifies checkpoints, off the store host | nothing (see LIMITATIONS: an HMAC key verifies and forges alike) |
+| Audit checkpoint (`purpose: audit-checkpoint`) | the operator's checkpointing job (its own process and credentials, not the server's) | public keys in `SENTINEL_TRUST_STORE`; the anchor is read-only for the server |
 
 **Private signing keys never live on the Sentinel application host.** The
 trust stores hold public keys only; deploy them read-only and root-owned,
@@ -134,6 +142,20 @@ sentinel trust sign --key /secure/core-ledger.pem --issuer core-ledger \
 sentinel --trust-store /etc/sentinel/trust.json trust verify envelope.json --kind dispute_ledger
 sentinel --trust-store /etc/sentinel/trust.json trust ingest envelope.json   # store it beside the record
 sentinel --trust-store /etc/sentinel/trust.json trust revoke <key_id> --reason compromised
+```
+
+### Audit checkpoints
+
+```bash
+sentinel trust keygen --issuer audit-notary --purpose audit-checkpoint \
+    --key-out /secure/audit-checkpoint.pem --trust-out /etc/sentinel/trust.json
+# a scheduled job (its own process; the server adopts the record it appends), with the
+# anchor on storage the store's writer cannot modify -- WORM, or a directory exported or
+# committed elsewhere after each run
+sentinel --db /data/sentinel.db --trust-store /etc/sentinel/trust.json audit checkpoint \
+    --sign-key /secure/audit-checkpoint.pem --signer audit-notary --anchor /mnt/worm/sentinel-anchor
+sentinel --db /data/sentinel.db --trust-store /etc/sentinel/trust.json audit verify \
+    --anchor /mnt/worm/sentinel-anchor --require-anchored
 ```
 
 ### Policy releases
@@ -170,8 +192,10 @@ a deactivated reviewer's pending four-eyes approval stops counting.
 ### Reloading configuration
 
 Replace the file atomically (write a temp file, then rename), then
-`kill -HUP <pid>` or restart. Both read the files the same way. The reload is
-audited (`CONFIG_RELOAD`: source, file SHA-256, keys added / removed / newly
+`kill -HUP <pid>` or restart. Both read the files the same way. The signal only
+wakes a reloader thread (a burst of signals is one or more reloads, never a
+deadlock), and a reload that fails for any reason keeps the server running on
+its old configuration. The reload is audited (`CONFIG_RELOAD`: source, file SHA-256, keys added / removed / newly
 revoked, reviewers added / deactivated, credential ids -- never key bytes or
 tokens). A file that fails to load is refused, the running configuration stays
 (nothing new is trusted, nothing is dropped), and `CONFIG_RELOAD_FAILED` is
@@ -188,6 +212,9 @@ activation, picked up at restart.
   from another.
 - **Reviewer credentials:** `reviewers add` a new credential for the person,
   deactivate the old one, reload.
+- **The API key:** replace the mounted `SENTINEL_API_KEY_FILE` in place; the
+  server reads it again when it changes (an environment variable needs a
+  restart).
 
 ### Logs and retention
 
@@ -210,6 +237,7 @@ service. `http.server` is not a production web server; real use needs the
 reverse proxy above (or a real WSGI/ASGI server), SSO/OIDC for reviewers
 instead of Sentinel-issued bearer tokens, a secret manager, log shipping,
 retention and PII policies, integration with the real ledger, records and
-authentication services in place of the SQLite context builders, an
-asymmetric, externally anchored audit checkpoint (issue #17), and a live-model
-evaluation on the operator's own key.
+authentication services in place of the SQLite context builders, an anchor
+nobody can delete from (WORM storage or a transparency log; the shipped anchors
+are a directory and a file), and a live-model evaluation on the operator's own
+key.

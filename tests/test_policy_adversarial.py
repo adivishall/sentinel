@@ -361,8 +361,9 @@ def test_without_authorization_or_policy_a_run_is_a_what_if_and_is_never_recorde
         b = _dispute(LEDGER, RunOptions(controls=FULL - {missing}))
         assert not b.decision.authoritative
     app = SentinelApp()
+    n = len(app.runtime.audit)  # the start's POLICY_ACTIVATIONS event
     b = app.evaluate_dispute(CLAIM, LEDGER, options=RunOptions(controls=FULL - {AUTHORIZATION}))
-    assert app.store.decision(b.decision.decision_id) is None and len(app.runtime.audit) == 0
+    assert app.store.decision(b.decision.decision_id) is None and len(app.runtime.audit) == n
 
 
 # ---- tampered policy files and hash mismatch --------------------------------------------------
