@@ -86,7 +86,7 @@ def record_problems(
     out += [  # a value the rules were not written for would make them silently false
         f"{k}={record[k]!r} is not one of {sorted(RECORD_VALUES[k])}"
         for k in vocab
-        if k in record and record[k] not in RECORD_VALUES[k]
+        if k in record and (not isinstance(record[k], str) or record[k] not in RECORD_VALUES[k])
     ]
     for k in numeric:
         if k in record:

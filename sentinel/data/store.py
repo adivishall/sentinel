@@ -27,7 +27,7 @@ from sentinel.domain.entities import (
     PaymentInstrument,
     Transaction,
 )
-from sentinel.domain.enums import CasePriority, CaseStatus, Workflow
+from sentinel.domain.enums import CasePriority, CaseStatus, FactKind, Workflow
 from sentinel.domain.risk import RiskAssessment
 from sentinel.domain.security import SecurityEvent
 from sentinel.domain.serialization import to_dict
@@ -73,6 +73,15 @@ CREATE TABLE IF NOT EXISTS fact_sequences (issuer TEXT, subject TEXT, sequence I
 
 def _j(obj: object) -> str:
     return json.dumps(to_dict(obj), sort_keys=True, default=str)
+
+
+# where each kind of record is kept (code constants, never caller input)
+_RECORD_TABLES: dict[FactKind, tuple[str, str]] = {
+    FactKind.DISPUTE_LEDGER: ("disputes", "dispute_id"),
+    FactKind.KYB_RECORD: ("kyb_applications", "application_id"),
+    FactKind.TRANSACTION: ("transactions", "transaction_id"),
+    FactKind.LOGIN_SESSION: ("login_sessions", "session_id"),
+}
 
 
 class SentinelStore:
@@ -409,6 +418,13 @@ class SentinelStore:
             r["label"],
             r["status"] or "settled",
         )
+
+    def held_id(self, kind: FactKind, rid: str) -> str | None:
+        """The stored record id equal to ``rid`` ignoring ASCII case, if the store holds
+        one: ``tx-000123`` names ``TX-000123`` and is refused as a new subject."""
+        table, column = _RECORD_TABLES[kind]
+        r = self._one(f"SELECT {column} FROM {table} WHERE {column} = ? COLLATE NOCASE", (rid,))
+        return str(r[0]) if r else None
 
     def transaction(self, tid: str) -> Transaction | None:
         r = self._one("SELECT * FROM transactions WHERE transaction_id = ?", (tid,))

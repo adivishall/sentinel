@@ -37,12 +37,13 @@
           "value": [
             "UNTRUSTED",
             "EXPIRED",
-            "SUPERSEDED"
+            "SUPERSEDED",
+            "NONE"
           ]
         }
       ],
       "outcome": "REQUIRE_HUMAN_REVIEW",
-      "reason": "Nothing establishes these facts (request-body, expired or superseded): a human must, before anything executes."
+      "reason": "Nothing establishes these facts (request-body, expired or superseded, or none recorded): a human must, before anything executes."
     },
     {
       "id": "review-unsigned-acquirer-record",
@@ -141,6 +142,18 @@
       ],
       "outcome": "REQUIRE_HUMAN_REVIEW",
       "reason": "High-risk merchant category."
+    },
+    {
+      "id": "review-unknown-mcc",
+      "when": [
+        {
+          "field": "mcc_risk",
+          "op": "==",
+          "value": "unknown"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "The acquirer did not classify the merchant category: a human decides what it is."
     },
     {
       "id": "review-high-ai-security",

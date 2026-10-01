@@ -48,7 +48,7 @@ from sentinel.decision.workflows import (
 from sentinel.domain.cases import Case
 from sentinel.domain.entities import Dispute, KYBApplication, LoginSession, Transaction
 from sentinel.domain.enums import CaseStatus, FactKind, FactsSource, TrustClass
-from sentinel.domain.ids import content_hash, new_id
+from sentinel.domain.ids import check_record_id, content_hash, new_id
 from sentinel.domain.risk import EntityRiskProfile
 from sentinel.domain.serialization import to_dict
 from sentinel.observability import METRICS, get_logger, log_decision
@@ -361,6 +361,15 @@ class SentinelApp:
         return self.world.dataset.as_of or datetime.utcnow().isoformat(timespec="seconds")
 
     # ---- persistence of a bundle ------------------------------------------------------------
+    def _refuse_held(self, kind: FactKind, rid: str | None) -> None:
+        """A caller-supplied record (or a statement) for a record the store holds -- under
+        the exact id or a case variant of it -- is refused: a stored record is evaluated
+        by id, as stored."""
+        if rid:
+            held = self.store.held_id(kind, rid)
+            if held is not None:
+                raise ValueError(f"{held} is held by the record store; evaluate it by id")
+
     def _rt(self, options: RunOptions) -> Runtime:
         return self.what_if_runtime if options.what_if else self.runtime
 
@@ -528,8 +537,7 @@ class SentinelApp:
                 raise ValueError("the envelope carries no transaction record")
             t = _transaction_from_record(payload)
             for rid in (t.transaction_id, _named(envelope, FactKind.TRANSACTION)):
-                if rid and self.store.transaction(rid) is not None:
-                    raise ValueError(f"{rid} is held by the record store; evaluate it by id")
+                self._refuse_held(FactKind.TRANSACTION, rid)
             src = FactsSource.CALLER_SUPPLIED
         else:
             if transaction is None:
@@ -540,6 +548,8 @@ class SentinelApp:
             if found is None:
                 raise KeyError(f"unknown transaction {transaction}")
             t = found
+            if not isinstance(transaction, str):
+                check_record_id(t.transaction_id, "transaction_id")
             # A transaction read by id (or identical to the stored record) is system-of-record
             # input, checked against its issuer's statement when the store holds one.
             stored = self.store.transaction(t.transaction_id)
@@ -551,6 +561,7 @@ class SentinelApp:
                     f"{t.transaction_id} is held by the record store; evaluate it by id"
                 )
             else:
+                self._refuse_held(FactKind.TRANSACTION, t.transaction_id)
                 src = FactsSource.CALLER_SUPPLIED
                 # an unsigned transaction's timestamp is a claim: it does not choose the
                 # moment its risk context and account status are read as of (backdating
@@ -599,10 +610,11 @@ class SentinelApp:
         if ledger is not None and envelope is not None:
             raise ValueError("pass a ledger or a signed envelope, not both")
         named = dispute_id or _named(envelope, FactKind.DISPUTE_LEDGER)
-        if (ledger is not None or envelope is not None) and named and self.store.dispute(named):
+        if (ledger is not None or envelope is not None) and named:
             # a stored dispute is evaluated as stored: its recorded submission, its account's
             # context and its statement checked against the stored row -- never re-pointed
-            raise ValueError(f"{named} is held by the record store; evaluate it by id")
+            check_record_id(named, "dispute_id")
+            self._refuse_held(FactKind.DISPUTE_LEDGER, named)
         account_id = None
         account_risk = 0
         facts_source = FactsSource.CALLER_SUPPLIED
@@ -687,12 +699,9 @@ class SentinelApp:
         ``evaluate_dispute``: a signed ``envelope``, or an unsigned ``ledger`` (UNTRUSTED)."""
         if (ledger is None) == (envelope is None):
             raise ValueError("pass exactly one of a ledger or a signed envelope")
-        named = _named(envelope, FactKind.DISPUTE_LEDGER)
-        if named and self.store.dispute(named):
-            # as for evaluate_dispute: a stored dispute is evaluated as stored (its recorded
-            # submission, its account's risk), never re-pointed with new text and its own
-            # statement
-            raise ValueError(f"{named} is held by the record store; evaluate it by id")
+        # as for evaluate_dispute: a stored dispute is evaluated as stored (its recorded
+        # submission, its account's risk), never re-pointed with new text and its own statement
+        self._refuse_held(FactKind.DISPUTE_LEDGER, _named(envelope, FactKind.DISPUTE_LEDGER))
         return self._persist(
             self._conversation(turns, ledger or {}, envelope, FactsSource.CALLER_SUPPLIED, options)
         )
@@ -740,8 +749,10 @@ class SentinelApp:
             raise ValueError("pass records or a signed envelope, not both")
         payload = envelope.get("payload") if isinstance(envelope, dict) else None
         app_named = payload.get("application_id") if isinstance(payload, dict) else None
-        if isinstance(app_named, str) and self.store.kyb_application(app_named) is not None:
-            raise ValueError(f"{app_named} is held by the record store; evaluate it by id")
+        if isinstance(app_named, str):
+            self._refuse_held(FactKind.KYB_RECORD, app_named)
+        if merchant_id:
+            check_record_id(merchant_id, "merchant_id")
         facts_source = FactsSource.CALLER_SUPPLIED
         if application_id and records is None and envelope is None:
             facts_source = FactsSource.SYSTEM_OF_RECORD
@@ -801,8 +812,7 @@ class SentinelApp:
                 raise ValueError("the envelope carries no session record")
             s = _session_from_record(payload)
             for rid in (s.session_id, _named(envelope, FactKind.LOGIN_SESSION)):
-                if rid and self.store.session(rid) is not None:
-                    raise ValueError(f"{rid} is held by the record store; evaluate it by id")
+                self._refuse_held(FactKind.LOGIN_SESSION, rid)
             src = FactsSource.CALLER_SUPPLIED
         else:
             if session is None:
@@ -811,6 +821,8 @@ class SentinelApp:
             if found is None:
                 raise KeyError(f"unknown session {session}")
             s = found
+            if not isinstance(session, str):
+                check_record_id(s.session_id, "session_id")
             stored_session = self.store.session(s.session_id)
             if isinstance(session, str) or stored_session == s:
                 src = FactsSource.SYSTEM_OF_RECORD
@@ -818,6 +830,7 @@ class SentinelApp:
             elif stored_session is not None:
                 raise ValueError(f"{s.session_id} is held by the record store; evaluate it by id")
             else:
+                self._refuse_held(FactKind.LOGIN_SESSION, s.session_id)
                 src = FactsSource.CALLER_SUPPLIED
                 s = replace(s, started_at=self._now())  # as for an unsigned transaction
         ctx = self.account_security_context(s)

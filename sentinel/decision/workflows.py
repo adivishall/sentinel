@@ -414,7 +414,8 @@ def _finish(
         )
         prior = rt.executions.claim(key, decision.decision_id)
         if prior is not None:  # claimed concurrently since the check above
-            decision = compose(replace(inputs, prior_execution=prior))
+            inputs = replace(inputs, prior_execution=prior)  # what the snapshot records
+            decision = compose(inputs)
     if rt.persist:
         decision = replace(decision, authoritative=True)
     sec = inputs.security

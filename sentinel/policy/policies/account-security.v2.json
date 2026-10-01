@@ -36,12 +36,13 @@
           "value": [
             "UNTRUSTED",
             "EXPIRED",
-            "SUPERSEDED"
+            "SUPERSEDED",
+            "NONE"
           ]
         }
       ],
       "outcome": "REQUIRE_HUMAN_REVIEW",
-      "reason": "Nothing establishes these facts (request-body, expired or superseded): a human must, before anything executes."
+      "reason": "Nothing establishes these facts (request-body, expired or superseded, or none recorded): a human must, before anything executes."
     },
     {
       "id": "block-critical-ai-security",

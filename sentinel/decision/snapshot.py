@@ -188,4 +188,5 @@ def restore(
         claim_type=d.get("claim_type"),
         provenance=FactProvenance.from_dict(d["provenance"]) if d.get("provenance") else None,
         fact_envelope=d.get("fact_envelope"),
+        prior_execution=d.get("prior_execution"),
     )

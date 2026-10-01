@@ -610,7 +610,10 @@ def test_f3_an_oversized_integer_fails_safe_and_leaves_no_orphan_audit_event(app
     n_audit, n_dec = len(app.runtime.audit), app.store.count("decisions")
     b = app.evaluate_dispute(CLAIM, envelope=env)
     assert b.decision.provenance.status is ProvenanceStatus.INVALID and not b.decision.executed
-    assert b.decision.final_action is FinalAction.REQUIRE_HUMAN_REVIEW  # nothing to decide on
+    # a failed statement is a tamper signal: the policy's BLOCK is decisive (DENY, no case),
+    # not a fail-safe review that nobody may ever approve
+    assert b.decision.final_action is FinalAction.DENY and b.case is None
+    assert "block-failed-fact-provenance" in b.decision.policy.matched_rules
     assert len(app.runtime.audit) == n_audit + 1 and app.store.count("decisions") == n_dec + 1
     body = app.evaluate_dispute(CLAIM, {**LEDGER, "amount": 2**64})  # the unsigned route too
     assert not body.decision.executed and app.verify_audit().ok
