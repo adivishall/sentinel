@@ -10,7 +10,7 @@
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 ![Runs offline](https://img.shields.io/badge/runs_offline-no_API_key-2e8b57)
 ![Runtime deps](https://img.shields.io/badge/runtime_deps-1_(cryptography)-2e6da4)
-![Tests](https://img.shields.io/badge/tests-984_passing-2e8b57)
+![Tests](https://img.shields.io/badge/tests-990_passing-2e8b57)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
 [Console (static snapshot)](https://adivishall.github.io/sentinel/) · [Screenshots](#screenshots) · [Evaluation](docs/EVALUATION.md) · [Security model](docs/SECURITY_MODEL.md) · [Limitations](docs/LIMITATIONS.md) · [Interview guide](docs/INTERVIEW.md)
@@ -142,12 +142,14 @@ monitoring cycle finder is bounded to 30 days ([details](docs/EVALUATION.md#g-fi
 | Control | What it does | Detail |
 |---|---|---|
 | **AI Security Gateway** | normalisation, bounded injection signals, provenance-aware rules, a multi-turn session model, a check of the model's own tool call; raises severity, never approves | [SECURITY_MODEL](docs/SECURITY_MODEL.md) |
-| **Trusted evidence** | claims ("never received") are checked against records ("delivered"); contradictions are first-class; every decision says where its facts came from (`system_of_record` -- here a synthetic SQLite store -- or demo / simulation input) | [EVIDENCE_MODEL](docs/EVIDENCE_MODEL.md) · [input classes](docs/API.md#input-classes-system-of-record-vs-demo--simulation) |
-| **Policy-as-code** | versioned, fail-closed (every field a rule reads must be present and typed), shipped versions pinned by SHA-256; only the active version decides | [POLICY_ENGINE](docs/POLICY_ENGINE.md) |
+| **Trusted evidence** | claims ("never received") are checked against records ("delivered"); contradictions are first-class | [EVIDENCE_MODEL](docs/EVIDENCE_MODEL.md) |
+| **Fact provenance** | every decision states what establishes its facts: `VERIFIED_EXTERNAL` (an issuer's Ed25519 statement, verified against an operator trust store with scopes, rotation, revocation, expiry and anti-rollback), `TRUSTED_LOCAL` (the record store), `UNTRUSTED` (a request body) or why a statement failed; unverified facts never execute, failed ones are denied | [SECURITY_MODEL](docs/SECURITY_MODEL.md) · [API](docs/API.md#input-classes-and-fact-provenance) |
+| **Policy-as-code** | versioned, fail-closed (every field a rule reads must be present and typed); a version decides only as a **signed release, explicitly activated** -- the trust root is outside the policy directory, and a rollback is refused | [POLICY_ENGINE](docs/POLICY_ENGINE.md) |
 | **Capability registry** | per capability: risk, reversibility, allowed actors, review level and the workflows that may execute it; no AI actor may execute a consequential capability, and a login decision can never approve a refund | [capability matrix](docs/SECURITY_MODEL.md#capability-security-matrix) |
 | **Evaluation authority** | only a run with every control, the active policy and the active risk model is recorded; what-ifs (replay, the attack simulator) never persist | [authority](docs/SECURITY_MODEL.md#evaluation-authority-sentineldecisionauthoritypy) |
-| **Human review** | only a human decision resolves a case, checked against the registry (a policy BLOCK is final for everyone); every human action is chained into the audit log | [case lifecycle](docs/SECURITY_MODEL.md#case-lifecycle-sentinelcasesservicepy) |
-| **Audit and replay** | a **tamper-evident application audit chain** (not a blockchain, not an immutable ledger): SHA-256-chained events that store hashes, never prose, with an HMAC-signed checkpoint; replay re-runs any decision under another policy or risk model and shows ORIGINAL vs RECOMPUTED with drift | [AUDIT_MODEL](docs/AUDIT_MODEL.md) |
+| **Human review** | only an **authenticated** reviewer resolves a case: identity, role and authority limit come from a credential, never the request; four eyes where the registry asks; a policy BLOCK is final for everyone; every action is chained | [case lifecycle](docs/SECURITY_MODEL.md#case-lifecycle-sentinelcasesservicepy) |
+| **Audit and replay** | a **tamper-evident application audit chain** (not a blockchain, not an immutable ledger): SHA-256-chained events that store hashes, never prose, with **Ed25519 checkpoints in an append-only anchor** (`anchored` / `not_anchored` / `anchor_mismatch` per decision); replay re-runs any decision and names its drift; a decision's full lineage in one view | [AUDIT_MODEL](docs/AUDIT_MODEL.md) |
+| **Secure by default** | loopback unless an API key (or an explicit, audited `--insecure-demo`); JSON-only, same-origin POSTs and a Host check against DNS rebinding; the configuration a server ran with is chained into the audit log | [DEPLOYMENT](docs/DEPLOYMENT.md) |
 
 Every consequential capability is traced from input to audit in
 [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md#consequential-capability-trace).
@@ -259,7 +261,7 @@ engine output over the synthetic demo dataset, nothing drawn by hand.
 ```bash
 git clone https://github.com/adivishall/sentinel.git && cd sentinel
 make install          # dev tooling + the `sentinel` command; the one runtime dependency is pyca/cryptography
-make test             # 984 tests, offline
+make test             # 990 tests, offline
 make attack-compare   # the flagship demo, no key needed
 make api              # API + console at http://localhost:8000 (in-memory demo dataset)
 ```

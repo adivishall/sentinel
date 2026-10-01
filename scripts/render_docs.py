@@ -3334,38 +3334,44 @@ author; on {cl['uncommon_n']} held-out unusual phrasings it read 7 on the first,
 {cl['uncommon_recognised']} after the patterns were extended by someone who had seen the misses --
 partially informed, not a clean benchmark. It is defence in depth.
 
-**6. What does the audit chain protect?**
-**IMPLEMENTED:** tamper-evidence for every decision, every human case action
-(manual case, status change, decision) and every replay: modification,
-deletion, insertion, reordering and unreadable records are an AUDIT INTEGRITY
-ERROR naming the first bad record (exit 2); a consistent rewrite of the whole
-chain is caught only against a checkpoint stored elsewhere, HMAC-signed with a
-shared key. It stores hashes of untrusted text, never the text. **NOT
-IMPLEMENTED:** proof that an event is true (a compromised writer writes false
-events honestly), availability, immutability, key management. It is a
-tamper-evident application audit chain -- not a blockchain, not an immutable ledger.
+**6. What does the audit chain protect, and what can an external checkpoint prove?**
+**IMPLEMENTED:** tamper-evidence for every decision, human case action, server
+start, configuration reload and replay: modification, deletion, insertion,
+reordering and unreadable records are an AUDIT INTEGRITY ERROR naming the
+first bad record. On its own the chain proves only self-consistency -- someone
+who can rewrite the store and recompute SHA-256 rewrites a suffix and it still
+verifies. A checkpoint signed with Ed25519 by an `audit-checkpoint` key (the
+verifier holds only the public key) and kept in an append-only anchor fixes
+the prefix it covers: a decision is `anchored` (unchanged since the
+checkpoint), `not_anchored` (after the latest one -- a rewrite cannot be
+excluded, and the report says so) or `anchor_mismatch`. **NOT IMPLEMENTED:**
+an anchor nobody can delete from (WORM storage, a transparency log); proof that
+an event is *true*; availability. A tamper-evident application audit chain --
+not a blockchain, not an immutable ledger.
 
-**7. Why is replay useful?**
-**IMPLEMENTED:** any recorded decision re-runs from its stored inputs under another
-policy version, rule threshold, risk model or recommendation, with a
-field-level diff, the versions on each side, policy drift and engine drift;
-the recorded side is checked against its audit event, so a rewritten record
-cannot replay as unchanged. It answers "what would v1 have done?" (the console
-example: a v3 denial of a second refund that v1 would have paid), "did the
-engine change?" and "does this record match what was audited?". **NOT
-IMPLEMENTED:** bulk backtesting over a history, scheduled drift monitoring.
+**7. What can replay prove?**
+**IMPLEMENTED:** any recorded decision re-runs from its stored inputs under
+another policy version, rule threshold, risk model or recommendation, with a
+field-level diff and a named `drift`: policy content, risk-model configuration
+(a digest of weights and thresholds), engine, record vs audit event, policy
+release artifact, audit anchor, fact signature (re-verified now: a key revoked
+since shows). The recorded side is read from the audit event, and the original
+is never changed (INV-REPLAY-1). It proves what another rule *would* have done
+and whether the record still matches what was audited. **NOT IMPLEMENTED:**
+bulk backtesting over a history; scheduled drift monitoring.
 
 **8. What can Sentinel actually guarantee?**
-**IMPLEMENTED, structural and tested:** no consequential capability executes
-unless the trusted records support it, the active policy allows it and the
-registry authorizes the actor -- attacker text and model output cannot change
-that; a workflow executes only the capabilities it owns; no evaluation with a
-weakened control, a historical policy or a historical risk model is recorded;
-only a human decision resolves a case, checked against the registry; tampering
-with a recorded event is detected; a recorded decision replays
-deterministically. **NOT guaranteed:** that the records are true, who the
-reviewer is, that detection catches everything, that the risk model is
-accurate, temporal correctness beyond the tested record kinds.
+**IMPLEMENTED, structural and tested** (`docs/INVARIANTS.md`): no consequential
+capability executes unless verified or trusted facts support it, a signed and
+activated policy allows it and the registry authorises the actor; attacker
+text, model output and caller-chosen fields cannot change that (the adaptive
+red team: {rt['metrics']['authoritative_bypass_count']} bypasses in {rt['methodology']['sample']['queries']:,} queries); unsigned or failed
+facts never execute; a modified policy cannot decide; a reviewer cannot declare
+their own authority and four eyes needs two identities; no what-if is recorded
+as authoritative; a recorded decision replays; tampering is detected, and a
+consistent rewrite is detected where an anchored checkpoint covers it. **NOT
+guaranteed:** that a signed fact is true, that a signed policy is right, that
+detection catches everything, that the risk model is accurate.
 
 **9. What happens if detection misses the attack?**
 Nothing changes for execution. **IMPLEMENTED:** three classes
@@ -3373,46 +3379,40 @@ Nothing changes for execution. **IMPLEMENTED:** three classes
 and their guarded attack success is still {pct(s['asr_guarded'])}; the ablation shows detection alone
 leaks exactly those classes. **SIMULATED:** the corpus and the gateway share an author.
 
-**10. What is the trust boundary?**
-**IMPLEMENTED:** trust is a type (`TrustClass`); `UntrustedContent` refuses a
-trusted class and its source is a sanitised label; `DisputeFacts` / `KYBFacts`
-are built from records only, and a malformed record goes to a human; every
-decision names where its facts came from (`facts_source`). **SIMULATED:** the
-"system of record" is a synthetic SQLite store; the ad-hoc API forms accept
-caller-supplied facts, labelled `caller_supplied` or `demo_fixture`. **NOT
-IMPLEMENTED:** real systems of record; caller authentication beyond one optional
-bearer token.
+**10. How are facts trusted, and what does a signature prove?**
+**IMPLEMENTED:** every decision carries the provenance of its primary record,
+computed by the workflow and never taken from a request: `VERIFIED_EXTERNAL`
+(an issuer's Ed25519 statement over canonical JSON, verified against an
+operator trust store -- key purpose and scope, validity window, revocation,
+expiry, anti-rollback, and bound to this record), `TRUSTED_LOCAL` (read by id
+from the store), `UNTRUSTED` (request body), or `INVALID` / `REVOKED` /
+`EXPIRED` / `SUPERSEDED`. Policy states the level it needs, and the
+capability registry holds a floor no policy can lower: failed facts are
+denied, unverified ones go to a human. A signature proves **who stated the
+record and that it was not changed since** -- not that the record is true.
+**SIMULATED:** the issuer is an ephemeral demo key over a synthetic store.
 
-**11. How would caller-supplied facts be replaced?**
-**IMPLEMENTED:** every workflow already has an id form (`dispute_id`,
-`transaction_id`, `application_id`, `session_id`, `account_id`) that reads the
-facts from the record store and labels the decision `system_of_record`; the
-context builders in `sentinel/app.py` are the single seam. **SIMULATED:** the
-store is synthetic. **NOT IMPLEMENTED:** production would take identifiers only on
-the authoritative API (the fact-carrying forms move to a sandbox), have the
-context builders read the ledger, payment switch and KYB provider through
-authenticated service calls with freshness checks, and record per fact the
-source system and record version.
+**11. What is the trust boundary, and how would real systems plug in?**
+**IMPLEMENTED:** trust is a type (`TrustClass`); untrusted text yields at most a
+claim type; facts arrive through three interfaces -- `RecordProvider`,
+`FactProvider`, `RiskContextProvider` (`sentinel/data/providers.py`) -- and no
+decision, risk, evidence or policy module reads storage (a test asserts it).
+Stored records are evaluated by id on every route; caller-named ids follow one
+grammar. **SIMULATED:** the only provider is a synthetic SQLite store. **NOT
+IMPLEMENTED:** adapters for a real ledger, payment switch or KYB provider.
 
-**12. How would reviewer authentication work?**
-**IMPLEMENTED:**
-- A reviewer registry (operator configuration) holds id, role, authority
-  limit and an active flag. Its bearer credentials are stored only as SHA-256
-  and matched in constant time.
-- Every case action resolves who acts from the credential. A body naming a
-  reviewer or role is refused.
-- Approvals check the capability registry's level, the reviewer's authority
-  limit and, where the registry asks, four eyes: two distinct reviewers
-  before a case resolves.
-- Every human action is chained with the resolved reviewer id and credential
-  id.
-
-**NOT IMPLEMENTED:**
-- SSO / OIDC: the credential is a bearer token Sentinel issues, not a
-  session from the institution's identity provider.
-- Credential expiry and rotation schedules, and TLS termination (issue #20).
-- Binding a reviewer to the subjects they may not review, such as their own
-  account.
+**12. How does four-eyes approval work?**
+**IMPLEMENTED:** who acts is resolved from a credential in an operator
+registry (stored as SHA-256, matched in constant time), never from the
+request. The capability registry decides how many distinct reviewers a case
+needs (payout changes, fund releases and risk overrides always two; refunds
+from ₹100,000, payments from ₹500,000); one identity cannot supply both however
+many requests it sends; a deny resolves; an escalation -- by decision or by
+status change -- hands the case to a senior and restarts the count; a
+deactivated reviewer's pending approval stops counting; each approval also
+checks the reviewer's authority limit; a policy BLOCK is final for everyone.
+Every action is chained with reviewer id, role and credential id, never the
+credential. **NOT IMPLEMENTED:** SSO/OIDC; conflict-of-interest binding.
 
 **13. Why not just use a fraud model?**
 A fraud model answers "does this payment look like fraud?", not "is this
@@ -3431,13 +3431,33 @@ describe this corpus and this generator. Enough would be labelled real
 disputes and transactions, a red-team corpus written by someone else, and a
 live-model run.
 
-**15. What would production require?**
-Integration with the systems of record behind an identifier-only API;
-authentication, roles and four-eyes approval; signed policy releases and key
-management; an event-sourced history; a production edge (TLS, a real server,
-per-identity rate limits); PII handling and retention; monitoring; a
-live-model evaluation; a trained risk model as an extra signal; and regulatory
-review. None of it is claimed."""
+**15. What happens if the risk model or the policy is wrong?**
+A wrong risk model mis-scores: its score is one input to policy, never the
+authority, so a missed fraud signal still has to clear evidence, policy and
+authorisation, and a false alarm goes to a human rather than denying outright.
+Every assessment pins its model's configuration digest, and replay shows what
+another model version would have done. A wrong policy is signed and activated
+by someone accountable (the release names the key); replay under the old
+version shows what changed, and rolling back is a new, higher activation of
+the old version -- removing the newest one is refused. Neither is caught
+automatically: drift monitoring is not implemented.
+
+**16. What is still simulated?**
+The agent (an offline deterministic simulator; every live-model row is NOT
+RUN without a key), the records (a seeded synthetic world), the issuers (an
+ephemeral demo key), the evaluation corpora (hand-authored, sharing an author
+with the detector), and the fraud labels (the generator's). The checks are
+real: the policy, capability, provenance, release, reviewer and audit code
+runs exactly as it would, and the tests exercise it.
+
+**17. What would production require?**
+Adapters for the systems of record behind the provider interfaces; issuers
+signing real statements; SSO for reviewers; a policy release pipeline with
+multi-party sign-off; an anchor nobody can delete from; the event envelope of
+D37; a production edge (TLS proxy, a real server); PII handling and retention;
+monitoring and drift alerts; a live-model evaluation on the operator's key; a
+trained risk model as an extra signal; regulatory review. None of it is
+claimed."""
     out["evaluation-categories"] = evaluation_categories(R)
     out["hero"] = "\n".join(
         [

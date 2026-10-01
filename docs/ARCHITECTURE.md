@@ -86,7 +86,7 @@ Everything composes nine typed, immutable primitives (`sentinel/domain` and the 
 | Policy | `policy/models.py` | versioned rules over a declared field catalog |
 | Decision | `domain/decisions.py` | the canonical record; carries the AI recommendation but is not computed from it |
 | Case | `domain/cases.py` | investigation with a guarded lifecycle and human-only resolution |
-| AuditEvent | `audit/chain.py` | tamper-evident chain (each event hashes its body plus the previous hash); stores hashes of untrusted content, never prose; exportable HMAC-signed checkpoints |
+| AuditEvent | `audit/chain.py` | tamper-evident chain (each event hashes its body plus the previous hash); stores hashes of untrusted content, never prose; Ed25519 checkpoints in an append-only anchor (`audit/anchor.py`) |
 
 ## Trust classes
 

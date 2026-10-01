@@ -240,7 +240,7 @@ block.
     authority limit come from an operator-configured reviewer registry, and
     four eyes is enforced where the capability registry asks. But:
     - the credential is a static bearer token with no expiry, sent in a
-      header, so production needs TLS and SSO / OIDC (issue #20);
+      header, so production needs a TLS proxy (DEPLOYMENT) and SSO / OIDC;
     - anyone who can write the registry file can mint a reviewer, so keep it
       outside the data directory;
     - Sentinel does not know which subjects a reviewer is conflicted on (for
