@@ -201,20 +201,28 @@ engine version the result reproduces and the diff is empty
 replay is stored as a replay record and an audit event of kind `replay`; it
 never overwrites the original decision.
 
-`POST /v1/cases/{id}/decision` takes `reviewer`, `outcome`
-(approve | deny | escalate), `note` and an optional declared `role`
-(`HUMAN_REVIEWER` default, or `SENIOR_REVIEWER`). It is the only way a case
-reaches RESOLVED. A reserved system / model actor name, or the name of an
-agent that recommended on the case, is a 403; approving a case whose
-capability needs a senior reviewer with `HUMAN_REVIEWER` is a 403; a decision
-on an OPEN (untriaged) or already RESOLVED case is a 409.
+Case actions (`POST /v1/cases`, `/v1/cases/{id}/transition`,
+`/v1/cases/{id}/decision`) act as the reviewer whose credential is in
+`X-Reviewer-Token`. The reviewer registry (`SENTINEL_REVIEWERS`) resolves the
+id, role and authority limit. Responses:
+
+- no or unknown credential → 401;
+- a body naming `reviewer`, `role`, `actor` or `reviewer_id` → 400;
+- a reviewer the case's capability does not allow, a senior needed on an
+  escalated case, an amount above the reviewer's limit, or a second approval
+  by the same reviewer where four eyes apply → 403;
+- a decision on an OPEN (untriaged) or already RESOLVED case → 409.
+
+`/decision` takes `outcome` (approve | deny | escalate) and `note`. It is the
+only way a case reaches RESOLVED. A first of two required approvals leaves the
+case open ("approvals 1 of 2").
 
 ## Errors
 
 | Status | When |
 |---|---|
 | 400 | malformed JSON (including a duplicated key), missing/invalid field, unknown option, invalid policy document, `facts_envelope` together with the facts it replaces, new text on a stored dispute or application |
-| 401 | `SENTINEL_API_KEY` set and no valid `Authorization: Bearer` / `X-API-Key` (compared in constant time) |
+| 401 | `SENTINEL_API_KEY` set and no valid `Authorization: Bearer` / `X-API-Key` (compared in constant time); a case action without an active reviewer credential (`X-Reviewer-Token`) |
 | 403 | a what-if switch (`unguarded`, `options.controls`, `options.policy_version`, `options.risk_model`, investigation `as_of`) on an evaluate route; a reviewer that is not a human actor or lacks the case's required level |
 | 404 | unknown route / id |
 | 409 | invalid case transition; a human decision on an OPEN or RESOLVED case |

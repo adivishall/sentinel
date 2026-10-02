@@ -15,6 +15,7 @@ import pytest
 
 from sentinel.api.server import make_server
 from sentinel.app import SentinelApp
+from tests.reviewers import ANALYST
 
 BODIES = [
     None,  # not JSON at all
@@ -57,7 +58,9 @@ def server():
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     from sentinel.domain.enums import Workflow
 
-    cid = app.runtime.cases.open_manual(Workflow.DISPUTE, "probe", ("account:A",)).case_id
+    cid = app.runtime.cases.open_manual(
+        Workflow.DISPUTE, "probe", ("account:A",), by=ANALYST
+    ).case_id
     yield f"http://127.0.0.1:{httpd.server_address[1]}", cid
     httpd.shutdown()
 
