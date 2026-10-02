@@ -123,3 +123,22 @@ def test_odd_get_parameters_are_client_errors(server, path):
     except urllib.error.HTTPError as e:
         code = e.code
     assert code < 500, (path, code)
+
+
+@pytest.mark.parametrize(
+    ("route", "body"),
+    [
+        ("/v1/transactions/evaluate", {"transaction_id": "TX-NOPE"}),
+        ("/v1/disputes/evaluate", {"dispute_id": "DSP-NOPE"}),
+        ("/v1/merchants/evaluate", {"application_id": "APP-NOPE"}),
+        ("/v1/accounts/evaluate", {"session_id": "SES-NOPE"}),
+    ],
+)
+def test_an_unknown_record_is_a_404_not_a_500(server, route, body):
+    """Found by the review of the red team: a well-formed id the store does not hold was a
+    500 on every evaluate route (an unmapped KeyError), so INV-API-1 did not hold. A
+    malformed id is a 400."""
+    base, _ = server
+    assert _code(base + route, body) == 404
+    (key,) = body
+    assert _code(base + route, {key: body[key] + "\n"}) == 400

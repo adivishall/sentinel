@@ -3,20 +3,32 @@
   "dataset": {
     "seeds": [
       42,
-      7
+      7,
+      11,
+      23
     ],
-    "transactions": 5191,
-    "sample": 192,
+    "transactions": 10342,
+    "sample": 497,
     "worlds": [
       {
         "seed": 42,
         "transactions": 2594,
-        "sample": 96
+        "sample": 128
       },
       {
         "seed": 7,
         "transactions": 2597,
-        "sample": 96
+        "sample": 119
+      },
+      {
+        "seed": 11,
+        "transactions": 2575,
+        "sample": 122
+      },
+      {
+        "seed": 23,
+        "transactions": 2576,
+        "sample": 128
       }
     ]
   },
@@ -37,13 +49,13 @@
     "risk_assessment",
     "security_event"
   ],
-  "comparisons": 1728,
-  "decisions_tested": 3648,
+  "comparisons": 4473,
+  "decisions_tested": 9443,
   "leakage_count": 0,
   "leakage_rate": 0.0,
-  "leakage_upper_95": 0.0008208614486580057,
-  "sample_leakage_upper_95": 0.015481679618674082,
-  "future_records": 19392,
+  "leakage_upper_95": 0.000317193385068526,
+  "sample_leakage_upper_95": 0.0060095006100948645,
+  "future_records": 50197,
   "truncation_mismatch_count": 0,
   "truncation_mismatch_rate": 0.0,
   "truncation_mismatches": [],
@@ -53,11 +65,11 @@
   "perturbation_by_kind": {
     "dispute": {
       "description": "a dispute filed on the account's latest earlier purchase",
-      "n": 192,
-      "future_records": 768,
+      "n": 497,
+      "future_records": 1988,
       "transaction_changed": 0,
       "monitoring_changed": 0,
-      "tested": 384,
+      "tested": 994,
       "leakage_count": 0,
       "leakage_rate": 0.0,
       "transaction_change_rate": 0.0,
@@ -65,11 +77,11 @@
     },
     "device_burst": {
       "description": "a new device and an eight-purchase burst abroad on it",
-      "n": 192,
-      "future_records": 6912,
+      "n": 497,
+      "future_records": 17892,
       "transaction_changed": 0,
       "monitoring_changed": 0,
-      "tested": 384,
+      "tested": 994,
       "leakage_count": 0,
       "leakage_rate": 0.0,
       "transaction_change_rate": 0.0,
@@ -77,11 +89,11 @@
     },
     "merchant": {
       "description": "a new flagged high-risk merchant and five purchases there",
-      "n": 192,
-      "future_records": 4608,
+      "n": 497,
+      "future_records": 11928,
       "transaction_changed": 0,
       "monitoring_changed": 0,
-      "tested": 384,
+      "tested": 994,
       "leakage_count": 0,
       "leakage_rate": 0.0,
       "transaction_change_rate": 0.0,
@@ -89,11 +101,11 @@
     },
     "graph": {
       "description": "a new account on the same payout instrument and a circular transfer through it",
-      "n": 192,
-      "future_records": 2304,
+      "n": 497,
+      "future_records": 5964,
       "transaction_changed": 0,
       "monitoring_changed": 0,
-      "tested": 384,
+      "tested": 994,
       "leakage_count": 0,
       "leakage_rate": 0.0,
       "transaction_change_rate": 0.0,
@@ -101,11 +113,11 @@
     },
     "session": {
       "description": "a login with credential and payout changes that failed MFA",
-      "n": 192,
-      "future_records": 768,
+      "n": 497,
+      "future_records": 1988,
       "transaction_changed": 0,
       "monitoring_changed": 0,
-      "tested": 384,
+      "tested": 994,
       "leakage_count": 0,
       "leakage_rate": 0.0,
       "transaction_change_rate": 0.0,
@@ -113,11 +125,11 @@
     },
     "account_status": {
       "description": "the account frozen after T1 (a current-state field)",
-      "n": 192,
-      "future_records": 192,
+      "n": 497,
+      "future_records": 497,
       "transaction_changed": 0,
       "monitoring_changed": 0,
-      "tested": 384,
+      "tested": 994,
       "leakage_count": 0,
       "leakage_rate": 0.0,
       "transaction_change_rate": 0.0,
@@ -125,11 +137,11 @@
     },
     "payout_change": {
       "description": "new bank accounts added after T1 and the payout moved to one of them",
-      "n": 192,
-      "future_records": 768,
+      "n": 497,
+      "future_records": 1988,
       "transaction_changed": 0,
       "monitoring_changed": 0,
-      "tested": 384,
+      "tested": 994,
       "leakage_count": 0,
       "leakage_rate": 0.0,
       "transaction_change_rate": 0.0,
@@ -137,11 +149,11 @@
     },
     "risk_assessment": {
       "description": "stored HIGH risk assessments for the account, the merchant and a future transaction",
-      "n": 192,
-      "future_records": 2304,
+      "n": 497,
+      "future_records": 5964,
       "transaction_changed": 0,
       "monitoring_changed": 0,
-      "tested": 384,
+      "tested": 994,
       "leakage_count": 0,
       "leakage_rate": 0.0,
       "transaction_change_rate": 0.0,
@@ -149,11 +161,11 @@
     },
     "security_event": {
       "description": "stored CRITICAL AI-security events dated after T1",
-      "n": 192,
-      "future_records": 768,
+      "n": 497,
+      "future_records": 1988,
       "transaction_changed": 0,
       "monitoring_changed": 0,
-      "tested": 384,
+      "tested": 994,
       "leakage_count": 0,
       "leakage_rate": 0.0,
       "transaction_change_rate": 0.0,
@@ -162,31 +174,43 @@
   },
   "perturbation_examples": [],
   "expected": "all counts 0: a decision at T1 reads only records at or before T1",
-  "seconds": 82.4,
+  "seconds": 253.9,
   "methodology": {
     "kind": "structural (synthetic data)",
     "dataset": "two seeded synthetic worlds (seeds 42 and 7), a stratified transaction sample (half fraud-labelled)",
     "method": "truncation equivalence, then nine kinds of future record at +1/7/30/90 days, one kind at a time; the transaction assessment and the account monitor at T1 must be byte-identical; exact counts with a one-sided 95% Clopper-Pearson bound when zero",
     "limitations": "a deterministic check over two generator worlds, not a proof over every record; comparisons from one sample are correlated (read the per-sample bound); a current-state field with no recorded start (legacy account status) cannot be point-in-time",
     "sample": {
-      "comparisons": 1728,
-      "decisions_tested": 3648,
+      "comparisons": 4473,
+      "decisions_tested": 9443,
       "dataset_seeds": [
         42,
-        7
+        7,
+        11,
+        23
       ],
-      "dataset_transactions": 5191,
-      "dataset_sample": 192,
+      "dataset_transactions": 10342,
+      "dataset_sample": 497,
       "dataset_worlds": [
         {
           "seed": 42,
           "transactions": 2594,
-          "sample": 96
+          "sample": 128
         },
         {
           "seed": 7,
           "transactions": 2597,
-          "sample": 96
+          "sample": 119
+        },
+        {
+          "seed": 11,
+          "transactions": 2575,
+          "sample": 122
+        },
+        {
+          "seed": 23,
+          "transactions": 2576,
+          "sample": 128
         }
       ]
     }

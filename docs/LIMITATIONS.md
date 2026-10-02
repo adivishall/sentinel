@@ -280,7 +280,7 @@ block.
   (structural, by construction),
   with **0.0%** false positives on deserved refunds -- including the
   urgent-but-legitimate phrasings -- which is the empirical part.
-- **0 observed leaks in 3,648 checks** on the temporal benchmark
+- **0 observed leaks in 9,443 checks** on the temporal benchmark
   (9 kinds of later record, 4 offsets, two synthetic worlds): evidence
   for a tested invariant -- for the record kinds tested, a decision at T1 read
   only records at or before T1 -- not a proof, and not a fully event-sourced

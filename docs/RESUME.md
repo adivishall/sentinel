@@ -21,7 +21,7 @@ transactions, fraud savings or regulatory compliance are claimed.
 - **Point-in-time risk engineering.** Built an explainable, versioned risk
   engine -- as-of behavioural baselines, a time-aware relationship graph,
   entity profiles and account monitoring -- and a temporal-leakage benchmark
-  (3,648 checks, 9 kinds of later record) that found two current-state
+  (9,443 checks, 9 kinds of later record) that found two current-state
   reads; 0 observed leaks after the fix. On the synthetic development seed:
   transaction precision 86.7% / recall 67.2% at 0.19% FPR, account-level
   90.0% / 90.0%, with held-out seeds reported and early-burst misses

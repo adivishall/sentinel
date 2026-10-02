@@ -10,7 +10,7 @@
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 ![Runs offline](https://img.shields.io/badge/runs_offline-no_API_key-2e8b57)
 ![Runtime deps](https://img.shields.io/badge/runtime_deps-1_(cryptography)-2e6da4)
-![Tests](https://img.shields.io/badge/tests-934_passing-2e8b57)
+![Tests](https://img.shields.io/badge/tests-1005_passing-2e8b57)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
 [Console (static snapshot)](https://adivishall.github.io/sentinel/) · [Screenshots](#screenshots) · [Evaluation](docs/EVALUATION.md) · [Security model](docs/SECURITY_MODEL.md) · [Limitations](docs/LIMITATIONS.md) · [Interview guide](docs/INTERVIEW.md)
@@ -26,7 +26,7 @@
 | **Why** | Those decisions read attacker-controlled information through legitimate channels -- a dispute narrative, an uploaded invoice, a merchant application -- and an AI agent in the loop can be persuaded, by an injected instruction or by a customer who simply lies about a fact. |
 | **How** | The model may recommend. The institution's own records decide whether the claim is supported, versioned fail-closed policy decides the outcome, a capability registry decides who may execute it, and a tamper-evident audit chain records why. |
 | **Why different** | The authoritative decision is computed from a view that has *no field* for the attacker's prose or the model's output. Detection can miss; nothing executes that the records do not support. |
-| **Result** | On synthetic corpora against an offline *simulated* naive agent: unauthorised execution 90.0% → **0.0%** on the 150-attack main corpus (structural), with 0.0% false positives on deserved refunds; 0 observed temporal leaks in 3,648 checks; synthetic transaction risk precision 86.7% / recall 67.2%. Live-model evaluation: **not run**. |
+| **Result** | On synthetic corpora against an offline *simulated* naive agent: unauthorised execution 90.0% → **0.0%** on the 150-attack main corpus (structural), with 0.0% false positives on deserved refunds; 0 observed temporal leaks in 9,443 checks; synthetic transaction risk precision 86.7% / recall 67.2%. Live-model evaluation: **not run**. |
 <!-- /gen:hero -->
 
 Runs from a clean checkout with no API key: `make install && make attack-compare`.
@@ -167,7 +167,7 @@ seeds, method and limitations.
 | **AI security** | synthetic, offline simulated agent (not a live LLM) | an unauthorised consequential capability actually executed | main corpus 150 attacks / 15 classes; held-out 20; other surfaces 30; KYB 47 applications (24 hostile) | hand-authored corpora (same author as the gateway) | main corpus: simulated agent 90.0% → Sentinel **0.0%**; held-out, surfaces, KYB: 0.0%; false positives 0.0% (10 deserved refunds) | [§A–F](docs/EVALUATION.md#a-ai-security----development-corpus-resultssecurityjson) |
 | **Decision integrity** | structural (0 by construction; a regression check) | attacker text or model output loosening a protected decision | 170 attacks (main 150 + held-out 20); 360 model-recommendation replays (60 main-corpus attacks × 6 recommendations) | the security corpora | **0.0%** (no controls: 83.5%) | [§H](docs/EVALUATION.md#h-decision-integrity-resultsintegrityjson) |
 | **Financial risk** | synthetic benchmark (empirical) | precision / recall / FPR against the generator's scenario labels | seed 42: 3,183 transactions, 157 accounts; two held-out seeds of similar size | dev 42 (point values tuned on it); held-out 7, 2024 | transactions P 86.7% R 67.2% FPR 0.19%; accounts P 90.0% R 90.0% | [§G](docs/EVALUATION.md#g-financial-risk-on-labelled-synthetic-data-resultsfinancialjson) |
-| **Temporal correctness** | synthetic invariant check (empirical; not a proof) | a record dated after T changing a decision at T | 192 transactions; 9 kinds of future record at 4 offsets; 3,648 checks | seeds 42, 7 | **0 observed leaks** (95% upper bound 0.082% per check, 1.55% per sampled transaction) | [§I](docs/EVALUATION.md#i-temporal-correctness-resultstemporaljson) |
+| **Temporal correctness** | synthetic invariant check (empirical; not a proof) | a record dated after T changing a decision at T | 497 transactions; 9 kinds of future record at 4 offsets; 9,443 checks | seeds 42, 7, 11, 23 | **0 observed leaks** (95% upper bound 0.032% per check, 0.60% per sampled transaction) | [§I](docs/EVALUATION.md#i-temporal-correctness-resultstemporaljson) |
 | **Claim classifier** | synthetic, same author; defence in depth, not the foundation | legitimate claims read as their type; the rest held for a human | 117 phrasings; 21 held-out unusual phrasings | hand-authored | held-out: first (blind) run 7/21; 17/21 after the patterns were extended by an author who had seen the misses; FN 4/56, FP 0/28 | [§L](docs/EVALUATION.md#l-claim-classifier-resultsclaimsjson) |
 | **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.2396 ms | [PERFORMANCE.md](docs/PERFORMANCE.md) |
 | **Live LLM** | live-model evaluation | the same suites against a real model | -- | `claude-opus-5-5/effort-low, claude-sonnet-5-5/effort-low` | **NOT RUN** -- no live number is quoted anywhere | [§K](docs/EVALUATION.md#k-model--provider-evaluation-resultsmodelsjson) |
@@ -230,12 +230,12 @@ Definitions of every configuration are in [docs/EVALUATION.md](docs/EVALUATION.m
 ### Temporal correctness
 
 <!-- gen:temporal -->
-| Temporal-leakage benchmark (`results/temporal.json`: seeds 42, 7, 5,191 transactions, 192 sampled, 9 future-record kinds at +1, 7, 30, 90 days, 19,392 future records) | Changed / tested |
+| Temporal-leakage benchmark (`results/temporal.json`: seeds 42, 7, 11, 23, 10,342 transactions, 497 sampled, 9 future-record kinds at +1, 7, 30, 90 days, 50,197 future records) | Changed / tested |
 |---|---:|
-| assessment changes when records after the transaction are removed (truncation) | **0 / 192** |
-| transaction assessment changes when future records are added (perturbation) | **0 / 1,728** |
-| account-monitor assessment changes under the same perturbation | **0 / 1,728** |
-| all checks: observed leaks (exact count; 95% upper bound 0.082% per check, 1.55% per sampled transaction) | **0 / 3,648** |
+| assessment changes when records after the transaction are removed (truncation) | **0 / 497** |
+| transaction assessment changes when future records are added (perturbation) | **0 / 4,473** |
+| account-monitor assessment changes under the same perturbation | **0 / 4,473** |
+| all checks: observed leaks (exact count; 95% upper bound 0.032% per check, 0.60% per sampled transaction) | **0 / 9,443** |
 <!-- /gen:temporal -->
 
 **0 observed temporal leaks across the tested synthetic benchmark** -- a
@@ -259,7 +259,7 @@ engine output over the synthetic demo dataset, nothing drawn by hand.
 ```bash
 git clone https://github.com/adivishall/sentinel.git && cd sentinel
 make install          # dev tooling + the `sentinel` command; the one runtime dependency is pyca/cryptography
-make test             # 934 tests, offline
+make test             # 1005 tests, offline
 make attack-compare   # the flagship demo, no key needed
 make api              # API + console at http://localhost:8000 (in-memory demo dataset)
 ```

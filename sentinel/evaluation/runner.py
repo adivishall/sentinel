@@ -17,6 +17,7 @@ from sentinel.evaluation import (
     integrity,
     kyb,
     models,
+    redteam,
     surfaces,
     temporal,
 )
@@ -36,6 +37,7 @@ SUITES = (
     "claims",
     "performance",
     "models",
+    "redteam",
     "charts",
 )
 
@@ -77,6 +79,8 @@ def run_suite(
             results[n] = bench.main(out_dir)
         elif n == "models":
             results[n] = models.main(out_dir, sample=sample, provider=provider)
+        elif n == "redteam":
+            results[n] = redteam.main(out_dir, sample=sample)
         elif n == "charts":
             results[n] = {"charts": charts.main(out_dir)}
         else:

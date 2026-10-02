@@ -54,7 +54,9 @@ def new_trace() -> str:
     return t
 
 
-def log_decision(logger: logging.Logger, decision: Any) -> None:
+def log_decision(logger: logging.Logger, decision: Any, *, risk_version: str | None = None) -> None:
+    """One structured line per recorded decision: ids, versions, digests, provenance, who
+    and what -- never prose, keys or credentials."""
     logger.info(
         "decision",
         extra={
@@ -68,6 +70,14 @@ def log_decision(logger: logging.Logger, decision: Any) -> None:
                 "risk_level": decision.risk_level.value,
                 "policy_version": f"{decision.policy.policy_id}@v{decision.policy.version}",
                 "policy_hash": decision.policy.policy_hash,
+                "policy_digest": decision.policy.policy_digest or None,
+                "policy_release": decision.policy.release_status or None,
+                "risk_version": risk_version,
+                "facts_provenance": (
+                    decision.provenance.status.value if decision.provenance is not None else None
+                ),
+                "actor": decision.authorization.actor.value,
+                "authoritative": decision.authoritative,
                 "policy_outcome": decision.policy.outcome.value,
                 "capability": (
                     decision.requested_capability.value if decision.requested_capability else None

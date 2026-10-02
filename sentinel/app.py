@@ -116,6 +116,13 @@ def configured_trust() -> TrustStore:
     return TrustStore.load(path) if path else TrustStore.empty()
 
 
+class UnknownRecord(KeyError):
+    """A caller named a record the store does not hold: the API's 404, never a 500."""
+
+    def __str__(self) -> str:
+        return str(self.args[0]) if self.args else "unknown record"
+
+
 def _named(envelope: dict[str, Any] | None, kind: FactKind) -> str | None:
     """The record id a caller-carried statement names (for the stored-record check)."""
     subject = envelope.get("subject") if isinstance(envelope, dict) else None
@@ -559,7 +566,7 @@ class SentinelApp:
             self.store.save_security_event(b.security_event)
         snap = snapshot(b.inputs) if b.inputs is not None else {}
         self.store.save_decision(b.decision, snap, [to_dict(e) for e in b.reconciliation.evidence])
-        log_decision(_log, b.decision)
+        log_decision(_log, b.decision, risk_version=b.risk.model_version if b.risk else None)
         METRICS.inc(f"decisions.{b.decision.workflow.value}")
         METRICS.inc(f"actions.{b.decision.final_action.value}")
         return b
@@ -723,7 +730,7 @@ class SentinelApp:
                 self.store.transaction(transaction) if isinstance(transaction, str) else transaction
             )
             if found is None:
-                raise KeyError(f"unknown transaction {transaction}")
+                raise UnknownRecord(f"unknown transaction {transaction}")
             t = found
             if not isinstance(transaction, str):
                 check_record_id(t.transaction_id, "transaction_id")
@@ -798,7 +805,7 @@ class SentinelApp:
         if dispute_id and ledger is None and envelope is None:
             found = self.store.dispute(dispute_id)
             if found is None:
-                raise KeyError(f"unknown dispute {dispute_id}")
+                raise UnknownRecord(f"unknown dispute {dispute_id}")
             d, texts = found
             stored = (
                 texts.get("narrative", ""),
@@ -871,16 +878,29 @@ class SentinelApp:
         *,
         envelope: dict[str, Any] | None = None,
         options: RunOptions = DEFAULT_OPTIONS,
+        dispute_id: str | None = None,
     ) -> DecisionBundle:
         """A multi-turn dispute: one conversation, one decision. Facts as for
-        ``evaluate_dispute``: a signed ``envelope``, or an unsigned ``ledger`` (UNTRUSTED)."""
+        ``evaluate_dispute``: a signed ``envelope``, or an unsigned ``ledger`` (UNTRUSTED);
+        ``dispute_id`` names the new dispute (a statement must then be about it)."""
         if (ledger is None) == (envelope is None):
             raise ValueError("pass exactly one of a ledger or a signed envelope")
         # as for evaluate_dispute: a stored dispute is evaluated as stored (its recorded
-        # submission, its account's risk), never re-pointed with new text and its own statement
-        self._refuse_held(FactKind.DISPUTE_LEDGER, _named(envelope, FactKind.DISPUTE_LEDGER))
+        # submission, its account's risk), never re-pointed with new text and its own
+        # statement, nor named again with body facts
+        named = dispute_id or _named(envelope, FactKind.DISPUTE_LEDGER)
+        if named is not None:
+            check_record_id(named, "dispute_id")
+            self._refuse_held(FactKind.DISPUTE_LEDGER, named)
         return self._persist(
-            self._conversation(turns, ledger or {}, envelope, FactsSource.CALLER_SUPPLIED, options)
+            self._conversation(
+                turns,
+                ledger or {},
+                envelope,
+                FactsSource.CALLER_SUPPLIED,
+                options,
+                dispute_id=dispute_id,
+            )
         )
 
     def _conversation(
@@ -950,7 +970,7 @@ class SentinelApp:
             facts_source = FactsSource.SYSTEM_OF_RECORD
             found = self.store.kyb_application(application_id)
             if found is None:
-                raise KeyError(f"unknown application {application_id}")
+                raise UnknownRecord(f"unknown application {application_id}")
             k, texts = found
             stored = (
                 texts.get("application", ""),
@@ -1011,7 +1031,7 @@ class SentinelApp:
                 raise ValueError("a session, its id or a signed envelope is required")
             found = self.store.session(session) if isinstance(session, str) else session
             if found is None:
-                raise KeyError(f"unknown session {session}")
+                raise UnknownRecord(f"unknown session {session}")
             s = found
             if not isinstance(session, str):
                 check_record_id(s.session_id, "session_id")
