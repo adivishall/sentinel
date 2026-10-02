@@ -539,3 +539,25 @@ checkpoint are `not_anchored` until the next one, and the report says so rather 
 calling them verified. The anchors shipped are as strong as where the operator keeps
 them; no external transparency log is integrated. The HMAC checkpoint remains for
 compatibility.
+
+## D36 — A model is benchmarked one exact configuration at a time, and a refusal is not a verdict
+
+**Decision.** The model suite has one row per exact configuration -- provider, requested
+model, effort, `max_tokens` -- measured against prompts, corpus, policy and risk models
+identified by digest, recording served model, SDK version, stop reasons, refusals,
+truncations, parse failures, latency, tokens and (from a dated price only) cost. A row
+that did not run is NOT RUN with the reason. The agent parses only an `end_turn` answer;
+every other ending is a labelled fail-safe recommendation.
+
+**Why.** "Model X scored Y" hides the settings, the date and what answered (a served
+model can differ from the requested one). And a reply cut off at `max_tokens` can still
+hold complete-looking JSON (a recommendation the model never finished), as can a refusal
+that carries partial text: parsing either as a tool call records a recommendation nobody
+made. (An empty reply was already a fallback; what this closes is the complete-looking
+truncated or refused one.)
+
+**Trade-off.** No universal score, so no headline number. Agents now ask for 4,096
+tokens, which costs more per call than the old 1,024 but is what current models need
+when they think. Without a key every live row is NOT RUN, which is the honest state of
+this repository.
+

@@ -9,7 +9,7 @@ COPY ui/ ./ui/
 COPY results/ ./results/
 COPY pyproject.toml README.md ./
 
-RUN pip install --no-cache-dir . && if [ "$LIVE" = "1" ]; then pip install --no-cache-dir "anthropic==0.40.0"; fi
+RUN pip install --no-cache-dir . && if [ "$LIVE" = "1" ]; then pip install --no-cache-dir "anthropic==1.11.0"; fi
 
 ENV SENTINEL_FORCE_OFFLINE=1 \
     SENTINEL_DB=/data/sentinel.db \

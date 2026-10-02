@@ -10,7 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from sentinel.agents.providers import LLMProvider, get_provider
-from sentinel.agents.tools import interpret, parse_tool_call
+from sentinel.agents.providers.base import EMPTY, OK, REFUSAL, TRUNCATED
+from sentinel.agents.tools import ToolCall, interpret, parse_tool_call
 from sentinel.domain.decisions import AIRecommendation
 from sentinel.domain.enums import Capability
 
@@ -25,6 +26,9 @@ class AgentSpec:
     # Per-agent overrides of tool name -> capability (e.g. an account agent's
     # "allow" allows a login; a transaction agent's "allow" is APPROVE_TRANSACTION).
     tool_capabilities: dict[str, Capability | None] = field(default_factory=dict)
+    # Room for the reply AND the model's thinking (current models may think on any request,
+    # and thinking counts toward max_tokens): a limit sized for the JSON alone truncates.
+    max_tokens: int = 4096
 
 
 class Agent:
@@ -42,8 +46,23 @@ class Agent:
 
     def recommend(self, prompt: str, *, role: str | None = None) -> AIRecommendation:
         p = self.provider
-        c = p.complete(self.spec.system_prompt, prompt, role=role or self.spec.role)
-        call = parse_tool_call(c.text, self.spec.fallback_tool)
+        c = p.complete(
+            self.spec.system_prompt,
+            prompt,
+            role=role or self.spec.role,
+            max_tokens=self.spec.max_tokens,
+        )
+        if c.outcome != OK:
+            # not a verdict: a labelled fail-safe. A refusal is not "deny", a truncated
+            # reply is not parsed (half a JSON object can still look like a tool call)
+            label = {
+                TRUNCATED: f"truncated at max_tokens={self.spec.max_tokens}",
+                REFUSAL: f"model refused (category={c.stop_category or 'unknown'})",
+                EMPTY: "empty response",
+            }.get(c.outcome, f"unexpected stop_reason {c.stop_reason!r}")
+            call = ToolCall(self.spec.fallback_tool, 0, label, c.text)
+        else:
+            call = parse_tool_call(c.text, self.spec.fallback_tool)
         return interpret(
             call,
             agent=self.spec.name,
