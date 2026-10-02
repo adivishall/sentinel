@@ -4,6 +4,100 @@ All notable changes to Sentinel. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — 2.3.0
+
+A trust audit asked why Sentinel should trust the facts it decides on. The answer was
+that nothing proved any of them: trust labels came from code paths, and request-body
+facts executed authoritative refunds, merchant onboardings, payments and account
+freezes. The 2.3 work makes the facts' provenance the thing that decides how far they
+can be trusted (roadmap issues #11–#20).
+
+### Security — fact provenance (#11)
+- **Signed fact envelopes** (`sentinel/trust/`). An issuer signs a record as a
+  `sentinel.fact/1` envelope. Ed25519 comes via pyca/cryptography, the one new runtime
+  dependency, and the signature is domain-separated and computed over canonical JSON.
+  Verification checks, in a fixed fail-closed order:
+  - shape, and the payload's signed digest;
+  - kind and subject binding;
+  - the signer against the operator's trust store (key id = key fingerprint, one
+    purpose per key, scopes);
+  - the signature;
+  - revocation, and the key's validity window (rotation);
+  - clock skew, maximum lifetime and expiry;
+  - anti-rollback sequences (an older statement is `SUPERSEDED`; the same sequence
+    with other content is equivocation).
+- **Every decision carries a provenance status for its primary record**, computed by the
+  workflow and never taken from a request: `VERIFIED_EXTERNAL`, `TRUSTED_LOCAL`,
+  `UNTRUSTED`, `EXPIRED`, `SUPERSEDED`, `REVOKED` or `INVALID`. Evidence takes its trust
+  class from it, so a record Sentinel could not establish is a claim
+  (`UNVERIFIED_RECORD`), never a VERIFIED fact. What such a record would support is
+  `INSUFFICIENT`: human review, never execution.
+- **Request-body facts no longer execute.** An API or CLI `ledger` / `records` /
+  `transaction` / `session` is `UNTRUSTED`. `facts_envelope` carries an issuer's signed
+  statement instead. The Python API no longer takes a `facts_source` argument, which had
+  let a caller label fabricated facts `system_of_record`.
+- **The record store is checked against its statements.** A stored row that differs
+  from its signed statement is `INVALID`. With `require_signed_facts` (on for the
+  in-memory demo; `SENTINEL_REQUIRE_SIGNED_FACTS`), deleting a statement cannot
+  downgrade a tampered row to `TRUSTED_LOCAL`.
+- **System-of-record ledgers no longer assert constants.** The store holds no
+  card-present or cancellation record, so those flags are unknown and the claims that
+  depend on them are held for a human. Before, every unauthorized claim was
+  "contradicted" by a hard-coded `True`. A duplicate is read from the ledger (a second
+  identical charge within 48 hours). `policy_auto_limit` is a policy parameter and is
+  no longer read from a ledger.
+- **A stored dispute or application is judged on its recorded submission.** New text
+  sent with a record id is refused.
+- **Duplicate JSON keys are refused in every API request body.**
+- The audit event of every decision records the fact provenance: status, issuer, key,
+  envelope digest, payload digest and sequence. Replay verifies the recorded statement
+  again and reports a key revoked since.
+- `sentinel trust keygen | sign | verify | list | revoke | ingest`, a `--trust-store`
+  option and `SENTINEL_TRUST_STORE`.
+- **Adversarial review of the first draft.** Nothing reached `VERIFIED_EXTERNAL` without
+  an issuer key, and unverified facts never executed. The review found these weaknesses,
+  all fixed with regression tests:
+  - a stored dispute's own statement sent in the body skipped the recorded-submission
+    binding and the account's risk; stored records are now evaluated by id only;
+  - a database writer could delete the anti-rollback marks and act on an older
+    statement; the marks are now also derived from the audit chain;
+  - one application's KYB statement could stand in for another's; statements now name
+    their application;
+  - a statement that failed verification was still decided on, and an oversized integer
+    caused a 500 with an orphan audit event; it now fails safe, and numbers are bounded;
+  - transaction and session audits could name a payload other than the record used;
+  - an incomplete signed statement was completed with permissive defaults; it is now
+    `INVALID`;
+  - replay's re-verification could read as more than a signature check; it is now
+    `signature_now`, withheld when the snapshot disagrees with its audit event;
+  - a 4,300-digit JSON integer dropped the connection.
+
+  The review of #12 found two more on this branch, both fixed with regression tests:
+  - **the conversation route re-pointed a stored dispute.** A caller sent a stored
+    dispute's own signed statement with new text; the refund executed, with the
+    account's risk dropped, where the dispute by id went to review (seeds 2, 3 and 8).
+    The route now refuses it, as the dispute route does;
+  - **the attack simulator minted executed refunds.** It signed its preset ledger on
+    request and recorded the WITH side as authoritative, so every legitimate-control run
+    executed a refund on a dispute that does not exist. Every simulator run is now a
+    what-if: never recorded, never executed.
+
+  Scope correction: the `facts_source` argument is gone from the *public* `SentinelApp`
+  methods. The internal `run_*` workflow layer trusts its caller's transport label, as
+  it always did.
+
+### Evaluation
+- The corpora's ledgers and acquirer records are signed by an ephemeral evaluation
+  issuer and verified in every case, so the suites measure text and model influence on
+  verified facts. The integrity suite adds F: the same claim-supporting ledgers sent
+  unsigned (expected 0 executions). The benchmark adds `fact_verify`, and the e2e
+  pipeline now includes verification.
+
+### Docs
+- Corrected: the audit chain does **not** detect a consistent rewrite of the events
+  after the last checkpoint by someone who can recompute it (THREAT_MODEL, LIMITATIONS).
+  Before, the docs said it did.
+
 ## [2.2.0] — 2026-09-27
 
 A release-candidate review of 2.1.0 as if the system protected real money,

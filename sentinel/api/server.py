@@ -104,6 +104,15 @@ class RateLimiter:
             return True
 
 
+def _no_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for k, v in pairs:
+        if k in out:
+            raise S.ValidationError(f"invalid JSON: duplicate key {k!r}")
+        out[k] = v
+    return out
+
+
 def _authorized(headers: Any) -> bool:
     key = os.environ.get("SENTINEL_API_KEY")
     if not key:
@@ -119,13 +128,13 @@ class Router:
         self.routes: list[tuple[str, re.Pattern[str], Any]] = []
 
     def add(self, method: str, pattern: str, fn: Any) -> None:
-        self.routes.append((method, re.compile("^" + pattern + "$"), fn))
+        self.routes.append((method, re.compile(pattern), fn))
 
     def match(self, method: str, path: str) -> tuple[Any, dict[str, str]] | None:
         for m, rx, fn in self.routes:
             if m != method:
                 continue
-            mt = rx.match(path)
+            mt = rx.fullmatch(path)  # not match + "$": "$" also matches before a final "\n"
             if mt:
                 return fn, mt.groupdict()
         return None
@@ -191,6 +200,11 @@ def build_routes(app: SentinelApp) -> Router:
         d = S.obj(b)
         opts = _evaluate_options(d)
         untrusted = S.untrusted_list(d, "untrusted")
+        env = S.envelope(d, exclusive=("transaction", "transaction_id"))
+        if env is not None:
+            return to_dict(
+                app.evaluate_transaction(envelope=env, untrusted=untrusted, options=opts).decision
+            )
         if "transaction" in d:
             t = S.transaction(d)
             return to_dict(app.evaluate_transaction(t, untrusted=untrusted, options=opts).decision)
@@ -204,15 +218,33 @@ def build_routes(app: SentinelApp) -> Router:
         if "document" in d and d["document"] is not None:
             docs = docs + (S.req_str(d, "document"),)
         messages = S.opt_str_list(d, "messages")
+        env = S.envelope(d, exclusive=("ledger",))
         if messages:
+            if env is not None:
+                return to_dict(
+                    app.evaluate_dispute_conversation(messages, envelope=env, options=opts).decision
+                )
             ledger = S.req_obj(d, "ledger")
             return to_dict(
                 app.evaluate_dispute_conversation(messages, ledger, options=opts).decision
             )
+        if env is not None:  # an issuer's signed ledger, carried by the caller
+            b = app.evaluate_dispute(
+                S.req_str(d, "narrative", alt="submission"),
+                envelope=env,
+                dispute_id=S.opt_str(d, "dispute_id", "", max_len=64) or None,
+                documents=docs,
+                source=S.opt_str(d, "source", "cardholder", max_len=64) or "cardholder",
+                options=opts,
+            )
+            return {**to_dict(b.decision), "adjudication": _adjudication(b)}
         if d.get("dispute_id") and "ledger" not in d:
+            # "submission" is the narrative's alias here too: new text sent with a stored
+            # dispute's id is refused, never silently dropped
+            text = S.opt_str(d, "narrative")
             return to_dict(
                 app.evaluate_dispute(
-                    S.opt_str(d, "narrative", "") or "",
+                    (text if text is not None else S.opt_str(d, "submission", "")) or "",
                     dispute_id=S.req_str(d, "dispute_id", max_len=64),
                     documents=docs,
                     options=opts,
@@ -235,6 +267,17 @@ def build_routes(app: SentinelApp) -> Router:
         docs = S.opt_str_list(d, "documents")
         if d.get("document"):
             docs = docs + (S.req_str(d, "document"),)
+        env = S.envelope(d, exclusive=("records", "application_id"))
+        if env is not None:
+            return to_dict(
+                app.evaluate_merchant(
+                    S.req_str(d, "application"),
+                    envelope=env,
+                    merchant_id=S.opt_str(d, "merchant_id", "", 64) or "",
+                    documents=docs,
+                    options=opts,
+                ).decision
+            )
         if d.get("application_id") and "records" not in d:
             return to_dict(
                 app.evaluate_merchant(
@@ -259,6 +302,13 @@ def build_routes(app: SentinelApp) -> Router:
         opts = _evaluate_options(d)
         msg = S.opt_str(d, "message")
         cap = S.capability(d, "requested_capability", workflow=Workflow.ACCOUNT_SECURITY)
+        env = S.envelope(d, exclusive=("session", "session_id"))
+        if env is not None:
+            return to_dict(
+                app.evaluate_account(
+                    envelope=env, message=msg, requested_capability=cap, options=opts
+                ).decision
+            )
         if "session" in d:
             return to_dict(
                 app.evaluate_account(
@@ -835,9 +885,15 @@ class SentinelHandler(BaseHTTPRequestHandler):
                 )
             raw = self.rfile.read(length) if length else b""
             try:
-                body = json.loads(raw or b"{}")
+                # a duplicated key is refused, not silently resolved: two parsers could keep
+                # different values (and a signed envelope must mean one thing)
+                body = json.loads(raw or b"{}", object_pairs_hook=_no_duplicate_keys)
             except json.JSONDecodeError as e:
                 return self._send(400, _error(400, f"invalid JSON: {e.msg}", rid), rid)
+            except S.ValidationError as e:
+                return self._send(400, _error(400, e.message, rid), rid)
+            except ValueError as e:  # e.g. an integer longer than Python's parse limit
+                return self._send(400, _error(400, f"invalid JSON: {e}", rid), rid)
         try:
             result = fn(query, body, params)
             status = 200
@@ -891,7 +947,8 @@ def serve(app: SentinelApp, host: str = "0.0.0.0", port: int = 8000) -> None:
     if not os.environ.get("SENTINEL_API_KEY") and host not in ("127.0.0.1", "localhost", "::1"):
         print(
             "WARNING: SENTINEL_API_KEY is unset and the API is bound to a non-loopback address. "
-            "Every caller can submit 'trusted' ledger/record facts and read every decision. "
+            "Every caller can request evaluations (unsigned facts are UNTRUSTED and never "
+            "execute) and read every decision. "
             "This is a lab configuration; set SENTINEL_API_KEY or bind to 127.0.0.1.",
             file=sys.stderr,
         )

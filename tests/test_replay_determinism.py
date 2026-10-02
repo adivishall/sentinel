@@ -8,7 +8,7 @@ from sentinel.app import SentinelApp
 from sentinel.decision.composer import compose
 from sentinel.decision.snapshot import restore, snapshot
 from sentinel.decision.workflows import DisputeRequest, RunOptions, Runtime, run_dispute
-from sentinel.domain.enums import Capability
+from sentinel.domain.enums import Capability, FactsSource
 from sentinel.policy import DEFAULT_REGISTRY
 from sentinel.replay.engine import ReplayEngine, ReplayOverrides
 from sentinel.security.provenance import UntrustedContent
@@ -67,7 +67,15 @@ def test_different_policy_version_and_risk_model_explain_their_difference():
 
 def test_replay_with_model_override_reports_no_change_and_no_drift():
     rt = Runtime(persist=False)
-    b = run_dispute(rt, DisputeRequest(UntrustedContent("never arrived"), LEDGER, "D"))
+    b = run_dispute(
+        rt,
+        DisputeRequest(
+            UntrustedContent("never arrived"),
+            LEDGER,
+            "D",
+            facts_source=FactsSource.SYSTEM_OF_RECORD,
+        ),
+    )
     r = ReplayEngine(DEFAULT_REGISTRY).replay(
         b.decision,
         snapshot(b.inputs),

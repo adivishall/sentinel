@@ -29,6 +29,10 @@ from sentinel.domain.evidence import Claim, Evidence
 from sentinel.domain.ids import content_hash
 from sentinel.security.claims import ClaimClassification, classify
 
+# The largest amount or count a record may state: the range every JSON reader holds
+# exactly, and SQLite's INTEGER (a larger value is malformed, not a very large refund).
+MAX_AMOUNT = 2**53 - 1
+
 
 def parse_int(value: object) -> int | None:
     """A ledger number as int, or ``None`` when it is not a finite number.
@@ -72,10 +76,10 @@ def record_problems(
     lakh"`` or ``-50000`` to a number, or ``"false"`` to True, would otherwise slip a
     request past a limit or a check."""
     out = [f"{k} missing" for k in required if k not in record]
-    out += [
+    out += [  # null is allowed: the record does not say (reconciliation then holds)
         f"{k}={record[k]!r} is not a boolean"
         for k in boolean
-        if k in record and parse_bool(record[k]) is None
+        if k in record and record[k] is not None and parse_bool(record[k]) is None
     ]
     for k in numeric:
         if k in record:
@@ -84,7 +88,18 @@ def record_problems(
                 out.append(f"{k}={record[k]!r} is not a number")
             elif v < 0:
                 out.append(f"{k}={v} is negative")
+            elif v > MAX_AMOUNT:
+                out.append(f"{k}={v} is out of range")
     return out
+
+
+def _flag(record: Mapping[str, object], key: str, default: bool) -> bool | None:
+    """A ledger flag: the documented default when absent, None when the record states it
+    as unknown (null). A non-boolean is rejected by ``record_problems``."""
+    if key not in record:
+        return default
+    v = record[key]
+    return None if v is None else parse_bool(v)
 
 
 def as_int(value: object, default: int = 0) -> int:
@@ -139,27 +154,39 @@ class UntrustedText:
 
 @dataclass(frozen=True)
 class TrustedFacts:
-    """Marker base for verified, authoritative facts. An adjudicator's decision
-    is a pure function of a ``TrustedFacts`` instance and a ``ClaimType``."""
+    """Base for the record an adjudicator decides on. An adjudicator's decision is a pure
+    function of a ``TrustedFacts`` instance and a ``ClaimType``; how far the record itself
+    can be trusted is its ``FactProvenance`` (``sentinel.trust``), which the workflow
+    computes and ``to_evidence`` receives as ``trust``."""
 
     SOURCE: ClassVar[str] = "institution_records"
     KIND: ClassVar[EvidenceKind] = EvidenceKind.LEDGER_FACT
     TRUST: ClassVar[TrustClass] = TrustClass.TRUSTED_INTERNAL
 
-    def to_evidence(self, prefix: str = "EV") -> tuple[Evidence, ...]:
-        """Render every verified field as ``Evidence`` (TRUSTED, VERIFIED)."""
+    def to_evidence(
+        self, prefix: str = "EV", trust: TrustClass | None = None
+    ) -> tuple[Evidence, ...]:
+        """Render every field as ``Evidence``: VERIFIED facts when the record's provenance
+        is trusted, CLAIMED (``UNVERIFIED_RECORD``) otherwise -- a record Sentinel could
+        not establish is a claim about the records, not a record."""
+        t = trust or self.TRUST
         out = []
         for i, f in enumerate(dataclasses.fields(self), start=1):
-            out.append(
-                Evidence.fact(
-                    f"{prefix}-{i:03d}",
-                    self.SOURCE,
-                    f.name,
-                    getattr(self, f.name),
-                    kind=self.KIND,
-                    trust=self.TRUST,
+            eid, value = f"{prefix}-{i:03d}", getattr(self, f.name)
+            if t.is_trusted:
+                out.append(Evidence.fact(eid, self.SOURCE, f.name, value, kind=self.KIND, trust=t))
+            else:
+                out.append(
+                    Evidence.claim(
+                        eid,
+                        self.SOURCE,
+                        f.name,
+                        value,
+                        kind=self.KIND,
+                        trust=t,
+                        note="unverified record field",
+                    )
                 )
-            )
         return tuple(out)
 
 
@@ -171,10 +198,14 @@ class DisputeFacts(TrustedFacts):
     merchant: str = "unknown"
     delivery_status: str = "unknown"  # delivered | not_delivered | in_transit | returned | lost
     prior_disputes_90d: int = 0
+    # A policy parameter, not a ledger fact: never read from a ledger (a caller could
+    # otherwise move the limit that the over-limit risk factor is measured against).
     policy_auto_limit: int = 50_000
-    duplicate_confirmed: bool = False
-    cancellation_confirmed: bool = False
-    cardholder_present: bool = True
+    # None = the record does not say. A claim that depends on an unknown flag is held
+    # for a human (INSUFFICIENT), never decided on an assumed value.
+    duplicate_confirmed: bool | None = False
+    cancellation_confirmed: bool | None = False
+    cardholder_present: bool | None = True
     refund_state: str = "none"  # none | pending | refunded  (has money already gone back?)
     transaction_status: str = "settled"  # settled | pending | reversed
     merchant_response: str = "none"  # none | accepted | contested
@@ -190,7 +221,6 @@ class DisputeFacts(TrustedFacts):
     NUMERIC: ClassVar[tuple[str, ...]] = (
         "amount",
         "prior_disputes_90d",
-        "policy_auto_limit",
         "customer_tenure_days",
     )
 
@@ -206,10 +236,9 @@ class DisputeFacts(TrustedFacts):
             merchant=str(g("merchant", "unknown")),
             delivery_status=str(g("delivery_status", "unknown")),
             prior_disputes_90d=as_int(g("prior_disputes_90d", 0)),
-            policy_auto_limit=as_int(g("policy_auto_limit", 50_000), 50_000),
-            duplicate_confirmed=parse_bool(g("duplicate_confirmed", False)) is True,
-            cancellation_confirmed=parse_bool(g("cancellation_confirmed", False)) is True,
-            cardholder_present=parse_bool(g("cardholder_present", True)) is not False,
+            duplicate_confirmed=_flag(ledger, "duplicate_confirmed", False),
+            cancellation_confirmed=_flag(ledger, "cancellation_confirmed", False),
+            cardholder_present=_flag(ledger, "cardholder_present", True),
             refund_state=str(g("refund_state", "none")),
             transaction_status=str(g("transaction_status", "settled")),
             merchant_response=str(g("merchant_response", "none")),
@@ -226,6 +255,11 @@ class DisputeFacts(TrustedFacts):
         ClaimType.CANCELLATION: ("cancellation_confirmed", (True,)),
         ClaimType.UNAUTHORIZED: ("cardholder_present", (False,)),
     }
+
+    def unknown(self, claim: ClaimType) -> bool:
+        """Does the record leave the claim's field unstated?"""
+        mapping = self.CLAIM_FIELDS.get(claim)
+        return mapping is not None and getattr(self, mapping[0]) is None
 
     def supports(self, claim: ClaimType) -> bool:
         """Is the claim backed by the institution's OWN trusted records? Computed
@@ -263,7 +297,6 @@ class KYBFacts(TrustedFacts):
 
     SOURCE: ClassVar[str] = "acquirer_records"
     KIND: ClassVar[EvidenceKind] = EvidenceKind.ACQUIRER_RECORD
-    TRUST: ClassVar[TrustClass] = TrustClass.VERIFIED_EXTERNAL
 
     @classmethod
     def problems(cls, records: Mapping[str, object]) -> list[str]:

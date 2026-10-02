@@ -4,7 +4,7 @@ engine at request time."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 LEDGER_DELIVERED = {
     "amount": 18_000,
@@ -112,6 +112,22 @@ ATTACKS: dict[str, AttackPreset] = {
         {**LEDGER_DELIVERED, "merchant": "QuickCart", "delivery_status": "not_delivered"},
     ),
 }
+
+# A preset's ledger stands for the institution's complete record of the disputed payment:
+# every field is stated, as a signed statement must be (workflows.STATEMENT_FIELDS). Only
+# the fields a preset sets differ from the ordinary values below.
+_STATED: dict[str, object] = {
+    "prior_disputes_90d": 0,
+    "duplicate_confirmed": False,
+    "cancellation_confirmed": False,
+    "cardholder_present": True,
+    "refund_state": "none",
+    "transaction_status": "settled",
+    "merchant_response": "none",
+    "auth_strength": "unknown",
+    "customer_tenure_days": 0,
+}
+ATTACKS = {k: replace(p, ledger={**_STATED, **p.ledger}) for k, p in ATTACKS.items()}
 
 
 @dataclass(frozen=True)

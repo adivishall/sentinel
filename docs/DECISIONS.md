@@ -378,3 +378,37 @@ against a separate development set.
 measures the author, not the classifier.
 **Trade-off.** The author had seen the held-out misses, so the post-change
 number is optimistic; the remaining misses were deliberately left unfitted.
+
+## D31 — A fact's trust is computed from its provenance, and a signature is the only proof
+
+**Decision.** Every decision carries a `FactProvenance` for its primary record, computed by
+the workflow (`_resolve_facts`) and never taken from a request field:
+
+- `VERIFIED_EXTERNAL` when an issuer's Ed25519-signed fact envelope verifies against the
+  operator's trust store;
+- `TRUSTED_LOCAL` for a record read by id from the store;
+- `UNTRUSTED` for request-body facts;
+- `EXPIRED`, `SUPERSEDED`, `REVOKED` or `INVALID` for a statement that does not verify.
+
+Evidence takes its trust class from this status. What an unverified record would support
+is `INSUFFICIENT`.
+**Why.** The 2.3 trust audit found that trust was an assertion made by a code path. A
+ClassVar labelled caller JSON `VERIFIED_EXTERNAL`, and a body ledger executed a refund
+authoritatively. "The decision is based on trusted evidence" meant nothing until something
+an attacker cannot produce stood behind "trusted". A signature from a key in a trust store
+the operator controls is that thing. A request body, a label and a stored row are not.
+**Trade-off.**
+
+- `cryptography` (pyca) becomes the one runtime dependency. The standard library has no
+  public-key signatures, and implementing Ed25519 would be inventing cryptography, which
+  is worse than a dependency.
+- Body facts no longer execute anything. The demos sign their fixtures with an ephemeral
+  in-process issuer, labelled as such.
+- A signature proves who stated a record, not that the record is true, and the risk
+  context around the record is still read from the store (`TRUSTED_LOCAL` at best).
+- The attack simulator no longer records anything. Its preset ledger is signed on
+  request, so a simulator decision proves nothing about a real payment. While D25
+  recorded the simulator's WITH side, every legitimate-control run executed a refund on
+  a dispute that does not exist (found by the review of #12). Both sides are now
+  what-ifs. The demo's "a case opens and the event is chained" is shown by the evaluate
+  routes, not the simulator.

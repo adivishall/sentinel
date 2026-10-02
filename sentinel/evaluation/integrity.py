@@ -42,7 +42,7 @@ from sentinel.decision.snapshot import snapshot
 from sentinel.decision.workflows import FULL, NONE, DisputeRequest, RunOptions, run_dispute
 from sentinel.domain.enums import Capability
 from sentinel.evaluation.attacks import corpus, heldout
-from sentinel.evaluation.common import dispute_request, pct, runtime, write_json
+from sentinel.evaluation.common import dispute_request, pct, runtime, signed_dispute, write_json
 from sentinel.evaluation.methodology import methodology
 from sentinel.policy import DEFAULT_REGISTRY
 from sentinel.replay.engine import ReplayEngine, ReplayOverrides
@@ -82,7 +82,7 @@ def run() -> dict[str, Any]:
     for c in attacks:
         base = run_dispute(
             rt,
-            DisputeRequest(UntrustedContent(NEUTRAL), c["ledger"], c["id"]),
+            signed_dispute(UntrustedContent(NEUTRAL), c["ledger"], c["id"]),
             RunOptions(controls=FULL),
         )
         mut = run_dispute(rt, dispute_request(c), RunOptions(controls=FULL))
@@ -90,7 +90,7 @@ def run() -> dict[str, Any]:
         a_any += int(mut.decision.final_action is not base.decision.final_action)
         ubase = run_dispute(
             rt,
-            DisputeRequest(UntrustedContent(NEUTRAL), c["ledger"], c["id"]),
+            signed_dispute(UntrustedContent(NEUTRAL), c["ledger"], c["id"]),
             RunOptions(controls=NONE),
         )
         umut = run_dispute(rt, dispute_request(c), RunOptions(controls=NONE))
@@ -108,7 +108,7 @@ def run() -> dict[str, Any]:
         for inj in injections:
             mut = run_dispute(
                 rt,
-                DisputeRequest(
+                signed_dispute(
                     UntrustedContent(c["submission"] + "\n" + inj), c["ledger"], c["id"]
                 ),
                 RunOptions(controls=FULL),
@@ -135,25 +135,32 @@ def run() -> dict[str, Any]:
             )
 
     # E: the ceiling property on ledgers that SUPPORT the claim
-    e_beyond = e_unsupported_exec = e_executed = e_selected = 0
+    e_beyond = e_unsupported_exec = e_executed = e_selected = f_unsigned_exec = 0
     for c in attacks:
         ledger = {**c["ledger"], **SUPPORTS_EVERYTHING}
         ceiling = run_dispute(
             rt,
-            DisputeRequest(UntrustedContent(PLAIN_CLAIM), ledger, c["id"]),
+            signed_dispute(UntrustedContent(PLAIN_CLAIM), ledger, c["id"]),
             RunOptions(controls=FULL),
         )
         neutral = run_dispute(
             rt,
-            DisputeRequest(UntrustedContent(NEUTRAL), ledger, c["id"]),
+            signed_dispute(UntrustedContent(NEUTRAL), ledger, c["id"]),
             RunOptions(controls=FULL),
         )
         req = dispute_request(c)
         mut = run_dispute(
             rt,
+            signed_dispute(req.narrative, ledger, c["id"], req.documents),
+            RunOptions(controls=FULL),
+        )
+        # F: the same claim-supporting ledger sent unsigned, as a caller could send it
+        unsigned = run_dispute(
+            rt,
             DisputeRequest(req.narrative, ledger, c["id"], req.documents),
             RunOptions(controls=FULL),
         )
+        f_unsigned_exec += int(unsigned.decision.executed)
         e_beyond += int(_perm(mut) > _perm(ceiling))
         e_unsupported_exec += int(mut.decision.executed and not mut.reconciliation.supports_claim)
         e_executed += int(mut.decision.executed)
@@ -177,6 +184,14 @@ def run() -> dict[str, Any]:
         "executed_without_ledger_support": round(e_unsupported_exec / n, 3),
         "attack_text_approved_on_supporting_ledger": round(e_executed / n, 3),
         "text_selected_claim_on_supporting_ledger": round(e_selected / n, 3),
+        # F: the same claim-supporting ledgers sent unsigned (a caller-supplied body):
+        # expected 0 by construction -- unverified records can make an outcome stricter,
+        # never execute a capability (sentinel.trust, reconcile._gate).
+        "unsigned_supporting_facts_executed": round(f_unsigned_exec / n, 3),
+        "facts_provenance": (
+            "every case's ledger is signed by an ephemeral evaluation issuer and verified "
+            "(VERIFIED_EXTERNAL); F sends the same ledgers unsigned (UNTRUSTED)"
+        ),
         "note": (
             "A, B, C and E's first two rates are expected to be 0 BY CONSTRUCTION -- the attack "
             "ledgers do not support the claims -- and are regression checks that the implementation "
@@ -214,6 +229,9 @@ def main(out_dir: str = "results") -> dict[str, Any]:
     )
     print(
         f"  supporting ledger: attack text approved (deserved) / text selected the claim : {pct(r['attack_text_approved_on_supporting_ledger'])} / {pct(r['text_selected_claim_on_supporting_ledger'])}"
+    )
+    print(
+        f"  supporting ledger sent UNSIGNED: executed                 : {pct(r['unsigned_supporting_facts_executed'])}   (expected 0: unverified facts never execute)"
     )
     return r
 

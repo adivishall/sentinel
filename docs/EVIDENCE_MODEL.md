@@ -6,8 +6,10 @@ Rendered by `make docs` from `sentinel/domain/enums.py`,
 
 ## Evidence objects
 
-Every fact the decision sees is an `Evidence` object: an id, a kind, a
-source, a trust class, a field, a value, a status and a content hash. Two
+Every record field and claim a reconciliation weighs is an `Evidence` object:
+an id, a kind, a source, a trust class, a field, a value, a status and a
+content hash. (The policy additionally reads a flat context of named fields;
+`docs/POLICY_ENGINE.md`.) Two
 constructors exist and the type enforces the boundary: `Evidence.fact` is
 VERIFIED and accepts only `TRUSTED_INTERNAL`, `VERIFIED_EXTERNAL`; `Evidence.claim` is CLAIMED and refuses a
 trusted class. A `MODEL_GENERATED` value can therefore never become VERIFIED
@@ -63,8 +65,26 @@ only chooses which field to read.
 `TrustedFacts` subclasses are built from records only (`from_ledger`,
 `from_records`), and each constructor reads its declared fields by name: any
 other key on the mapping (a `narrative`, `document` or `note`) is never
-copied (`tests/test_trust_boundary.py`). Every field renders itself as
-VERIFIED evidence.
+copied (`tests/test_trust_boundary.py`).
+
+How far a record can be trusted is its **fact provenance**
+(`docs/SECURITY_MODEL.md`, `sentinel/trust/`), not its type:
+
+- a record whose issuer's signed statement verified renders as VERIFIED
+  `VERIFIED_EXTERNAL` evidence;
+- a record read from Sentinel's store renders as VERIFIED `TRUSTED_INTERNAL`
+  evidence;
+- anything else (a request body, or a signature that failed, expired, was
+  revoked or superseded) renders as CLAIMED `UNVERIFIED_RECORD`.
+
+A claim that only an unverified record would support is `INSUFFICIENT`
+(`reconcile._gate`), so it goes to a human and never executes.
+
+A ledger flag stated as `null` is *unknown*. A claim that depends on an
+unknown flag is `INSUFFICIENT`, never decided on an assumed value. The record
+store holds no card-present or cancellation record, so a stored dispute's
+ledger states those flags as unknown. `policy_auto_limit` is a policy
+parameter and is never read from a ledger.
 
 | `DisputeFacts` field | Default | Values |
 |---|---|---|

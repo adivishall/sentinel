@@ -20,6 +20,7 @@ from sentinel.domain.decisions import AIRecommendation
 from sentinel.domain.enums import (
     Capability,
     EvidenceStatus,
+    FactsSource,
     FinalAction,
     TrustClass,
     Workflow,
@@ -32,6 +33,9 @@ from sentinel.security.provenance import UntrustedContent
 from sentinel.security.trust_boundary import DisputeFacts, UntrustedText
 
 LEDGER = {"amount": 18000, "delivery_status": "delivered", "policy_auto_limit": 50000}
+
+# The ledger here is the institution's record (TRUSTED_LOCAL): the tests are about the model.
+SOR = FactsSource.SYSTEM_OF_RECORD
 
 
 class _Scripted:
@@ -99,7 +103,10 @@ def test_parser_and_interpreter_keep_model_fields_out_of_trusted_state(raw):
 @pytest.mark.parametrize("raw", HOSTILE_OUTPUTS)
 def test_hostile_model_output_never_reaches_the_decision(raw):
     rt = Runtime(persist=False, provider=_Scripted(raw))
-    b = run_dispute(rt, DisputeRequest(UntrustedContent("my order never arrived"), LEDGER, "D"))
+    b = run_dispute(
+        rt,
+        DisputeRequest(UntrustedContent("my order never arrived"), LEDGER, "D", facts_source=SOR),
+    )
     d = b.decision
     assert not d.executed and d.executed_capability is None
     assert d.final_action in (FinalAction.DENY, FinalAction.BLOCK)
@@ -117,7 +124,9 @@ def test_hostile_model_output_never_reaches_the_decision(raw):
 
 def test_policy_context_and_snapshot_carry_no_model_fields_as_facts():
     rt = Runtime(persist=False, provider=_Scripted(HOSTILE_OUTPUTS[0]))
-    b = run_dispute(rt, DisputeRequest(UntrustedContent("never arrived"), LEDGER, "D"))
+    b = run_dispute(
+        rt, DisputeRequest(UntrustedContent("never arrived"), LEDGER, "D", facts_source=SOR)
+    )
     assert b.inputs is not None
     from sentinel.decision import composer as C
 
@@ -220,7 +229,9 @@ def test_agent_surface_cannot_be_widened_by_output():
 
 def test_recommendation_is_distinguishable_everywhere_it_is_persisted():
     rt = Runtime(persist=True, provider=_Scripted(HOSTILE_OUTPUTS[1]))
-    b = run_dispute(rt, DisputeRequest(UntrustedContent("never arrived"), LEDGER, "D"))
+    b = run_dispute(
+        rt, DisputeRequest(UntrustedContent("never arrived"), LEDGER, "D", facts_source=SOR)
+    )
     d = to_dict(b.decision)
     assert d["ai_recommendation"]["trust"] == "MODEL_GENERATED"
     assert d["final_action"] != "ALLOW" and d["executed_capability"] is None

@@ -6,6 +6,7 @@ import os
 import pytest
 
 from sentinel.cli.main import main
+from tests.records import ledger as complete
 
 
 @pytest.fixture(scope="module")
@@ -217,22 +218,82 @@ def test_case_policy_audit_replay_scenario(db, capsys, tmp_path):
     assert exp.exists() and "exported" in out
     code, out = _run(capsys, "--db", db, "audit", "list", "--limit", "3")
     assert "#" in out
+    ledger = complete(amount=18000, delivery_status="not_delivered")
+    claim = "My order never arrived after three weeks."
+    unsigned = tmp_path / "unsigned.json"
+    unsigned.write_text(json.dumps({"narrative": claim, "ledger": ledger}))
+    code, out = _run(capsys, "--db", db, "--json", "dispute", "evaluate", str(unsigned))
+    held = json.loads(out)  # a ledger in a file is a claim about the records
+    assert held["final_action"] == "REQUIRE_HUMAN_REVIEW" and held["executed_capability"] is None
+    # the operator workflow: an issuer key, its trust-store entry, a signed ledger
+    key, trust = tmp_path / "ledger.pem", tmp_path / "trust.json"
+    code, out = _run(
+        capsys,
+        "trust",
+        "keygen",
+        "--issuer",
+        "core-ledger",
+        "--scopes",
+        "dispute_ledger",
+        "--key-out",
+        str(key),
+        "--trust-out",
+        str(trust),
+    )
+    assert code == 0 and oct(key.stat().st_mode & 0o777) == "0o600"
+    assert "PRIVATE" not in trust.read_text() and "core-ledger" in trust.read_text()
+    (tmp_path / "ledger.json").write_text(json.dumps(ledger))
+    env_path = tmp_path / "env.json"
+    code, out = _run(
+        capsys,
+        "trust",
+        "sign",
+        "--key",
+        str(key),
+        "--issuer",
+        "core-ledger",
+        "--kind",
+        "dispute_ledger",
+        "--id",
+        "DSP-CLI-1",
+        "--payload",
+        str(tmp_path / "ledger.json"),
+        "--out",
+        str(env_path),
+    )
+    assert code == 0
+    code, out = _run(
+        capsys,
+        "--trust-store",
+        str(trust),
+        "trust",
+        "verify",
+        str(env_path),
+        "--kind",
+        "dispute_ledger",
+    )
+    assert code == 0 and out.startswith("VERIFIED_EXTERNAL")
+    code, out = _run(capsys, "trust", "verify", str(env_path), "--kind", "dispute_ledger")
+    assert code == 3 and "unknown signer" in out  # no trust store: nothing is trusted
     legit = tmp_path / "legit.json"
     legit.write_text(
-        json.dumps(
-            {
-                "narrative": "My order never arrived after three weeks.",
-                "ledger": {
-                    "amount": 18000,
-                    "delivery_status": "not_delivered",
-                    "policy_auto_limit": 50000,
-                },
-            }
-        )
+        json.dumps({"narrative": claim, "facts_envelope": json.loads(env_path.read_text())})
     )
-    code, out = _run(capsys, "--db", db, "--json", "dispute", "evaluate", str(legit))
+    code, out = _run(
+        capsys, "--db", db, "--trust-store", str(trust), "--json", "dispute", "evaluate", str(legit)
+    )
     dec = json.loads(out)
-    assert dec["final_action"] == "ALLOW"
+    assert dec["final_action"] == "ALLOW" and dec["provenance"]["status"] == "VERIFIED_EXTERNAL"
+    # revoking the key: the same statement is now REVOKED and nothing executes
+    code, out = _run(
+        capsys, "--trust-store", str(trust), "trust", "revoke", dec["provenance"]["key_id"]
+    )
+    assert code == 0
+    code, out = _run(
+        capsys, "--db", db, "--trust-store", str(trust), "--json", "dispute", "evaluate", str(legit)
+    )
+    revoked = json.loads(out)
+    assert revoked["provenance"]["status"] == "REVOKED" and revoked["executed_capability"] is None
     code, out = _run(
         capsys,
         "--db",

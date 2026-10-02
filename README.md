@@ -9,8 +9,8 @@
 [![CI](https://github.com/adivishall/sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/adivishall/sentinel/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 ![Runs offline](https://img.shields.io/badge/runs_offline-no_API_key-2e8b57)
-![Zero runtime deps](https://img.shields.io/badge/runtime_deps-0_(stdlib)-2e6da4)
-![Tests](https://img.shields.io/badge/tests-640_passing-2e8b57)
+![Runtime deps](https://img.shields.io/badge/runtime_deps-1_(cryptography)-2e6da4)
+![Tests](https://img.shields.io/badge/tests-718_passing-2e8b57)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
 [Console (static snapshot)](https://adivishall.github.io/sentinel/) · [Screenshots](#screenshots) · [Evaluation](docs/EVALUATION.md) · [Security model](docs/SECURITY_MODEL.md) · [Limitations](docs/LIMITATIONS.md) · [Interview guide](docs/INTERVIEW.md)
@@ -22,7 +22,7 @@
 <!-- gen:hero -->
 | | |
 |---|---|
-| **What** | A standard-library Python engine, versioned HTTP API, CLI and web console that sits between AI agents and the financial actions they might trigger: refunds, payment authorisation, merchant onboarding, account security, investigations. |
+| **What** | A Python engine (standard library plus one cryptography dependency), versioned HTTP API, CLI and web console that sits between AI agents and the financial actions they might trigger: refunds, payment authorisation, merchant onboarding, account security, investigations. |
 | **Why** | Those decisions read attacker-controlled information through legitimate channels -- a dispute narrative, an uploaded invoice, a merchant application -- and an AI agent in the loop can be persuaded, by an injected instruction or by a customer who simply lies about a fact. |
 | **How** | The model may recommend. The institution's own records decide whether the claim is supported, versioned fail-closed policy decides the outcome, a capability registry decides who may execute it, and a tamper-evident audit chain records why. |
 | **Why different** | The authoritative decision is computed from a view that has *no field* for the attacker's prose or the model's output. Detection can miss; nothing executes that the records do not support. |
@@ -96,7 +96,7 @@ make attack-compare
      authorization: APPROVE_REFUND -> DENIED
 5. WHAT WAS FINALLY ALLOWED
      WITHOUT Sentinel (the simulated agent's tool call runs): EXECUTED APPROVE_REFUND
-     WITH Sentinel: BLOCK, executed nothing; case opened; audit event chained
+     WITH Sentinel: BLOCK, executed nothing   (a simulation too: nothing recorded)
 
 The AI was persuaded. The financial system was not.
 ```
@@ -145,7 +145,7 @@ monitoring cycle finder is bounded to 30 days ([details](docs/EVALUATION.md#g-fi
 | **Trusted evidence** | claims ("never received") are checked against records ("delivered"); contradictions are first-class; every decision says where its facts came from (`system_of_record` -- here a synthetic SQLite store -- or demo / simulation input) | [EVIDENCE_MODEL](docs/EVIDENCE_MODEL.md) · [input classes](docs/API.md#input-classes-system-of-record-vs-demo--simulation) |
 | **Policy-as-code** | versioned, fail-closed (every field a rule reads must be present and typed), shipped versions pinned by SHA-256; only the active version decides | [POLICY_ENGINE](docs/POLICY_ENGINE.md) |
 | **Capability registry** | per capability: risk, reversibility, allowed actors, review level and the workflows that may execute it; no AI actor may execute a consequential capability, and a login decision can never approve a refund | [capability matrix](docs/SECURITY_MODEL.md#capability-security-matrix) |
-| **Evaluation authority** | only a run with every control, the active policy and the active risk model is recorded; what-ifs (replay, the simulator's no-controls side) never persist | [authority](docs/SECURITY_MODEL.md#evaluation-authority-sentineldecisionauthoritypy) |
+| **Evaluation authority** | only a run with every control, the active policy and the active risk model is recorded; what-ifs (replay, the attack simulator) never persist | [authority](docs/SECURITY_MODEL.md#evaluation-authority-sentineldecisionauthoritypy) |
 | **Human review** | only a human decision resolves a case, checked against the registry (a policy BLOCK is final for everyone); every human action is chained into the audit log | [case lifecycle](docs/SECURITY_MODEL.md#case-lifecycle-sentinelcasesservicepy) |
 | **Audit and replay** | a **tamper-evident application audit chain** (not a blockchain, not an immutable ledger): SHA-256-chained events that store hashes, never prose, with an HMAC-signed checkpoint; replay re-runs any decision under another policy or risk model and shows ORIGINAL vs RECOMPUTED with drift | [AUDIT_MODEL](docs/AUDIT_MODEL.md) |
 
@@ -169,7 +169,7 @@ seeds, method and limitations.
 | **Financial risk** | synthetic benchmark (empirical) | precision / recall / FPR against the generator's scenario labels | seed 42: 3,183 transactions, 157 accounts; two held-out seeds of similar size | dev 42 (point values tuned on it); held-out 7, 2024 | transactions P 86.7% R 67.2% FPR 0.19%; accounts P 90.0% R 90.0% | [§G](docs/EVALUATION.md#g-financial-risk-on-labelled-synthetic-data-resultsfinancialjson) |
 | **Temporal correctness** | synthetic invariant check (empirical; not a proof) | a record dated after T changing a decision at T | 192 transactions; 9 kinds of future record at 4 offsets; 3,648 checks | seeds 42, 7 | **0 observed leaks** (95% upper bound 0.082% per check, 1.55% per sampled transaction) | [§I](docs/EVALUATION.md#i-temporal-correctness-resultstemporaljson) |
 | **Claim classifier** | synthetic, same author; defence in depth, not the foundation | legitimate claims read as their type; the rest held for a human | 117 phrasings; 21 held-out unusual phrasings | hand-authored | held-out: first (blind) run 7/21; 17/21 after the patterns were extended by an author who had seen the misses; FN 4/56, FP 0/28 | [§L](docs/EVALUATION.md#l-claim-classifier-resultsclaimsjson) |
-| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.7608 ms | [PERFORMANCE.md](docs/PERFORMANCE.md) |
+| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.2425 ms | [PERFORMANCE.md](docs/PERFORMANCE.md) |
 | **Live LLM** | live-model evaluation | the same suites against a real model | -- | `claude-opus-5-5` | **NOT RUN** -- no live number is quoted anywhere | [§K](docs/EVALUATION.md#k-model--provider-evaluation-resultsmodelsjson) |
 <!-- /gen:evaluation-categories -->
 
@@ -258,8 +258,8 @@ engine output over the synthetic demo dataset, nothing drawn by hand.
 
 ```bash
 git clone https://github.com/adivishall/sentinel.git && cd sentinel
-make install          # dev tooling + the `sentinel` command; the core has zero runtime dependencies
-make test             # 640 tests, offline
+make install          # dev tooling + the `sentinel` command; the one runtime dependency is pyca/cryptography
+make test             # 718 tests, offline
 make attack-compare   # the flagship demo, no key needed
 make api              # API + console at http://localhost:8000 (in-memory demo dataset)
 ```
@@ -295,8 +295,9 @@ are `{error, code, request_id}`; no stack trace ever leaves the server.
 
 ## Engineering
 
-- **Stack:** Python 3.11+, standard library only at runtime (SQLite,
-  `http.server`, dataclasses); vanilla-JS console with no decision logic of its
+- **Stack:** Python 3.11+, the standard library (SQLite, `http.server`,
+  dataclasses) plus one runtime dependency, pyca/cryptography, for Ed25519
+  signatures on fact envelopes; vanilla-JS console with no decision logic of its
   own ([contract-tested](tests/test_ui_api_contract.py)); optional Anthropic
   SDK for live mode and matplotlib for charts.
 - **Quality gates:** 640 offline tests (pytest + Hypothesis), a coverage gate,
@@ -314,9 +315,9 @@ are `{error, code, request_id}`; no stack trace ever leaves the server.
 <!-- gen:performance -->
 ### Performance (offline, own overhead)
 
-Full protected dispute pipeline: **p50 0.7205 ms · p95 0.7608 ms · 1,377/s**
-sequential single-thread; policy evaluation 0.0147 ms p95 over the composer's real
-26-field context; gateway inspection 0.2313 ms p95 ([all components](docs/PERFORMANCE.md)).
+Full protected dispute pipeline: **p50 0.2282 ms · p95 0.2425 ms · 4,337/s**
+sequential single-thread; policy evaluation 0.0155 ms p95 over the composer's real
+26-field context; gateway inspection 0.2388 ms p95 ([all components](docs/PERFORMANCE.md)).
 <!-- /gen:performance -->
 
 ## Limitations
@@ -326,8 +327,10 @@ sequential single-thread; policy evaluation 0.0147 ms p95 over the composer's re
   fraud saving or regulatory compliance is claimed.
 - The "no controls" victim is a simulator that shares an author with the
   attack corpus; the live-model row is **not run**.
-- Sentinel does not verify the facts it adjudicates against; demo input is
-  trusted by contract (and labelled). Reviewer identity is declared, not
+- Sentinel verifies *who* stated a record, not whether it is true. Signed
+  facts verify against an operator trust store, and in the demo the issuer is
+  an ephemeral in-process key. Store reads are trusted for where they are
+  kept, and body facts never execute. Reviewer identity is declared, not
   authenticated.
 - The risk model is rules tuned on one seed (held-out seeds reported); the
   first transactions of a burst cannot see the burst yet (reported per

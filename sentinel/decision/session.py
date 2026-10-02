@@ -42,6 +42,7 @@ class DisputeSession:
     decided: DecisionBundle | None = None
     options: RunOptions = RunOptions()
     facts_source: FactsSource = FactsSource.CALLER_SUPPLIED
+    envelope: Mapping[str, object] | None = None  # a signed dispute_ledger statement
 
     def append(
         self,
@@ -84,6 +85,7 @@ class DisputeSession:
             dispute_id=self.dispute_id,
             conversation=self.conversation,
             facts_source=self.facts_source,
+            envelope=self.envelope,
         )
         opts = RunOptions(**{**self.options.__dict__, "session_id": self.session_id})
         b = run_dispute(rt, req, opts)

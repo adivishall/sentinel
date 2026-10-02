@@ -118,9 +118,20 @@ def test_kyb_facts_come_only_from_acquirer_records():
         and payload["prior_flags"] == 3
         and "document" not in payload
     )
+    # The trust a record's fields carry is its provenance's (sentinel.trust), not the class's:
+    # a record with no provenance is at most the institution's own (TRUSTED_INTERNAL), a
+    # verified acquirer statement is VERIFIED_EXTERNAL, and an unverified one is only a claim.
+    assert all(
+        e.trust is TrustClass.TRUSTED_INTERNAL and e.status is EvidenceStatus.VERIFIED
+        for e in facts.to_evidence()
+    )
     assert all(
         e.trust is TrustClass.VERIFIED_EXTERNAL and e.status is EvidenceStatus.VERIFIED
-        for e in facts.to_evidence()
+        for e in facts.to_evidence(trust=TrustClass.VERIFIED_EXTERNAL)
+    )
+    assert all(
+        e.trust is TrustClass.UNVERIFIED_RECORD and e.status is EvidenceStatus.CLAIMED
+        for e in facts.to_evidence(trust=TrustClass.UNVERIFIED_RECORD)
     )
 
 

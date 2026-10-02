@@ -30,6 +30,13 @@ def ledger(amount: int, merchant: str, **over: Any) -> dict[str, Any]:
         "duplicate_confirmed": False,
         "cancellation_confirmed": False,
         "cardholder_present": True,
+        # the rest of the record, stated: a signed statement must be complete
+        # (workflows.STATEMENT_FIELDS); these are the values the defaults supplied
+        "refund_state": "none",
+        "transaction_status": "settled",
+        "merchant_response": "none",
+        "auth_strength": "unknown",
+        "customer_tenure_days": 0,
     }
     base.update(over)
     return base

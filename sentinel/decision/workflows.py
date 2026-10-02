@@ -12,8 +12,9 @@ call these functions -- there is no second pipeline.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 
 from sentinel import __version__
 from sentinel.agents.base import Agent
@@ -31,13 +32,16 @@ from sentinel.domain.entities import LoginSession, Transaction
 from sentinel.domain.enums import (
     Capability,
     EvidenceKind,
+    FactKind,
     FactsSource,
+    ProvenanceStatus,
     Severity,
     TrustClass,
     Workflow,
 )
 from sentinel.domain.evidence import Claim, Evidence, Reconciliation
 from sentinel.domain.ids import content_hash, new_id, now_iso
+from sentinel.domain.provenance import FactProvenance
 from sentinel.domain.risk import RiskAssessment
 from sentinel.domain.security import SecurityAssessment, SecurityEvent
 from sentinel.evidence.reconcile import reconcile_dispute, reconcile_kyb, reconcile_records_only
@@ -57,7 +61,11 @@ from sentinel.risk.scoring import RiskModel
 from sentinel.security.gateway import GATEWAY, AISecurityGateway, Conversation
 from sentinel.security.normalize import InvalidSubmission, validate
 from sentinel.security.provenance import UntrustedContent, wrap_many
-from sentinel.security.trust_boundary import DisputeFacts, KYBFacts, UntrustedText
+from sentinel.security.trust_boundary import MAX_AMOUNT, DisputeFacts, KYBFacts, UntrustedText
+from sentinel.trust import local, record_digest, untrusted
+from sentinel.trust.facts import MemorySequences, SequenceLedger, verify_fact
+from sentinel.trust.issuer import utc_now
+from sentinel.trust.keys import TrustStore
 
 PROVENANCE = "provenance"  # wrap untrusted spans in the agent prompt
 FULL: frozenset[str] = composer.FULL | {PROVENANCE}
@@ -74,6 +82,15 @@ class Runtime:
     audit: AuditChain = field(default_factory=AuditChain)
     provider: LLMProvider | None = None
     persist: bool = True  # write audit events and open cases
+    # Which issuers' signed facts are trusted (operator configuration), the highest
+    # statement already acted on per subject (anti-rollback), and the verification clock.
+    trust: TrustStore = field(default_factory=TrustStore.empty)
+    sequences: SequenceLedger = field(default_factory=MemorySequences)
+    clock: Callable[[], datetime] = utc_now
+    # Deployment configuration, not data: every record-store read must come with its
+    # issuer's signed statement. Without it, deleting a statement from the store would
+    # silently downgrade a tampered record to TRUSTED_LOCAL instead of exposing it.
+    require_signed_facts: bool = False
 
     def __post_init__(self) -> None:
         # a recording runtime chains every human case action into its own audit chain
@@ -98,11 +115,17 @@ class RunOptions:
     hardened: bool = False
     session_id: str | None = None
     skip_agent: bool = False  # evaluate without calling any model
+    # an attack-simulator run: its facts are demo fixtures signed on request, so however it
+    # is decided it is a simulation -- never recorded, never executed
+    simulation: bool = False
 
     @property
     def what_if(self) -> bool:
         return (
-            self.controls != FULL or self.policy_version is not None or self.risk_model is not None
+            self.controls != FULL
+            or self.policy_version is not None
+            or self.risk_model is not None
+            or self.simulation
         )
 
 
@@ -157,6 +180,191 @@ def _admit(rt: Runtime, opts: RunOptions) -> None:
             "refusing a what-if run on a recording runtime (reduced controls, a named policy "
             "version or a supplied risk model); use the what-if runtime or replay"
         )
+
+
+def _id_from_subject(kind: FactKind, subject: str) -> str | None:
+    prefix = kind.subject_prefix + ":"
+    rid = subject[len(prefix) :] if subject.startswith(prefix) else ""
+    return rid if rid and rid != "?" else None
+
+
+# What a signed statement of each kind must state. An issuer that leaves a field out has
+# not said it; a default filled in here would be Sentinel's assumption presented as the
+# issuer's word (a missing refund_state read as "none" can pay a second refund).
+STATEMENT_FIELDS: dict[FactKind, frozenset[str]] = {
+    FactKind.DISPUTE_LEDGER: frozenset(
+        {
+            "amount",
+            "delivery_status",
+            "prior_disputes_90d",
+            "duplicate_confirmed",
+            "cancellation_confirmed",
+            "cardholder_present",
+            "refund_state",
+            "transaction_status",
+            "merchant_response",
+            "auth_strength",
+            "customer_tenure_days",
+        }
+    ),
+    FactKind.KYB_RECORD: frozenset(
+        {
+            "application_id",  # a statement names its application (one cannot stand in for another)
+            "registration_status",
+            "domain_age_days",
+            "business_age_days",
+            "prior_flags",
+            "mcc_risk",
+        }
+    ),
+    FactKind.TRANSACTION: frozenset(
+        {
+            "transaction_id",
+            "account_id",
+            "merchant_id",
+            "instrument_id",
+            "device_id",
+            "amount",
+            "currency",
+            "timestamp",
+            "country",
+            "channel",
+            "auth_strength",
+            "delivery_status",
+            "counterparty_account_id",
+            "status",
+        }
+    ),
+    FactKind.LOGIN_SESSION: frozenset(
+        {
+            "session_id",
+            "account_id",
+            "device_id",
+            "ip",
+            "country",
+            "started_at",
+            "mfa_passed",
+            "events",
+        }
+    ),
+}
+
+
+def _resolve_facts(
+    rt: Runtime,
+    kind: FactKind,
+    record_id: str,
+    record: Mapping[str, object],
+    source: FactsSource,
+    envelope: Mapping[str, object] | None,
+    *,
+    new_prefix: str,
+    uses_record: bool = False,
+) -> tuple[FactProvenance, dict[str, object], str]:
+    """Establish the facts a decision may use, and how far they can be trusted.
+
+    - an envelope is verified against the runtime's trust store (``sentinel.trust``);
+      only one that verifies, states every field its kind requires, and (for a record
+      read from the store) matches the stored row yields VERIFIED_EXTERNAL, and then its
+      payload -- the issuer's statement, not a stored copy -- is what the decision uses.
+      A statement that does not verify is never decided on: the decision falls back to
+      the request's own record (empty for a bare envelope), which fails safe.
+    - a record read by id from the record store is TRUSTED_LOCAL (INVALID when the
+      deployment requires signed records and none is held);
+    - anything else (a request body, a demo fixture nobody signed) is UNTRUSTED.
+
+    ``uses_record``: the workflow decides on ``record`` itself (a transaction or session
+    builds its risk context from it), so the provenance names that record's digest.
+    Returns the provenance, the facts to use and the record id (taken from the envelope's
+    subject when the request named none)."""
+    if envelope is not None:
+        v = verify_fact(
+            envelope,
+            trust=rt.trust,
+            now=rt.clock(),
+            kind=kind,
+            subject=kind.subject(record_id) if record_id else None,
+            sequences=rt.sequences,
+        )
+        prov = v.provenance
+        rid = record_id or _id_from_subject(kind, prov.subject) or new_id(new_prefix)
+        if v.verified:
+            assert v.payload is not None
+            missing = sorted(STATEMENT_FIELDS[kind] - set(v.payload))
+            if missing:
+                prov = replace(
+                    prov,
+                    status=ProvenanceStatus.INVALID,
+                    reason=f"the signed statement omits {missing}; an unstated field is not "
+                    "the issuer's word",
+                )
+            elif kind is FactKind.KYB_RECORD and not (
+                isinstance(v.payload["application_id"], str) and v.payload["application_id"]
+            ):
+                prov = replace(
+                    prov,
+                    status=ProvenanceStatus.INVALID,
+                    reason="the signed statement does not name its application",
+                )
+            elif source is FactsSource.SYSTEM_OF_RECORD and record:
+                diff = sorted(
+                    k
+                    for k in set(v.payload) | set(record)
+                    if v.payload.get(k, _MISSING) != record.get(k, _MISSING)
+                )
+                if diff:
+                    prov = replace(
+                        prov,
+                        status=ProvenanceStatus.INVALID,
+                        reason=f"the stored record differs from the signed statement on {diff}",
+                    )
+        verified = prov.status is ProvenanceStatus.VERIFIED_EXTERNAL
+        facts = dict(v.payload) if verified and v.payload is not None else dict(record)
+        used = record if uses_record else facts
+        return replace(prov, payload_digest=record_digest(used)), facts, rid
+    rid = record_id or new_id(new_prefix)
+    if source is FactsSource.SYSTEM_OF_RECORD:
+        prov = local(kind, rid, record)
+        if rt.require_signed_facts:
+            prov = replace(
+                prov,
+                status=ProvenanceStatus.INVALID,
+                reason="the record store holds no signed statement for this record, and "
+                "this deployment requires one (a deleted statement is a tamper signal)",
+            )
+        return prov, dict(record), rid
+    return untrusted(kind, rid, record), dict(record), rid
+
+
+_MISSING = object()
+
+
+def _record_evidence(
+    evidence_id: str,
+    source: str,
+    field_name: str,
+    value: str | int | bool,
+    prov: FactProvenance,
+    *,
+    kind: EvidenceKind = EvidenceKind.LEDGER_FACT,
+    note: str = "",
+) -> Evidence:
+    """A record field as evidence, carrying the trust its provenance earned: a verified or
+    stored record is a VERIFIED fact; an unverified one is only a claim about the records."""
+    trust = prov.evidence_trust
+    if trust.is_trusted:
+        return Evidence.fact(
+            evidence_id, source, field_name, value, kind=kind, trust=trust, note=note
+        )
+    return Evidence.claim(
+        evidence_id,
+        source,
+        field_name,
+        value,
+        kind=kind,
+        trust=trust,
+        note=(note + "; " if note else "") + f"unverified record ({prov.status.value})",
+    )
 
 
 def _finish(
@@ -241,6 +449,7 @@ def _finish(
                 "security_event_id": decision.security_event_id,
                 "risk_model": risk.model_version if risk is not None else None,
                 "facts_source": str(inputs.facts_source),
+                "facts": inputs.provenance.audit_detail() if inputs.provenance else None,
                 # replay verifies the stored input snapshot against this
                 "snapshot_hash": snapshot_hash(snapshot(inputs)),
                 "engine_version": __version__,
@@ -249,6 +458,15 @@ def _finish(
         decision = replace(decision, audit_event_id=audit_event.event_id)
         if case is not None:
             rt.cases.link_audit(case.case_id, audit_event.event_id)
+        prov = inputs.provenance
+        if (
+            prov is not None
+            and prov.status is ProvenanceStatus.VERIFIED_EXTERNAL
+            and prov.sequence is not None
+            and prov.envelope_digest is not None
+        ):
+            # acted on: an older statement about this subject is now SUPERSEDED
+            rt.sequences.advance(prov.source, prov.subject, prov.sequence, prov.envelope_digest)
     return DecisionBundle(
         decision,
         sec,
@@ -286,8 +504,12 @@ def _fail_safe(
     error: str,
     opts: RunOptions,
     facts_source: FactsSource = FactsSource.CALLER_SUPPLIED,
+    provenance: FactProvenance | None = None,
 ) -> DecisionBundle:
-    """Unusable untrusted input never silently approves -- it goes to a human."""
+    """Unusable untrusted input never silently approves -- it goes to a human. An amount
+    outside what a record may state is recorded as 0: it was never a usable amount."""
+    if isinstance(amount, bool) or not isinstance(amount, int) or not 0 <= amount <= MAX_AMOUNT:
+        amount = 0
     from sentinel.domain.enums import EvidenceVerdict
     from sentinel.domain.evidence import EvidenceSet
 
@@ -316,6 +538,7 @@ def _fail_safe(
         model=model,
         claim_type="invalid",
         facts_source=facts_source,
+        provenance=provenance,
     )
     return _finish(
         rt, inputs, entities=(), reconciliation=rec, risk=None, ai=None, agent_name="n/a"
@@ -335,16 +558,25 @@ class DisputeRequest:
     account_id: str | None = None
     account_risk_score: int = 0
     facts_source: FactsSource = FactsSource.CALLER_SUPPLIED
+    envelope: Mapping[str, object] | None = None  # a signed dispute_ledger statement
 
 
 def run_dispute(
     rt: Runtime, req: DisputeRequest, opts: RunOptions = DEFAULT_OPTIONS
 ) -> DecisionBundle:
     _admit(rt, opts)
-    facts = DisputeFacts.from_ledger(req.ledger)
-    dispute_id = req.dispute_id or new_id("DSP")
+    prov, ledger, dispute_id = _resolve_facts(
+        rt,
+        FactKind.DISPUTE_LEDGER,
+        req.dispute_id,
+        req.ledger,
+        req.facts_source,
+        req.envelope,
+        new_prefix="DSP",
+    )
+    facts = DisputeFacts.from_ledger(ledger)
     try:
-        bad = DisputeFacts.problems(req.ledger)
+        bad = DisputeFacts.problems(ledger)
         if bad:  # an unusable trusted record is never coerced into a decision
             raise InvalidSubmission("ledger record malformed: " + "; ".join(bad))
         validate(req.narrative.text)
@@ -362,6 +594,7 @@ def run_dispute(
             str(e),
             opts,
             facts_source=req.facts_source,
+            provenance=prov,
         )
 
     contents = (req.narrative,) + req.documents
@@ -382,7 +615,10 @@ def run_dispute(
     claim = UntrustedText(req.narrative.text, req.narrative.source, req.narrative.trust).claim()
     extra: list[Claim] = [UntrustedText(d.text, d.source, d.trust).claim() for d in req.documents]
     rec = reconcile_dispute(
-        claim, facts, extra_claims=tuple(c for c in extra if c.claim_type.value != "unspecified")
+        claim,
+        facts,
+        extra_claims=tuple(c for c in extra if c.claim_type.value != "unspecified"),
+        provenance=prov,
     )
 
     risk = dispute_risk.assess_dispute(
@@ -413,6 +649,8 @@ def run_dispute(
         model=model,
         claim_type=claim.claim_type.value,
         facts_source=req.facts_source,
+        provenance=prov,
+        fact_envelope=dict(req.envelope) if req.envelope is not None else None,
     )
     entities = (f"account:{req.account_id}",) if req.account_id else ()
     return _finish(
@@ -437,6 +675,28 @@ class TransactionRequest:
     merchant_risk_level: str = "LOW"
     untrusted: tuple[UntrustedContent, ...] = ()  # merchant descriptor, customer note, ...
     facts_source: FactsSource = FactsSource.CALLER_SUPPLIED
+    envelope: Mapping[str, object] | None = None  # a signed transaction statement
+
+
+def transaction_record(t: Transaction) -> dict[str, object]:
+    """The transaction as its issuer (the payment switch) states it. The evaluation
+    label is ground truth for scoring the engine, not a fact the switch attests."""
+    return {
+        "transaction_id": t.transaction_id,
+        "account_id": t.account_id,
+        "merchant_id": t.merchant_id,
+        "instrument_id": t.instrument_id,
+        "device_id": t.device_id,
+        "amount": t.amount,
+        "currency": t.currency,
+        "timestamp": t.timestamp,
+        "country": t.country,
+        "channel": t.channel,
+        "auth_strength": t.auth_strength,
+        "delivery_status": t.delivery_status,
+        "counterparty_account_id": t.counterparty_account_id,
+        "status": t.status,
+    }
 
 
 def run_transaction(
@@ -444,7 +704,21 @@ def run_transaction(
 ) -> DecisionBundle:
     _admit(rt, opts)
     t = req.transaction
-    if isinstance(t.amount, bool) or not isinstance(t.amount, int) or t.amount <= 0:
+    prov, _, _ = _resolve_facts(
+        rt,
+        FactKind.TRANSACTION,
+        t.transaction_id,
+        transaction_record(t),
+        req.facts_source,
+        req.envelope,
+        new_prefix="TX",
+        uses_record=True,
+    )
+    if (
+        isinstance(t.amount, bool)
+        or not isinstance(t.amount, int)
+        or not 0 < t.amount <= MAX_AMOUNT
+    ):
         # a caller-supplied record with a zero, negative or non-integer amount is not a
         # payment to authorise; it goes to a human, never through the limit checks
         return _fail_safe(
@@ -455,9 +729,10 @@ def run_transaction(
             0,
             Capability.APPROVE_TRANSACTION,
             "transaction-authorization",
-            f"transaction amount {t.amount!r} is not a positive integer",
+            f"transaction amount {t.amount!r} is not a positive integer up to {MAX_AMOUNT:,}",
             opts,
             req.facts_source,
+            prov,
         )
     risk = txn_risk.assess_transaction(
         t, req.context, scoring.model_for("transaction", opts.risk_model)
@@ -499,20 +774,23 @@ def run_transaction(
         ("account_status", req.account_status),
     )
     fact_ev = tuple(
-        Evidence.fact(f"EV-TXN-{i:03d}", "payment_switch", k, v)
+        _record_evidence(f"EV-TXN-{i:03d}", "payment_switch", k, v, prov)
         for i, (k, v) in enumerate(pairs, start=1)
     ) + tuple(
-        Evidence.fact(
+        _record_evidence(
             f"EV-RISK-{i:03d}",
             "risk_engine",
             f.code,
             f.points,
+            prov,
             kind=EvidenceKind.RISK_SIGNAL,
             note=f.label,
         )
         for i, f in enumerate(risk.factors, start=1)
     )
-    rec = reconcile_records_only(fact_ev, why="payment-switch record and risk signals are trusted")
+    rec = reconcile_records_only(
+        fact_ev, why="payment-switch record and risk signals", provenance=prov
+    )
     provider, model_name = _provider_meta(rt, ai)
     inputs = DecisionInputs(
         workflow=Workflow.TRANSACTION,
@@ -537,6 +815,8 @@ def run_transaction(
         provider=provider,
         model=model_name,
         facts_source=req.facts_source,
+        provenance=prov,
+        fact_envelope=dict(req.envelope) if req.envelope is not None else None,
     )
     entities = (f"account:{t.account_id}", f"merchant:{t.merchant_id}", f"device:{t.device_id}")
     return _finish(
@@ -560,6 +840,7 @@ class KYBRequest:
     merchant_id: str = ""
     documents: tuple[UntrustedContent, ...] = ()
     facts_source: FactsSource = FactsSource.CALLER_SUPPLIED
+    envelope: Mapping[str, object] | None = None  # a signed kyb_record statement
 
 
 def run_kyb(rt: Runtime, req: KYBRequest, opts: RunOptions = DEFAULT_OPTIONS) -> DecisionBundle:
@@ -569,10 +850,18 @@ def run_kyb(rt: Runtime, req: KYBRequest, opts: RunOptions = DEFAULT_OPTIONS) ->
             f"risk model {opts.risk_model.version} does not apply to merchant onboarding "
             "(scored by the entity engine, which has no selectable version)"
         )
-    facts = KYBFacts.from_records(req.records)
-    merchant_id = req.merchant_id or new_id("MER")
+    prov, records, merchant_id = _resolve_facts(
+        rt,
+        FactKind.KYB_RECORD,
+        req.merchant_id,
+        req.records,
+        req.facts_source,
+        req.envelope,
+        new_prefix="MER",
+    )
+    facts = KYBFacts.from_records(records)
     try:
-        bad = KYBFacts.problems(req.records)
+        bad = KYBFacts.problems(records)
         if bad:
             raise InvalidSubmission("acquirer record malformed: " + "; ".join(bad))
         validate(req.application.text)
@@ -590,6 +879,7 @@ def run_kyb(rt: Runtime, req: KYBRequest, opts: RunOptions = DEFAULT_OPTIONS) ->
             str(e),
             opts,
             facts_source=req.facts_source,
+            provenance=prov,
         )
     contents = (req.application,) + req.documents
     security = _inspect_all(rt, contents, None)
@@ -601,7 +891,7 @@ def run_kyb(rt: Runtime, req: KYBRequest, opts: RunOptions = DEFAULT_OPTIONS) ->
     claim = UntrustedText(
         req.application.text, req.application.source, req.application.trust
     ).claim()
-    rec = reconcile_kyb(facts, application_claim=claim)
+    rec = reconcile_kyb(facts, application_claim=claim, provenance=prov)
     provider, model = _provider_meta(rt, ai)
     inputs = DecisionInputs(
         workflow=Workflow.MERCHANT_ONBOARDING,
@@ -627,6 +917,8 @@ def run_kyb(rt: Runtime, req: KYBRequest, opts: RunOptions = DEFAULT_OPTIONS) ->
         provider=provider,
         model=model,
         facts_source=req.facts_source,
+        provenance=prov,
+        fact_envelope=dict(req.envelope) if req.envelope is not None else None,
     )
     return _finish(
         rt, inputs, entities=(), reconciliation=rec, risk=None, ai=ai, agent_name=SPECS["kyb"].name
@@ -643,6 +935,21 @@ class AccountSecurityRequest:
     message: UntrustedContent | None = None  # what the customer / agent said
     requested_capability: Capability | None = None  # e.g. CHANGE_PAYOUT, UNFREEZE_ACCOUNT
     facts_source: FactsSource = FactsSource.CALLER_SUPPLIED
+    envelope: Mapping[str, object] | None = None  # a signed login_session statement
+
+
+def session_record(s: LoginSession) -> dict[str, object]:
+    """The login session as the authentication service states it."""
+    return {
+        "session_id": s.session_id,
+        "account_id": s.account_id,
+        "device_id": s.device_id,
+        "ip": s.ip,
+        "country": s.country,
+        "started_at": s.started_at,
+        "mfa_passed": s.mfa_passed,
+        "events": list(s.events),
+    }
 
 
 def run_account_security(
@@ -650,6 +957,16 @@ def run_account_security(
 ) -> DecisionBundle:
     _admit(rt, opts)
     s = req.session
+    prov, _, _ = _resolve_facts(
+        rt,
+        FactKind.LOGIN_SESSION,
+        s.session_id,
+        session_record(s),
+        req.facts_source,
+        req.envelope,
+        new_prefix="SES",
+        uses_record=True,
+    )
     risk = account_security.assess_login(
         s, req.context, scoring.model_for("login", opts.risk_model)
     )
@@ -684,11 +1001,13 @@ def run_account_security(
         ("events", ",".join(s.events)),
     )
     fact_ev = tuple(
-        Evidence.fact(f"EV-SESS-{i:03d}", "auth_service", k, v, kind=EvidenceKind.SESSION_RECORD)
+        _record_evidence(
+            f"EV-SESS-{i:03d}", "auth_service", k, v, prov, kind=EvidenceKind.SESSION_RECORD
+        )
         for i, (k, v) in enumerate(spairs, start=1)
     )
     rec = reconcile_records_only(
-        fact_ev, why="session record from the authentication service is trusted"
+        fact_ev, why="session record from the authentication service", provenance=prov
     )
     cap = req.requested_capability
     if cap is None:
@@ -721,6 +1040,8 @@ def run_account_security(
         provider=provider,
         model=model,
         facts_source=req.facts_source,
+        provenance=prov,
+        fact_envelope=dict(req.envelope) if req.envelope is not None else None,
     )
     return _finish(
         rt,

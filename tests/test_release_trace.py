@@ -44,13 +44,18 @@ from sentinel.domain.enums import (
     ActorKind,
     AuthorizationStatus,
     CaseStatus,
+    FactKind,
+    FactsSource,
     FinalAction,
     PolicyOutcome,
     Workflow,
 )
+from sentinel.domain.ids import new_id
+from sentinel.presets import ATTACKS
 from sentinel.risk import scoring
 from sentinel.security.capabilities import CONSEQUENTIAL, WORKFLOW_CAPABILITIES, authorize
 from sentinel.security.provenance import UntrustedContent, wrap_untrusted
+from tests.records import ledger
 
 NOT_DELIVERED = {"amount": 9_000, "delivery_status": "not_delivered", "policy_auto_limit": 50_000}
 
@@ -122,7 +127,8 @@ def test_the_api_refuses_an_off_surface_capability_before_evaluating(app, api):
 def test_a_multi_turn_dispute_is_decided_and_audited_once(app):
     n_audit, n_dec = len(app.runtime.audit), app.store.count("decisions")
     b = app.evaluate_dispute_conversation(
-        ("Hello,", "about my order,", "it never arrived."), NOT_DELIVERED
+        ("Hello,", "about my order,", "it never arrived."),
+        envelope=app.issuer.sign(FactKind.DISPUTE_LEDGER, "DSP-MULTI", ledger(**NOT_DELIVERED)),
     )
     assert len(app.runtime.audit) == n_audit + 1
     assert app.store.count("decisions") == n_dec + 1
@@ -131,10 +137,10 @@ def test_a_multi_turn_dispute_is_decided_and_audited_once(app):
 
 
 def test_the_multi_turn_attack_leaves_no_orphan_case_or_audit_event(app):
-    n = len(app.runtime.audit)
+    n, cases = len(app.runtime.audit), len(app.cases(limit=10_000))
     sb = app.simulate_attack("multi_turn")
-    new = app.runtime.audit.events()[n:]
-    assert [e.decision_id for e in new if e.kind == "decision"] == [sb["decision"]["decision_id"]]
+    assert not sb["decision"]["authoritative"]  # a simulation: nothing is recorded
+    assert len(app.runtime.audit) == n and len(app.cases(limit=10_000)) == cases
     for c in app.cases(limit=500):
         for did in c.decision_ids:
             assert app.store.decision(did) is not None, (c.case_id, did)
@@ -142,7 +148,7 @@ def test_the_multi_turn_attack_leaves_no_orphan_case_or_audit_event(app):
 
 def test_a_session_records_only_when_it_decides():
     rt = Runtime()
-    s = DisputeSession(rt, NOT_DELIVERED)
+    s = DisputeSession(rt, NOT_DELIVERED, facts_source=FactsSource.SYSTEM_OF_RECORD)
     interim = s.add("Hello,")
     s.add("my order never arrived.")
     assert len(rt.audit) == 0 and not interim.decision.authoritative
@@ -156,8 +162,17 @@ def test_a_session_records_only_when_it_decides():
 
 # ---- D3: every human case action is chained -------------------------------------------------
 def _blocked_case(app):
-    sb = app.simulate_attack("document_injection")
-    return app.case(sb["case"]["case_id"])
+    """The flagship attack, recorded: an issuer-signed ledger (delivered) and a document that
+    tells the agent compliance approved the refund, through the real evaluate path."""
+    p = ATTACKS["document_injection"]
+    did = new_id("DSP")
+    b = app.evaluate_dispute(
+        p.narrative,
+        envelope=app.issuer.sign(FactKind.DISPUTE_LEDGER, did, ledger(**p.ledger)),
+        documents=(p.document,),
+    )
+    assert b.decision.authoritative and b.case is not None
+    return app.case(b.case.case_id)
 
 
 def test_human_case_actions_are_audit_events(app):
@@ -289,7 +304,9 @@ def test_a_flag_that_is_not_a_boolean_is_a_malformed_record(app, flag):
 def test_a_non_positive_transaction_amount_is_never_authorised(app, api):
     t = app.store.transactions(limit=1)[0]
     for amount in (-5_000_000, 0):
-        d = app.evaluate_transaction(replace(t, amount=amount)).decision
+        d = app.evaluate_transaction(
+            replace(t, transaction_id="TX-NOT-STORED", amount=amount)
+        ).decision
         assert d.final_action is FinalAction.REQUIRE_HUMAN_REVIEW and not d.executed
     body = {"transaction": {**json.loads(json.dumps(t.__dict__)), "amount": -5}}
     assert _post(api + "/v1/transactions/evaluate", body)[0] == 400

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from sentinel.domain.enums import ClaimType, EvidenceKind, EvidenceVerdict, TrustClass
 from sentinel.domain.evidence import Claim, Evidence, EvidenceSet, Reconciliation
+from sentinel.domain.provenance import FactProvenance
 from sentinel.evidence.contradiction import find_contradictions
 from sentinel.security.trust_boundary import DisputeFacts, KYBFacts
 
@@ -43,11 +44,31 @@ def claim_evidence(claim: Claim, evidence_id: str = "EV-CLAIM") -> Evidence | No
     )
 
 
+def _gate(
+    verdict: EvidenceVerdict, why: str, provenance: FactProvenance | None
+) -> tuple[EvidenceVerdict, str]:
+    """Unverified records may make an outcome stricter, never looser: a claim they would
+    support is held for a human instead (INSUFFICIENT)."""
+    if provenance is not None and not provenance.status.trusted and verdict.supports:
+        return (
+            EvidenceVerdict.INSUFFICIENT,
+            f"{why} -- but only per a record Sentinel could not establish "
+            f"({provenance.status.value}: {provenance.reason}); held for a human",
+        )
+    return verdict, why
+
+
 def reconcile_dispute(
-    claim: Claim, facts: DisputeFacts, *, extra_claims: tuple[Claim, ...] = ()
+    claim: Claim,
+    facts: DisputeFacts,
+    *,
+    extra_claims: tuple[Claim, ...] = (),
+    provenance: FactProvenance | None = None,
 ) -> Reconciliation:
-    """Verified ledger facts vs the cardholder's (and any document's) claim."""
-    fact_ev = facts.to_evidence("EV-LEDGER")
+    """Ledger facts vs the cardholder's (and any document's) claim."""
+    fact_ev = facts.to_evidence(
+        "EV-LEDGER", provenance.evidence_trust if provenance is not None else None
+    )
     claims: list[Evidence] = []
     ce = claim_evidence(claim, "EV-CLAIM-1")
     if ce is not None:
@@ -81,6 +102,11 @@ def reconcile_dispute(
                 EvidenceVerdict.INSUFFICIENT,
                 "item still in transit; premature dispute, held for a human",
             )
+    elif facts.unknown(ct):
+        verdict, why = (
+            EvidenceVerdict.INSUFFICIENT,
+            f"claims {ct.value}; the records do not state {DisputeFacts.CLAIM_FIELDS[ct][0]}",
+        )
     elif facts.supports(ct):
         verdict, why = EvidenceVerdict.SUPPORTED, f"ledger supports {ct.value}"
     else:
@@ -92,14 +118,22 @@ def reconcile_dispute(
             )
         else:
             verdict, why = EvidenceVerdict.UNSUPPORTED, f"ledger does not confirm {ct.value}"
+    verdict, why = _gate(verdict, why, provenance)
     return Reconciliation(claim, verdict, evidence, contradictions, why)
 
 
-def reconcile_kyb(facts: KYBFacts, *, application_claim: Claim | None = None) -> Reconciliation:
+def reconcile_kyb(
+    facts: KYBFacts,
+    *,
+    application_claim: Claim | None = None,
+    provenance: FactProvenance | None = None,
+) -> Reconciliation:
     """The applicant implicitly claims to be a verified, clean business. The
     acquirer's records either support that, contradict it (shell / flagged) or
     are incomplete (unverified) -> human review."""
-    fact_ev = facts.to_evidence("EV-ACQ")
+    fact_ev = facts.to_evidence(
+        "EV-ACQ", provenance.evidence_trust if provenance is not None else None
+    )
     claims: list[Evidence] = []
     if application_claim is not None:
         claims.append(
@@ -129,12 +163,18 @@ def reconcile_kyb(facts: KYBFacts, *, application_claim: Claim | None = None) ->
         verdict, why = EvidenceVerdict.SUPPORTED, "registration verified and history clean"
     else:
         verdict, why = EvidenceVerdict.INSUFFICIENT, "verification incomplete"
+    verdict, why = _gate(verdict, why, provenance)
     return Reconciliation(application_claim, verdict, evidence, contradictions, why)
 
 
 def reconcile_records_only(
-    fact_evidence: tuple[Evidence, ...], *, why: str = "trusted records consistent"
+    fact_evidence: tuple[Evidence, ...],
+    *,
+    why: str = "trusted records consistent",
+    provenance: FactProvenance | None = None,
 ) -> Reconciliation:
     """Workflows with no external claim (transaction authorisation, account
-    security, investigations): the evidence is the records themselves."""
-    return Reconciliation(None, EvidenceVerdict.SUPPORTED, EvidenceSet.of(fact_evidence), (), why)
+    security, investigations): the evidence is the records themselves, so they support
+    the request exactly as far as the records can be trusted."""
+    verdict, reason = _gate(EvidenceVerdict.SUPPORTED, why, provenance)
+    return Reconciliation(None, verdict, EvidenceSet.of(fact_evidence), (), reason)

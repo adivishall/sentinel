@@ -43,6 +43,7 @@ from sentinel.domain.enums import (
 )
 from sentinel.domain.evidence import Reconciliation
 from sentinel.domain.ids import content_hash, new_id, now_iso
+from sentinel.domain.provenance import FactProvenance
 from sentinel.domain.risk import RiskAssessment
 from sentinel.domain.security import SecurityAssessment
 from sentinel.policy.engine import PolicyEvaluationError, evaluate
@@ -80,6 +81,10 @@ class DecisionInputs:
     model: str = "offline-simulator"
     claim_type: str | None = None
     facts_source: FactsSource = FactsSource.CALLER_SUPPLIED
+    # What establishes the facts (sentinel.trust), and the signed statement itself when
+    # there was one, so replay can verify it again.
+    provenance: FactProvenance | None = None
+    fact_envelope: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -310,11 +315,16 @@ def compose(inputs: DecisionInputs) -> Decision:
             wanted_execute and action is FinalAction.ALLOW and ai.requested_capability == candidate
         ) or (not wanted_execute and action is not FinalAction.ALLOW)
 
+    prov = inputs.provenance
     trail = [
         TrailEntry(
             "provenance",
-            f"untrusted input hashed ({inputs.input_hash or 'n/a'}); trusted facts from records",
-            {"facts": sorted(inputs.facts)},
+            f"untrusted input hashed ({inputs.input_hash or 'n/a'}); facts "
+            + (f"{prov.status.value}: {prov.reason}" if prov else "from records"),
+            {
+                "facts": sorted(inputs.facts),
+                **({"facts_provenance": prov.audit_detail()} if prov else {}),
+            },
         ),
         TrailEntry(
             "ai_security_gateway",
@@ -428,4 +438,5 @@ def compose(inputs: DecisionInputs) -> Decision:
         facts_source=inputs.facts_source,
         ai_agreed=ai_agreed,
         executed_capability=executed,
+        provenance=inputs.provenance,
     )

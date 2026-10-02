@@ -11,7 +11,9 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "adivishall" }]
 keywords = ["fintech", "ai-security", "llm-security", "prompt-injection", "fraud-detection", "policy-as-code", "audit-log", "decision-integrity"]
-dependencies = []  # the core is standard library only (sqlite3, http.server, dataclasses)
+# One runtime dependency: pyca/cryptography, for Ed25519 signatures on fact envelopes
+# (sentinel/trust). Everything else is the standard library (sqlite3, http.server, ...).
+dependencies = ["cryptography>=42"]
 
 [project.urls]
 Homepage = "https://github.com/adivishall/sentinel"
