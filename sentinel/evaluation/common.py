@@ -98,7 +98,11 @@ def run_kyb_case(
             {},
             case["id"],
             docs,
-            envelope=EVAL_ISSUER.sign(FactKind.KYB_RECORD, case["id"], dict(case["records"])),
+            envelope=EVAL_ISSUER.sign(
+                FactKind.KYB_RECORD,
+                case["id"],
+                {**case["records"], "application_id": case["id"]},  # it names its application
+            ),
         ),
         RunOptions(controls=controls),
     )
