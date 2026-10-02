@@ -23,7 +23,7 @@ console's case form. It does that only on a loopback bind or under
 
 ```bash
 make docker-build                 # docker build -t sentinel .
-make docker-run                   # demo: published on 127.0.0.1:8000 only, SENTINEL_INSECURE_DEMO=1
+make docker-run                   # demo: 127.0.0.1:8000 only, SENTINEL_INSECURE_DEMO=1 and SENTINEL_DEMO_DATA=1
 curl localhost:8000/health
 ```
 
@@ -42,6 +42,9 @@ docker run --rm -p 127.0.0.1:8000:8000 \
 
 - `python:3.11-slim`, non-root user, `HEALTHCHECK` on `/health`, a `/data`
   volume for the SQLite store, offline by default.
+- The store in `/data` is never filled with synthetic data unless the
+  container is given `SENTINEL_DEMO_DATA=1` (the demo target does this); a
+  deployment starts empty and reads its records from the system of record.
 - Live mode: `docker build --build-arg LIVE=1 -t sentinel:live .` and run with
   `-e SENTINEL_FORCE_OFFLINE=0` and the Anthropic key as a mounted secret.
 
@@ -71,7 +74,8 @@ SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models   # same corpus, real 
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `SENTINEL_DB` | `data/sentinel.db` | SQLite store path (`:memory:` for ephemeral) |
+| `SENTINEL_DB` | `data/sentinel.db` | SQLite store path (`:memory:` for ephemeral). A store named here (or with `--db`) is never filled with synthetic data unless asked; read-only commands (`audit`, `replay`) refuse a path that does not exist |
+| `SENTINEL_DEMO_DATA` | unset | `1` = fill an empty named store with the synthetic demo dataset (same as `--demo-data`); `:memory:` and the default `data/sentinel.db` always are |
 | `SENTINEL_API_KEY` | unset | the API's bearer token (16+ characters to serve a network address) |
 | `SENTINEL_API_KEY_FILE` | unset | read the API key from this file (a mounted secret) |
 | `SENTINEL_INSECURE_DEMO` | unset | `1` = serve a network address without a key (throwaway demos; audited) |
@@ -86,6 +90,8 @@ SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models   # same corpus, real 
 | `SENTINEL_TRUST_STORE` | unset (nothing trusted) | trust store JSON: the public keys of the issuers whose signed fact envelopes Sentinel accepts |
 | `SENTINEL_REQUIRE_SIGNED_FACTS` | off (on for the in-memory demo) | every record read by id must come with its issuer's signed statement; a missing one is `INVALID` |
 | `SENTINEL_POLICY_TRUST` | the shipped root (`sentinel/trust/policy_root.json`) | trust store holding the `policy-release` keys whose signed releases and activations Sentinel accepts |
+| `SENTINEL_POLICY_DIR` | the shipped policies | the policy directory a server loads and the `policy` commands use: an operator's copy, released and activated under `SENTINEL_POLICY_TRUST` |
+| `SENTINEL_UI_DIR`, `SENTINEL_RESULTS_DIR` | the source checkout, else `./ui` and `./results` | where the console's static files and evaluation results are served from (the image copies them to `/app`) |
 | `SENTINEL_REQUIRE_SIGNED_POLICY` | on | `0` runs unsigned policies (each decision then records `UNSIGNED`) |
 | `SENTINEL_REVIEWERS` | unset (nobody can act on cases) | reviewer registry JSON: who may act on cases, their role and authority limit, their credential's SHA-256 |
 | `SENTINEL_REVIEWER_TOKEN` | — | the CLI's reviewer credential for `case transition` / `case decide` |
@@ -114,8 +120,9 @@ production-shaped boundaries (see "Honest scope" below).
   POSTs are refused as cross-origin.
 - Start with `SENTINEL_API_KEY_FILE`, `SENTINEL_TRUST_STORE`,
   `SENTINEL_REVIEWERS`, `SENTINEL_REQUIRE_SIGNED_FACTS=1` and the policy trust
-  root. Check the `SERVER_START` event (`sentinel audit list`): `auth=api_key`,
-  `insecure_demo=false`, the fingerprints you expect.
+  root. Check the `SERVER_START` event
+  (`sentinel --db /data/sentinel.db audit list --action SERVER_START --json`):
+  `auth=api_key`, `insecure_demo=false`, the fingerprints you expect.
 
 ### Keys: three purposes, three keys, none on the Sentinel host
 
@@ -160,16 +167,30 @@ sentinel --db /data/sentinel.db --trust-store /etc/sentinel/trust.json audit ver
 
 ### Policy releases
 
+The shipped policies are released by the maintainers' root. A deployment that
+uses its own root keeps its own copy of the policies and releases every version
+under its key (this sequence is executed by `tests/test_policy_runbook.py`):
+
 ```bash
+# 1. your policy-release key (kept off the Sentinel host) and your trust root
 sentinel trust keygen --issuer policy-pipeline --purpose policy-release \
     --key-out /secure/policy-release.pem --trust-out /etc/sentinel/policy-trust.json
-sentinel policy pin                                   # pin the new version's digest
+# 2. a copy of the policies, without the maintainers' release book
+cp -R "$(python -c 'import sentinel.policy.loader as l; print(l.POLICY_DIR)')" /etc/sentinel/policies
+rm /etc/sentinel/policies/RELEASES.json
+export SENTINEL_POLICY_DIR=/etc/sentinel/policies SENTINEL_POLICY_TRUST=/etc/sentinel/policy-trust.json
+# 3. release every pinned version (each id@vN in MANIFEST.json), e.g.
 sentinel policy sign --key /secure/policy-release.pem --signer policy-pipeline \
-    --policy dispute-refund --version 5               # release exactly this document
+    --policy dispute-refund --version 4
+# 4. activate the version that should decide, for each policy
 sentinel policy activate --key /secure/policy-release.pem --signer policy-pipeline \
-    --policy dispute-refund --version 5 --effective-from 2026-11-01T00:00:00Z
-SENTINEL_POLICY_TRUST=/etc/sentinel/policy-trust.json sentinel policy verify
+    --policy dispute-refund --version 4
+# 5. verify, as the server does at start (run the server with the same two variables)
+sentinel policy verify
 ```
+
+A new version later: add `policy-id.vN.json`, `sentinel policy pin`, then sign
+and activate it (optionally `--effective-from 2026-11-01T00:00:00Z`).
 
 A changed policy is a new version: signed, then activated explicitly (a higher
 number activates nothing). An in-place edit fails the release digest and the
