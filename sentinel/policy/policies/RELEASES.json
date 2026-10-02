@@ -1,0 +1,271 @@
+{
+  "format": "sentinel.policy-releases/1",
+  "releases": [
+    {
+      "format": "sentinel.policy-release/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "account-security",
+      "version": 1,
+      "digest": "4e8a7c54b8064d52297aaeb67ff61a64440caeeb962d1743f4a39a775178f521",
+      "released_at": "2026-10-01T09:35:32Z",
+      "signature": "mL-8YMLCw9b_OrJKQsYNuV7dgOxVYMNKjTqwUWBDL8QHaWjU_ZSCcpMM-fUWGRNeZdRI8VNo8rCAO2dUUB9fBg"
+    },
+    {
+      "format": "sentinel.policy-release/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "account-security",
+      "version": 2,
+      "digest": "d54c955d85afe50ac258bba79198e74dadeefd4aaf3eed8eb79331444e0a06b3",
+      "released_at": "2026-10-01T09:35:32Z",
+      "signature": "S80OqaWLwMuQGHicfb86zrmmTr1S1Wwh86QDlJCsi7egXtpLn_CLnF-81cK4pwgVjCzPH_r_R1nZsiU4W_mYBw"
+    },
+    {
+      "format": "sentinel.policy-release/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "dispute-refund",
+      "version": 1,
+      "digest": "a856d00b4987488498543ce8df1704d60e9e0dd4e06d5ce75d900798fa9b6cf3",
+      "released_at": "2026-10-01T09:35:33Z",
+      "signature": "HL0K3K3XjV4gDvIMGbLUnUGMKR7Wjz-HFCM6bi7Worm4AkU36jWmsb0bvDQAlGkQmcw7ufEZtT4N3cSbQ-7EAw"
+    },
+    {
+      "format": "sentinel.policy-release/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "dispute-refund",
+      "version": 2,
+      "digest": "3cd95f7fa9b6482f29301a4ff439c9731fc5ffa815c691bad4238afc5cfc925a",
+      "released_at": "2026-10-01T09:35:33Z",
+      "signature": "RjCwQ7PkHtjjGv1UkkYCkYjzugZNcMuMwTUpOSumpi9hzzfmoHUFAG8iOSIZ-H3AUrfAxdd4b9okfnKrohOUBQ"
+    },
+    {
+      "format": "sentinel.policy-release/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "dispute-refund",
+      "version": 3,
+      "digest": "1c37ac159eabbc0a34b3af131845d02390f7bfd6e99700acbd9b10967b660648",
+      "released_at": "2026-10-01T09:35:33Z",
+      "signature": "GZvn5QByDGkaT1vEH7J2G3zva2w68lRQJh2sws0ZtDRmI2_nHgmXWGy2LgS6mpA_4IzpiJY1jYpBw0jkfwcHAQ"
+    },
+    {
+      "format": "sentinel.policy-release/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "dispute-refund",
+      "version": 4,
+      "digest": "5c2839ef5ac4c45ee69f89b6a695b6ce5adf67a1336880feff60f010ba83f9ff",
+      "released_at": "2026-10-01T09:35:33Z",
+      "signature": "YcOhvsB_GJeP1eUapIHFX7t1sxMEIxxSE6kkVhbryW2_s1ge8Mio9jm0J3Q3Zv7x0ZdERA1N8--vnPO9a8s-Cw"
+    },
+    {
+      "format": "sentinel.policy-release/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "investigation",
+      "version": 1,
+      "digest": "80f52ddf4bddba7c33f02b4ef698b359a0bd44f20cfa6f238dd3060520888b98",
+      "released_at": "2026-10-01T09:35:34Z",
+      "signature": "xQBr3C5UWWwwn-GrbfkXqok5uQ7L-PiNG4nw28XOWg-_xqtc2afS_YixnAZmREDHQYnhMTyLM582qgIALrNsDQ"
+    },
+    {
+      "format": "sentinel.policy-release/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "merchant-onboarding",
+      "version": 1,
+      "digest": "199f8087247b76ab7e81ce6d6e99f556fdbfcfae06c056b8659ad7d97225881b",
+      "released_at": "2026-10-01T09:35:34Z",
+      "signature": "eHgW88Y2JtNVJy1rBY0cT2vqEogPlDm4oT-yCX8KSUV0PGPHTJNiGd0vS05_DMN_HfYGPv8xrXDyXMlQoeT5Aw"
+    },
+    {
+      "format": "sentinel.policy-release/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "merchant-onboarding",
+      "version": 2,
+      "digest": "9b4c9b5c2834ad6df30acd7fe8b25dcf94767169fa8be00238a06a0f2f901307",
+      "released_at": "2026-10-01T09:35:34Z",
+      "signature": "jUY0x7lwAImnp1Irk8SZlrLF8yNyjryZz5J0vZz4u1qa62PAD9JcdOp8oTh-vDLNWBk_OPV-AxTUtrz_i2_-Bw"
+    },
+    {
+      "format": "sentinel.policy-release/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "transaction-authorization",
+      "version": 1,
+      "digest": "36ca2e834433045bc6bdc15c3913c47b32626085a088fc67e1f84d087cc34c8f",
+      "released_at": "2026-10-01T09:35:34Z",
+      "signature": "tJ9-CrH60Bn-D6nuHK46s_9htn5Ak7bTeIvyW97RtzQR-lXmtF8t4jP8lOT8Hwhm9JG5XXwcInucYeWHeR0OAQ"
+    },
+    {
+      "format": "sentinel.policy-release/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "transaction-authorization",
+      "version": 2,
+      "digest": "64b50c9ae7cecd910c44c70ed669316fa6cd5ed081d7a974b77b9356b1a7a1cd",
+      "released_at": "2026-10-01T09:35:34Z",
+      "signature": "MquuiWGTQpFnfRdU_Ee7PHuqmbg8MOR-_KiTLJgrf85_ClFRqdMiPo6jZdbUYBVBDS-Fpan2lv7JNAkMLPvFAg"
+    },
+    {
+      "format": "sentinel.policy-release/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "transaction-authorization",
+      "version": 3,
+      "digest": "c408816022a1824fcab0d4ab8fe6ed1909d46f81cccfb0c6009f221903097281",
+      "released_at": "2026-10-01T09:35:35Z",
+      "signature": "ZvmwQB1Zq82W5l4v1nGCiIH2tRt8CLW0ZVgCjYn1a-PhOmIV9gX9fDxqCGIl1QguC3CqpcmBrq7V0iuPnHDbCQ"
+    }
+  ],
+  "activations": [
+    {
+      "format": "sentinel.policy-activation/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "account-security",
+      "version": 1,
+      "digest": "4e8a7c54b8064d52297aaeb67ff61a64440caeeb962d1743f4a39a775178f521",
+      "sequence": 1,
+      "effective_from": "2026-09-01T00:00:00Z",
+      "issued_at": "2026-10-01T09:35:32Z",
+      "signature": "bWrZbF2_Q6wUFZ7OblARHyB7cb_Ct5O23QJwOEZW40QzYZQQEj2iaa43yvHihRcu-UxBEPx7BDRGtONq8pH9CQ"
+    },
+    {
+      "format": "sentinel.policy-activation/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "account-security",
+      "version": 2,
+      "digest": "d54c955d85afe50ac258bba79198e74dadeefd4aaf3eed8eb79331444e0a06b3",
+      "sequence": 2,
+      "effective_from": "2026-09-29T00:00:00Z",
+      "issued_at": "2026-10-01T09:35:33Z",
+      "signature": "tjx4EoqQfCm8wbbsHN-C5wLZ2G1GSSzyq6CXbpsPXxlJ8pVdnOAYLvqHvBtfQPte1sBulOjeWOV0P4o4-pyWCA"
+    },
+    {
+      "format": "sentinel.policy-activation/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "dispute-refund",
+      "version": 1,
+      "digest": "a856d00b4987488498543ce8df1704d60e9e0dd4e06d5ce75d900798fa9b6cf3",
+      "sequence": 1,
+      "effective_from": "2026-09-01T00:00:00Z",
+      "issued_at": "2026-10-01T09:35:33Z",
+      "signature": "tPUeRMX5YXCBHhJufAZ1wv3Zit-Vz8ZGMhAzAaq4-LwN-qDK3KldFsuRR-Y_GhEc8lpMd76yyUTYHomi47slCQ"
+    },
+    {
+      "format": "sentinel.policy-activation/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "dispute-refund",
+      "version": 2,
+      "digest": "3cd95f7fa9b6482f29301a4ff439c9731fc5ffa815c691bad4238afc5cfc925a",
+      "sequence": 2,
+      "effective_from": "2026-09-20T00:00:00Z",
+      "issued_at": "2026-10-01T09:35:33Z",
+      "signature": "WYyezg0QuylAmwZbjJWeMvXt2isoKFPiJTP8hBXo4B1CdSqPvvbg1oEJcas90eTZGlnml2mmftnMaescoJD-BA"
+    },
+    {
+      "format": "sentinel.policy-activation/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "dispute-refund",
+      "version": 3,
+      "digest": "1c37ac159eabbc0a34b3af131845d02390f7bfd6e99700acbd9b10967b660648",
+      "sequence": 3,
+      "effective_from": "2026-09-25T00:00:00Z",
+      "issued_at": "2026-10-01T09:35:33Z",
+      "signature": "xd0gBlYhro-y3-RZPotW9FlvQFrSISWbhEOptqG-pk8zqJnjP_v2MUz-IKFPQI2MTZLAePHr9eX8TDd4aplJDw"
+    },
+    {
+      "format": "sentinel.policy-activation/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "dispute-refund",
+      "version": 4,
+      "digest": "5c2839ef5ac4c45ee69f89b6a695b6ce5adf67a1336880feff60f010ba83f9ff",
+      "sequence": 4,
+      "effective_from": "2026-09-29T00:00:00Z",
+      "issued_at": "2026-10-01T09:35:33Z",
+      "signature": "ioZbm7zscCOqTwTg-KbbPR7lJHtoLQNKY3CYrsAFYYVAV-hKo7zdti5hBui8cd6w15Sk9G6ZvbRRJwffgaTrBg"
+    },
+    {
+      "format": "sentinel.policy-activation/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "investigation",
+      "version": 1,
+      "digest": "80f52ddf4bddba7c33f02b4ef698b359a0bd44f20cfa6f238dd3060520888b98",
+      "sequence": 1,
+      "effective_from": "2026-09-01T00:00:00Z",
+      "issued_at": "2026-10-01T09:35:34Z",
+      "signature": "U7FdXy6D5STN5IUVelT9OsJ4idFLykgAUvbgQoKnnifFRbO1nHjvA5ty8MGOAlvm-27mDclgBnSlK-jwlfviBg"
+    },
+    {
+      "format": "sentinel.policy-activation/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "merchant-onboarding",
+      "version": 1,
+      "digest": "199f8087247b76ab7e81ce6d6e99f556fdbfcfae06c056b8659ad7d97225881b",
+      "sequence": 1,
+      "effective_from": "2026-09-01T00:00:00Z",
+      "issued_at": "2026-10-01T09:35:34Z",
+      "signature": "1II09rpKbTs9ZU2l0YoL7Ebnx7rtoTM-zwINK4H_9fPAq6DP0kLE-mB1FGM8SZRsMps9nSirq3CbruyLvpGfCA"
+    },
+    {
+      "format": "sentinel.policy-activation/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "merchant-onboarding",
+      "version": 2,
+      "digest": "9b4c9b5c2834ad6df30acd7fe8b25dcf94767169fa8be00238a06a0f2f901307",
+      "sequence": 2,
+      "effective_from": "2026-09-29T00:00:00Z",
+      "issued_at": "2026-10-01T09:35:34Z",
+      "signature": "wjv5W96Rcov62uk5_ggAOxEvWAIFEHNIOA5k1s3DMw6heP4zyoZbGGcaeHiw62jeYNqjxxnrsvtmV8iLxlG6DA"
+    },
+    {
+      "format": "sentinel.policy-activation/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "transaction-authorization",
+      "version": 1,
+      "digest": "36ca2e834433045bc6bdc15c3913c47b32626085a088fc67e1f84d087cc34c8f",
+      "sequence": 1,
+      "effective_from": "2026-09-01T00:00:00Z",
+      "issued_at": "2026-10-01T09:35:34Z",
+      "signature": "3Ti-6Q7jcoz5tsb5msNe0rJRN3bc8rZuP3So-S_HS_xL1z2yiLoRRNymElDLj62J5xjBcb2EF8nc3AfdfQfYAA"
+    },
+    {
+      "format": "sentinel.policy-activation/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "transaction-authorization",
+      "version": 2,
+      "digest": "64b50c9ae7cecd910c44c70ed669316fa6cd5ed081d7a974b77b9356b1a7a1cd",
+      "sequence": 2,
+      "effective_from": "2026-09-20T00:00:00Z",
+      "issued_at": "2026-10-01T09:35:34Z",
+      "signature": "cp-qNy4K4ly6-k8OtmUq5J-Gg-vjHKrLILWnGMDr4J22SDA4x7qxNmHsdVeO2aKWw5m6cnguE7lNXFziioPkAg"
+    },
+    {
+      "format": "sentinel.policy-activation/1",
+      "signer": "sentinel-policy",
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "policy_id": "transaction-authorization",
+      "version": 3,
+      "digest": "c408816022a1824fcab0d4ab8fe6ed1909d46f81cccfb0c6009f221903097281",
+      "sequence": 3,
+      "effective_from": "2026-09-29T00:00:00Z",
+      "issued_at": "2026-10-01T09:35:35Z",
+      "signature": "L9sX7QDrKZiEavmvfBX-FZOAC61JGPwKlqcgLsaThdSfe8l-J6OXB26YFwOH3VJGfNoaDIKprqouHpMBk2r4CA"
+    }
+  ]
+}

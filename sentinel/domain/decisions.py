@@ -66,6 +66,13 @@ class PolicyDecision:
     explanations: tuple[str, ...]
     context_hash: str = ""
     policy_hash: str = ""  # content hash of the policy document (versions are labels; this is not)
+    # What establishes the policy version (sentinel.policy.release): its full SHA-256, the
+    # release status, who signed it and the activation that made it active.
+    policy_digest: str = ""
+    release_status: str = ""
+    release_signer: str | None = None
+    release_key_id: str | None = None
+    activation_sequence: int | None = None
 
 
 @dataclass(frozen=True)

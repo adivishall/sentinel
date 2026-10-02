@@ -1,0 +1,20 @@
+{
+  "format": "sentinel.trust-store/1",
+  "keys": [
+    {
+      "key_id": "ed25519:194b2634646a2533361dde26c1940a7b",
+      "issuer": "sentinel-policy",
+      "public_key": "2YrzXOdpxU3e6-1VeNqlGnqcJtljCGQh6TaoALy1YtY",
+      "purpose": "policy-release",
+      "scopes": [
+        "*"
+      ],
+      "not_before": "2026-10-01T09:30:25Z",
+      "not_after": null,
+      "revoked_at": null,
+      "revocation_reason": null,
+      "max_validity_days": 30,
+      "label": "Sentinel policy releases: the maintainer's key (private half kept off the repository and off the Sentinel host)"
+    }
+  ]
+}
