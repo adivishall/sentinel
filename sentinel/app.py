@@ -913,6 +913,21 @@ class SentinelApp:
             self._refuse_held(FactKind.KYB_RECORD, app_named)
         if merchant_id:
             check_record_id(merchant_id, "merchant_id")
+        if records is not None:
+            # unsigned body facts are a new, UNTRUSTED application: they may not re-point a
+            # merchant or an application the store holds (release audit: body records for a
+            # stored merchant, and case variants of its id, each opened a case a reviewer
+            # could approve -- several onboardings of one merchant over its signed record)
+            if merchant_id:
+                held = self.store.held_merchant(merchant_id)
+                if held is not None:
+                    raise ValueError(
+                        f"{held} is held by the record store; evaluate its application by id"
+                    )
+            named = records.get("application_id")
+            if isinstance(named, str):
+                check_record_id(named, "records.application_id")
+                self._refuse_held(FactKind.KYB_RECORD, named)
         facts_source = FactsSource.CALLER_SUPPLIED
         if application_id and records is None and envelope is None:
             facts_source = FactsSource.SYSTEM_OF_RECORD
