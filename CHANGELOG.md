@@ -214,6 +214,48 @@ can be trusted (roadmap issues #11–#20).
   - an `effective_from` the verifier could not read silently skipped the effective-date
     floor; it is refused.
 
+### Security — secure-by-default deployment (#20)
+- **Loopback by default** (`serve`, `make_server`, `make api`). A network bind with no API
+  key is refused before a socket opens (CLI exit 2); a key shorter than 16 characters does
+  not count. `--insecure-demo` (`SENTINEL_INSECURE_DEMO=1`) is the only way to serve the
+  network unauthenticated: logged at ERROR, audited, marked on every response, bannered in
+  the console. The Docker image therefore refuses to start without a key or the flag;
+  `make docker-run` publishes the demo on 127.0.0.1 only.
+- `SENTINEL_API_KEY_FILE` (a mounted secret); the key is compared over SHA-256 digests in
+  constant time; the console asks for it once and keeps it for the tab.
+- **Browser requests:** POSTs must be `application/json` (415) and same-origin (403 for a
+  foreign `Origin`, `Origin: null` or `Sec-Fetch-Site: cross-site`), so a page elsewhere
+  cannot drive the loopback default. Security headers on every response and a CSP on the
+  console; negative `Content-Length` is a 400; a 30-second socket timeout.
+- **The record of how the server ran:** a `SERVER_START` audit event (bind, auth mode, key
+  fingerprint prefix, insecure-demo, signed facts and policy settings, trust-store and
+  reviewer-registry fingerprints). SIGHUP reloads the trust store and reviewer registry
+  deliberately: audited (`CONFIG_RELOAD`, with what changed), and a file that fails to
+  load keeps the running configuration (`CONFIG_RELOAD_FAILED`).
+- `/version` no longer names the provider and model unauthenticated; `/v1/system` names
+  the store's file, not its path. The in-memory demo's reviewer credentials are minted
+  only on loopback or under `--insecure-demo`.
+- `docs/DEPLOYMENT.md` is a runbook: TLS termination, the three key purposes (facts,
+  policy release, audit checkpoint) and why none lives on the Sentinel host, issuer and
+  policy-release keys, reviewer credentials, reload, rotation and revocation.
+- **Adversarial review of this branch.** Bind parsing failed closed for every odd address,
+  no GET wrote anything, traversal and symlinks were refused, and no secret reached a
+  response, log or audit event. Found and fixed, each with a regression test:
+  - **DNS rebinding** defeated the Origin check (a rebound page is same-origin with
+    itself): a loopback server now answers only loopback names or `SENTINEL_ALLOWED_HOSTS`
+    (421 otherwise);
+  - **two SIGHUPs** 0.2 ms apart deadlocked the server, and a reload raising anything but
+    ValueError/OSError killed it: the handler only wakes a reloader thread, which catches
+    everything and audits `CONFIG_RELOAD_FAILED`;
+  - rotating the key file did nothing until a restart; a whitespace key passed the bind
+    check; `SERVER_START` carried an unsalted key-hash prefix (a guessing oracle);
+  - `snapshot.json` was served without the key; a malformed `Origin` dropped the
+    connection; a TLS proxy rewriting `Host` had its console POSTs refused; the console
+    prompted for the API key on a blank reviewer credential; `::1` could not be bound;
+    trust-store paths reached `/v1/system` and reload failures.
+  Documented, not changed: a client trickling bytes is the proxy's to cut off; concurrent
+  connections are now capped (`SENTINEL_MAX_CONNECTIONS`).
+
 ### Evaluation
 - The corpora's ledgers and acquirer records are signed by an ephemeral evaluation
   issuer and verified in every case, so the suites measure text and model influence on

@@ -6,10 +6,13 @@ decision."""
 
 from __future__ import annotations
 
+import hashlib
 import os
+import threading
 import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from sentinel.audit.chain import AuditChain, ChainVerification
@@ -74,6 +77,16 @@ DEMO_ISSUER_LABEL = (
     "ephemeral demo issuer: stands in for the institution's systems of record signing their "
     "records; its key is generated in this process and never written anywhere"
 )
+
+
+def _file_sha256(path: str | None) -> str | None:
+    """SHA-256 of a configuration file's bytes (a fingerprint, never its content)."""
+    if not path:
+        return None
+    try:
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    except OSError:
+        return None
 
 
 def configured_reviewers() -> ReviewerRegistry:
@@ -170,6 +183,15 @@ class SentinelApp:
         makes a record-store read without its signed statement INVALID."""
         self.store = store or SentinelStore(":memory:")
         self.issuer = issuer
+        # Where the trust store and reviewer registry are read from, for a deliberate reload
+        # (``reload_config``): the environment's files unless a caller passed objects.
+        self.trust_source: str | None = (
+            None if trust is not None else os.environ.get("SENTINEL_TRUST_STORE")
+        )
+        self.reviewers_source: str | None = (
+            None if reviewers is not None else os.environ.get("SENTINEL_REVIEWERS")
+        )
+        self._config_lock = threading.Lock()
         # who may act on cases (sentinel.cases.identity): operator configuration, apart from
         # the case data. Empty = nobody can act on a case through the API or CLI.
         self.reviewers = reviewers if reviewers is not None else configured_reviewers()
@@ -228,6 +250,97 @@ class SentinelApp:
     @classmethod
     def open(cls, path: str, **kw: Any) -> SentinelApp:
         return cls(SentinelStore(path), **kw)
+
+    # ---- configuration: fingerprints and a deliberate, audited reload ----------------------
+    def config_fingerprint(self) -> dict[str, Any]:
+        """The trust store and reviewer registry in effect, as fingerprints (never key bytes
+        or credentials): for SERVER_START and CONFIG_RELOAD audit events."""
+        trust = self.runtime.trust
+        reviewers = self.reviewers
+        return {
+            "trust": {
+                "origin": Path(trust.origin).name,
+                "sha256": _file_sha256(self.trust_source),
+                "keys": sorted(trust.keys),
+                "revoked": sorted(k for k, v in trust.keys.items() if v.revoked),
+            },
+            "reviewers": {
+                "origin": Path(reviewers.origin).name,
+                "sha256": _file_sha256(self.reviewers_source),
+                "active": sorted(r.reviewer_id for r in reviewers.reviewers() if r.active),
+                "credential_ids": sorted(r.credential_id for r in reviewers.reviewers()),
+            },
+        }
+
+    def reload_config(self, source: str = "manual") -> dict[str, Any]:
+        """Re-read the trust store and reviewer registry from their files (SIGHUP, or a
+        restart, which reads them the same way). Both load before either is swapped in; a
+        file that fails to load keeps the configuration that was running (nothing new is
+        trusted) and the failure is audited. The demo issuer's key stays trusted."""
+        with self._config_lock:
+            before = self.config_fingerprint()
+            try:
+                trust = TrustStore.load(self.trust_source) if self.trust_source else None
+                reviewers = (
+                    ReviewerRegistry.load(self.reviewers_source) if self.reviewers_source else None
+                )
+                if trust is not None and self.issuer is not None:
+                    trust = trust.with_key(self.issuer.key)
+            except Exception as e:  # noqa: BLE001 -- nothing new is trusted, nothing dropped
+                reason = str(e)
+                for src in (self.trust_source, self.reviewers_source):
+                    if src:  # file names, never paths on disk
+                        reason = reason.replace(str(src), Path(src).name)
+                detail: dict[str, Any] = {
+                    "source": source,
+                    "outcome": "refused",
+                    "reason": reason[:300],
+                }
+                self.runtime.audit.append(
+                    actor="sentinel",
+                    workflow="system",
+                    action="CONFIG_RELOAD_FAILED",
+                    kind="system",
+                    detail=detail,
+                )
+                _log.error("configuration reload refused", extra={"detail": detail})
+                return detail
+            if trust is not None:
+                self.runtime.trust = trust
+                self.what_if_runtime.trust = trust
+            if reviewers is not None:
+                self.reviewers = reviewers
+            after = self.config_fingerprint()
+            detail = {
+                "source": source,
+                "outcome": "reloaded",
+                "trust": {
+                    **after["trust"],
+                    "added": sorted(set(after["trust"]["keys"]) - set(before["trust"]["keys"])),
+                    "removed": sorted(set(before["trust"]["keys"]) - set(after["trust"]["keys"])),
+                    "newly_revoked": sorted(
+                        set(after["trust"]["revoked"]) - set(before["trust"]["revoked"])
+                    ),
+                },
+                "reviewers": {
+                    **after["reviewers"],
+                    "deactivated": sorted(
+                        set(before["reviewers"]["active"]) - set(after["reviewers"]["active"])
+                    ),
+                    "added": sorted(
+                        set(after["reviewers"]["active"]) - set(before["reviewers"]["active"])
+                    ),
+                },
+            }
+            self.runtime.audit.append(
+                actor="sentinel",
+                workflow="system",
+                action="CONFIG_RELOAD",
+                kind="system",
+                detail=detail,
+            )
+            _log.warning("configuration reloaded", extra={"detail": detail})
+            return detail
 
     def _check_activations(self, policies: Any) -> None:
         """Refuse to start on an activation older than one this store already ran under
@@ -1692,11 +1805,12 @@ class SentinelApp:
             "default_transaction_model": scoring.TRANSACTION_DEFAULT.version,
             "facts_sources": {f.value: f.describe for f in FactsSource},
             "trust": {
-                "origin": self.runtime.trust.origin,
+                "origin": Path(self.runtime.trust.origin).name,
                 "keys": self.runtime.trust.summary(),
                 "demo_issuer": self.issuer.key.key_id if self.issuer is not None else None,
             },
             "audit": to_dict(self.verify_audit()),
             "metrics": METRICS.snapshot(),
-            "store": self.store.path,
+            # the file name only: where it lives on disk is not the API's business
+            "store": Path(self.store.path).name if self.store.path != ":memory:" else ":memory:",
         }

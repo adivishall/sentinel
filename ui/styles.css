@@ -203,3 +203,6 @@ td.wrap{white-space:normal}
 .review-form select{width:auto;min-width:130px}.review-form input{flex:1;min-width:160px;width:auto}
 .stack{display:flex;flex-direction:column;gap:14px;min-width:0}
 .timeline .tl{grid-template-columns:132px 88px 1fr}
+
+/* --insecure-demo: the server says it is reachable without authentication */
+.insecure-banner { background: #8b1a1a; color: #fff; font-weight: 600; padding: 6px 16px; text-align: center; font-size: 13px; }
