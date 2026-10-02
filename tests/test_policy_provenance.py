@@ -576,3 +576,56 @@ def test_r8_a_trailing_newline_is_not_a_new_subject():
         fn({}, {"transaction": {**to_dict(t), "transaction_id": t.transaction_id + "\n"}}, params)
     with pytest.raises(ValueError, match="not a record id"):
         app.evaluate_transaction(replace(t, transaction_id=t.transaction_id + "\n", amount=1))
+
+
+def test_r9_body_records_cannot_re_point_a_stored_merchant():
+    """Release audit (HIGH): body records naming a stored merchant -- or a case variant of
+    its id -- opened an UNTRUSTED case a single reviewer could approve, onboarding the
+    merchant over its signed record, once per spelling. ``application_id`` sent with
+    ``records`` was silently dropped. All are refused now; a new merchant still goes to a
+    human."""
+    from sentinel.api.schemas import ValidationError
+    from sentinel.api.server import build_routes
+
+    app = SentinelApp.demo(seed=42, customers=50, merchants=10, transactions=600)
+    fn, params = build_routes(app).match("POST", "/v1/merchants/evaluate")
+    k = app.store.kyb_applications(limit=1)[0]
+    clean = {"application": "We sell books online.", "records": kyb_record()}
+    for mid in (k.merchant_id, k.merchant_id.lower(), k.merchant_id.title()):
+        with pytest.raises(ValueError, match="held by the record store"):
+            fn({}, {**clean, "merchant_id": mid}, params)
+    with pytest.raises(ValidationError, match="not both"):
+        fn({}, {**clean, "application_id": k.application_id}, params)
+    stored_app = {**clean, "records": kyb_record(application_id=k.application_id)}
+    with pytest.raises(ValueError, match="held by the record store"):
+        fn({}, stored_app, params)
+    fresh = fn({}, {**clean, "merchant_id": "MER-NEW-AUDIT"}, params)
+    assert fresh["provenance"]["status"] == "UNTRUSTED" and fresh["executed_capability"] is None
+
+
+@pytest.mark.parametrize("ledger", ["memory", "sqlite"])
+def test_r10_one_subject_is_one_execution_whatever_the_case_of_its_id(ledger):
+    """Defence in depth for the same audit finding: two spellings of a new subject's id
+    must not hold two execution claims."""
+    from sentinel.data.store import SentinelStore, SqliteExecutions
+    from sentinel.decision.workflows import MemoryExecutions
+
+    ex = MemoryExecutions() if ledger == "memory" else SqliteExecutions(SentinelStore())
+    assert ex.claim("merchant_onboarding:MER-NEW-1:APPROVE_MERCHANT", "case:A") is None
+    assert ex.claim("merchant_onboarding:mer-new-1:APPROVE_MERCHANT", "case:B") == "case:A"
+    assert ex.holder("MERCHANT_ONBOARDING:MER-NEW-1:approve_merchant") == "case:A"
+
+
+def test_r11_a_repeat_on_an_executed_subject_is_a_denial_not_a_case():
+    """Release audit (MEDIUM): when policy asked for review, a repeat on a subject whose
+    capability had already executed opened a new case that could never be approved; the
+    documented answer is DENY "already executed"."""
+    svc_rt = Runtime(trust=TRUST)
+    req = _signed({**SUPPORTING, "amount": 60_000}, "DSP-R11")  # over the limit: review
+    b = run_dispute(svc_rt, req)
+    c = svc_rt.cases.transition(b.case.case_id, CaseStatus.INVESTIGATING, actor="analyst")
+    svc_rt.cases.record_human_decision(c.case_id, reviewer="alice", outcome="approve")
+    again = run_dispute(svc_rt, req)
+    assert again.decision.final_action is FinalAction.DENY
+    assert "already executed" in again.decision.authorization.reason
+    assert again.case is None and not again.decision.executed

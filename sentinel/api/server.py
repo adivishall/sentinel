@@ -246,9 +246,12 @@ def build_routes(app: SentinelApp) -> Router:
             )
             return {**to_dict(b.decision), "adjudication": _adjudication(b)}
         if d.get("dispute_id") and "ledger" not in d:
+            # "submission" is the narrative's alias here too: new text sent with a stored
+            # dispute's id is refused, never silently dropped
+            text = S.opt_str(d, "narrative")
             return to_dict(
                 app.evaluate_dispute(
-                    S.opt_str(d, "narrative", "") or "",
+                    (text if text is not None else S.opt_str(d, "submission", "")) or "",
                     dispute_id=S.req_id(d, "dispute_id"),
                     documents=docs,
                     options=opts,
@@ -272,6 +275,12 @@ def build_routes(app: SentinelApp) -> Router:
         if d.get("document"):
             docs = docs + (S.req_str(d, "document"),)
         env = S.envelope(d, exclusive=("records", "application_id"))
+        if d.get("application_id") and "records" in d:
+            # never silently drop one of them (release audit)
+            raise S.ValidationError(
+                "pass application_id (a stored application) or records (a new, unsigned "
+                "application), not both"
+            )
         if env is not None:
             return to_dict(
                 app.evaluate_merchant(

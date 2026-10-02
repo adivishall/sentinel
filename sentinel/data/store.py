@@ -7,6 +7,7 @@ need indexing, which keeps the schema honest without an ORM."""
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 from typing import Any
@@ -70,6 +71,8 @@ CREATE TABLE IF NOT EXISTS executions (key TEXT PRIMARY KEY, holder TEXT);
 CREATE TABLE IF NOT EXISTS fact_sequences (issuer TEXT, subject TEXT, sequence INTEGER, envelope_digest TEXT, PRIMARY KEY (issuer, subject));
 """
 
+_log = logging.getLogger(__name__)
+
 
 def _j(obj: object) -> str:
     return json.dumps(to_dict(obj), sort_keys=True, default=str)
@@ -95,6 +98,13 @@ class SentinelStore:
             cols = {r[1] for r in self._conn.execute("PRAGMA table_info(accounts)")}
             if "status_since" not in cols:  # a store created before 2.2.0
                 self._conn.execute("ALTER TABLE accounts ADD COLUMN status_since TEXT")
+            try:  # one subject is one execution, whatever the ASCII case of its id
+                self._conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS executions_key_nocase "
+                    "ON executions(key COLLATE NOCASE)"
+                )
+            except sqlite3.IntegrityError:  # a store that already holds case-variant claims
+                _log.warning("executions: case-variant keys already present; exact-match claims")
             self._conn.commit()
 
     # ---- generic ------------------------------------------------------------------
@@ -418,6 +428,11 @@ class SentinelStore:
             r["label"],
             r["status"] or "settled",
         )
+
+    def held_merchant(self, mid: str) -> str | None:
+        """The stored merchant id equal to ``mid`` ignoring ASCII case, if any."""
+        r = self._one("SELECT merchant_id FROM merchants WHERE merchant_id = ? COLLATE NOCASE", (mid,))
+        return str(r[0]) if r else None
 
     def held_id(self, kind: FactKind, rid: str) -> str | None:
         """The stored record id equal to ``rid`` ignoring ASCII case, if the store holds
@@ -1213,7 +1228,9 @@ class SqliteExecutions:
         self._store = store
 
     def holder(self, key: str) -> str | None:
-        r = self._store._one("SELECT holder FROM executions WHERE key = ?", (key,))
+        r = self._store._one(
+            "SELECT holder FROM executions WHERE key = ? COLLATE NOCASE", (key,)
+        )
         return str(r["holder"]) if r else None
 
     def claim(self, key: str, by: str) -> str | None:

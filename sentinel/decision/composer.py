@@ -156,6 +156,7 @@ def _final_action(
     auth: Authorization,
     security: SecurityAssessment,
     controls: frozenset[str],
+    prior_execution: str | None = None,
 ) -> tuple[FinalAction, str]:
     security_caused = DETECTION in controls and (
         security.severity.rank >= Severity.HIGH.rank or security.capability_escalation
@@ -164,6 +165,10 @@ def _final_action(
         if security_caused:
             return FinalAction.BLOCK, "blocked: AI-security finding and policy"
         return FinalAction.DENY, "denied: policy outcome BLOCK on trusted inputs"
+    # the capability already executed on this subject: a review case could never approve
+    # it again, so the repeat is a denial, not a case (release audit)
+    if prior_execution is not None and auth.status is AuthorizationStatus.DENIED:
+        return FinalAction.DENY, f"denied: {auth.reason}"
     if verdict is EvidenceVerdict.INSUFFICIENT:
         return FinalAction.REQUIRE_HUMAN_REVIEW, "held: evidence insufficient to decide (fail-safe)"
     if not verdict.supports:
@@ -236,7 +241,7 @@ def _decide(
             v.actor,
             "authorization control disabled",
         )
-    action, reason = _final_action(v.verdict, pol, auth, v.security, v.controls)
+    action, reason = _final_action(v.verdict, pol, auth, v.security, v.controls, v.prior_execution)
     return pol, auth, action, reason, context
 
 
