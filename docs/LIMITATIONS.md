@@ -145,12 +145,14 @@ block.
     recompute the chain**.
 
     A storage attacker can recompute it. A consistent rewrite of every event
-    after the last checkpoint passes both `verify` and checkpoint
-    verification. Only the prefix up to a checkpoint the operator stores
-    outside the audit store is protected (`sentinel audit checkpoint`). That
-    checkpoint is HMAC-signed with `SENTINEL_AUDIT_KEY`, so anyone who can
-    verify it can also forge one. Asymmetric, externally anchored checkpoints
-    are roadmap issue #17.
+    after the last anchored checkpoint passes `verify`; only the prefix up to
+    a checkpoint signed with an `audit-checkpoint` key and kept in an anchor
+    the writer cannot reach is protected, and replay labels everything after
+    it `not_anchored`. The anchors shipped are a directory and an append-only
+    file the operator must keep elsewhere (export, commit, WORM storage);
+    Sentinel integrates no transparency log. The legacy HMAC checkpoint
+    (`SENTINEL_AUDIT_KEY`) remains for compatibility: anyone who can verify it
+    can also forge one.
 
 ## Known weaknesses (deliberately not tuned away)
 

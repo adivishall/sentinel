@@ -807,16 +807,70 @@ def _verify_report(what: str, v: Any, args: argparse.Namespace) -> int:
     return 0 if v.ok else 2
 
 
+def _anchored_report(what: str, v: Any, a: Any, args: argparse.Namespace) -> int:
+    """The chain report plus its anchoring. Exit 2 on any integrity failure (the chain's
+    own or a mismatch with the anchor), else 3 with --require-anchored while events after
+    the latest checkpoint exist, else 0."""
+    latest = a.latest or {}
+    lines = {
+        "anchored": (
+            f"anchoring: anchored through event #{a.covered_length - 1} (checkpoint "
+            f"{latest.get('checkpoint_sequence')}, {latest.get('signer')} "
+            f"{latest.get('key_id')}); {a.unanchored_events} event(s) after it are not "
+            "anchored yet: a consistent rewrite of those cannot be excluded"
+        ),
+        "not_anchored": (
+            f"anchoring: NOT ANCHORED ({'; '.join(a.reasons)}): the chain proves only its "
+            "own consistency"
+        ),
+        "anchor_mismatch": "anchoring: ANCHOR MISMATCH\n  " + "\n  ".join(a.reasons),
+    }
+    if getattr(args, "json", False):
+        print(json.dumps({**to_dict(v), "anchoring": a.to_dict()}, indent=2, default=str))
+        code = 0 if v.ok else 2
+    else:
+        code = _verify_report(what, v, args)
+        print(lines[a.status])
+        for note in a.notes:
+            print(f"  note: {note}")
+    if code or a.status == "anchor_mismatch":
+        return 2
+    if getattr(args, "require_anchored", False) and a.unanchored_events:
+        return 3
+    return 0
+
+
 def cmd_audit(args: argparse.Namespace) -> int:
     from sentinel.audit.chain import Checkpoint, JsonlBackend, checkpoint_key, verify_records
 
+    if args.audit_command == "verify" and getattr(args, "anchor", None) and args.checkpoint:
+        raise ValueError("--anchor and --checkpoint are two different checks; pass one")
     if args.audit_command == "verify" and getattr(args, "file", None):
         if not os.path.exists(args.file):
             raise FileNotFoundError(args.file)
-        v = verify_records(JsonlBackend(args.file).read_all())
+        records = JsonlBackend(args.file).read_all()
+        v = verify_records(records)
+        if getattr(args, "anchor", None):
+            from sentinel.app import configured_trust
+            from sentinel.audit.anchor import anchoring, open_anchor
+            from sentinel.trust.keys import TrustStore
+
+            trust = (
+                TrustStore.load(args.trust_store)
+                if getattr(args, "trust_store", None)
+                else configured_trust()
+            )
+            a = anchoring(records, open_anchor(args.anchor), trust, require_publication=True)
+            return _anchored_report(f"file {args.file}", v, a, args)
         return _verify_report(f"file {args.file}", v, args)
     app = _app(args)
+    if getattr(args, "anchor", None):
+        from sentinel.audit.anchor import open_anchor
+
+        app.anchor = open_anchor(args.anchor)
     if args.audit_command == "verify":
+        if app.anchor is not None and not getattr(args, "checkpoint", None):
+            return _anchored_report("chain", app.verify_audit(), app.audit_anchoring(), args)
         if getattr(args, "checkpoint", None):
             cp = Checkpoint.from_dict(_load_json(args.checkpoint))
             v = app.runtime.audit.verify_checkpoint(cp, checkpoint_key())
@@ -827,6 +881,18 @@ def cmd_audit(args: argparse.Namespace) -> int:
             v = app.verify_audit()
             what = "chain"
         return _verify_report(what, v, args)
+    if args.audit_command == "checkpoint" and getattr(args, "sign_key", None):
+        from sentinel.trust import crypto
+
+        if not args.signer:
+            raise ValueError("--signer is required with --sign-key")
+        stmt = app.publish_checkpoint(crypto.load_private_pem(args.sign_key), args.signer)
+        print(
+            f"checkpoint {stmt['checkpoint_sequence']} signed by {stmt['signer']} "
+            f"({stmt['key_id']}): {stmt['length']} events, head {stmt['head_hash'][:16]}… "
+            f"-> {app.anchor.name if app.anchor else '?'}"
+        )
+        return 0
     if args.audit_command == "checkpoint":
         cp = app.runtime.audit.checkpoint(checkpoint_key())
         with open(args.out, "w", encoding="utf-8") as fh:
@@ -1420,9 +1486,23 @@ def build_parser() -> argparse.ArgumentParser:
     av = au.add_parser("verify")
     av.add_argument("--checkpoint", help="also verify against an exported checkpoint file")
     av.add_argument("--file", help="verify an exported JSONL chain (sentinel audit export)")
-    au.add_parser("checkpoint").add_argument(
-        "--out", default="audit-checkpoint.json", help="write {length, head_hash[, signature]}"
+    av.add_argument("--anchor", help="check the chain against the signed checkpoints here")
+    av.add_argument(
+        "--require-anchored",
+        action="store_true",
+        help="exit 3 when events after the latest anchored checkpoint exist",
     )
+    ac = au.add_parser("checkpoint")
+    ac.add_argument(
+        "--out",
+        default="audit-checkpoint.json",
+        help="HMAC mode: write {length, head_hash[, signature]}",
+    )
+    ac.add_argument(
+        "--sign-key", help="an audit-checkpoint Ed25519 key (PEM): sign and anchor the head"
+    )
+    ac.add_argument("--signer", help="the signer id the trust store names for that key")
+    ac.add_argument("--anchor", help="directory or .jsonl file (default: SENTINEL_AUDIT_ANCHOR)")
     au.add_parser("show").add_argument("id")
     au.add_parser("export").add_argument("path")
     al = au.add_parser("list", help="the latest audit events (newest last)")
@@ -1506,7 +1586,9 @@ def build_parser() -> argparse.ArgumentParser:
     ).add_subparsers(dest="trust_command", required=True)
     kg = tr.add_parser("keygen", help="generate an Ed25519 key and add it to a trust store")
     kg.add_argument("--issuer", required=True, help="issuer id, e.g. core-ledger")
-    kg.add_argument("--purpose", default="facts", choices=["facts", "policy-release"])
+    kg.add_argument(
+        "--purpose", default="facts", choices=["facts", "policy-release", "audit-checkpoint"]
+    )
     kg.add_argument(
         "--scopes", default="*", help="comma-separated fact kinds or policy ids ('*' = all)"
     )

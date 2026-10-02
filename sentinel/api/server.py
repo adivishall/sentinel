@@ -706,7 +706,14 @@ def build_routes(app: SentinelApp) -> Router:
             "length": len(app.runtime.audit),
         },
     )
-    r.add("GET", "/v1/audit/verify", lambda q, b, p: to_dict(app.verify_audit()))
+    r.add(
+        "GET",
+        "/v1/audit/verify",
+        lambda q, b, p: {
+            **to_dict(app.verify_audit()),
+            "anchoring": app.audit_anchoring().to_dict(),
+        },
+    )
     r.add(
         "GET",
         "/v1/audit/(?P<id>[^/]+)",

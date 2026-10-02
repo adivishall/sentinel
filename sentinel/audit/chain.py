@@ -414,6 +414,27 @@ class AuditChain:
     def head(self) -> str:
         return self._head
 
+    def _adopt(self, stored: int) -> bool:
+        """Records another writer appended since this chain last looked (the scheduled
+        checkpoint job records CHECKPOINT_PUBLISHED from its own process): adopted only if
+        each is in sequence and hash-links from this chain's head."""
+        prev = self._head
+        for i in range(self._length, stored):
+            r = self.backend.at(i)
+            if r is None:
+                return False
+            try:
+                ev = AuditEvent.from_dict(r)
+            except (KeyError, ValueError, TypeError):
+                return False
+            if ev.sequence != i or ev.previous_hash != prev:
+                return False
+            if chain_hash(ev.body(), prev) != ev.event_hash:
+                return False
+            prev = ev.event_hash
+        self._length, self._head = stored, prev
+        return True
+
     def __len__(self) -> int:
         return self._length
 
@@ -439,7 +460,9 @@ class AuditChain:
     ) -> AuditEvent:
         with self._lock:
             stored = self.backend.count()
-            if stored != self._length:
+            if stored > self._length and self._adopt(stored):
+                pass  # another writer (a checkpoint job) appended, correctly linked
+            elif stored != self._length:
                 raise AuditIntegrityError(
                     f"audit chain is inconsistent: the store holds {stored} events but the chain "
                     f"expects {self._length} (a record was deleted or inserted underneath the "

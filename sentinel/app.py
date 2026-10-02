@@ -15,6 +15,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from sentinel.audit.anchor import (
+    Anchor,
+    Anchoring,
+    anchoring,
+    checkpoint_digest,
+    open_anchor,
+    sign_checkpoint_statement,
+)
 from sentinel.audit.chain import AuditChain, ChainVerification
 from sentinel.cases.identity import ReviewerRegistry
 from sentinel.cases.service import CaseService
@@ -67,7 +75,7 @@ from sentinel.risk.graph import EntityGraph, Node
 from sentinel.security.gateway import Conversation
 from sentinel.security.provenance import UntrustedContent
 from sentinel.trust.facts import verify_fact
-from sentinel.trust.issuer import Issuer
+from sentinel.trust.issuer import Issuer, utc_now
 from sentinel.trust.keys import TrustStore
 
 _log = get_logger("sentinel.app")
@@ -87,6 +95,13 @@ def _file_sha256(path: str | None) -> str | None:
         return hashlib.sha256(Path(path).read_bytes()).hexdigest()
     except OSError:
         return None
+
+
+def configured_anchor() -> Anchor | None:
+    """Where audit checkpoints are anchored (``SENTINEL_AUDIT_ANCHOR``: a directory or a
+    ``.jsonl`` file kept out of the audit store writer's reach), or None."""
+    spec = os.environ.get("SENTINEL_AUDIT_ANCHOR")
+    return open_anchor(spec) if spec else None
 
 
 def configured_reviewers() -> ReviewerRegistry:
@@ -192,6 +207,8 @@ class SentinelApp:
             None if reviewers is not None else os.environ.get("SENTINEL_REVIEWERS")
         )
         self._config_lock = threading.Lock()
+        # where signed audit checkpoints are anchored (read-only for the server)
+        self.anchor: Anchor | None = configured_anchor()
         # who may act on cases (sentinel.cases.identity): operator configuration, apart from
         # the case data. Empty = nobody can act on a case through the API or CLI.
         self.reviewers = reviewers if reviewers is not None else configured_reviewers()
@@ -1703,6 +1720,58 @@ class SentinelApp:
     def verify_audit(self) -> ChainVerification:
         return self.runtime.audit.verify()
 
+    def audit_anchoring(self) -> Anchoring:
+        """The chain checked against every signed checkpoint the anchor holds
+        (``sentinel.audit.anchor``): anchored | not_anchored | anchor_mismatch."""
+        return anchoring(
+            self.runtime.audit.backend.read_all(),
+            self.anchor,
+            self.runtime.trust,
+            now=utc_now(),
+            require_publication=True,  # this application always records the publication
+        )
+
+    def publish_checkpoint(self, private: Any, signer: str) -> dict[str, Any]:
+        """Sign the chain's head with an audit-checkpoint key and publish it to the
+        anchor, then record the publication in the chain itself (so deleting the newest
+        anchored checkpoint is visible). The key is the operator's, used here and
+        discarded; a server never holds it."""
+        if self.anchor is None:
+            raise ValueError("no audit anchor configured (SENTINEL_AUDIT_ANCHOR / --anchor)")
+        current = self.audit_anchoring()
+        if current.status == "anchor_mismatch":
+            # a checkpoint over a chain that disagrees with its anchor would bless the
+            # disagreement: find out why first
+            raise ValueError(
+                "the chain and its anchor disagree; refusing to checkpoint: "
+                + "; ".join(current.reasons)
+            )
+        held = self.anchor.all()
+        previous = held[-1] if held and "_unreadable" not in held[-1] else None
+        stmt = sign_checkpoint_statement(
+            private,
+            signer=signer,
+            records=self.runtime.audit.backend.read_all(),
+            previous=previous,
+            issued_at=utc_now(),
+        )
+        receipt = self.anchor.publish(stmt)
+        self.runtime.audit.append(
+            actor="sentinel",
+            workflow="system",
+            action="CHECKPOINT_PUBLISHED",
+            kind="system",
+            detail={
+                "checkpoint_sequence": stmt["checkpoint_sequence"],
+                "digest": checkpoint_digest(stmt),
+                "length": stmt["length"],
+                "anchor": self.anchor.name,
+                "receipt": receipt,
+                "key_id": stmt["key_id"],
+            },
+        )
+        return stmt
+
     def replay(self, decision_id: str, overrides: ReplayOverrides) -> ReplayResult:
         original = self.store.decision(decision_id)
         snap = self.store.decision_snapshot(decision_id)
@@ -1726,6 +1795,16 @@ class SentinelApp:
         r = replace(
             r, facts=self._reverify_facts(snap, ev.to_dict() if ev else None, r.record_verified)
         )
+        anchored = self.audit_anchoring()
+        status = anchored.for_event(ev.sequence if ev else None)
+        r = replace(r, anchoring={**anchored.to_dict(), "decision_event": status})
+        if status == "anchor_mismatch":
+            r = replace(
+                r,
+                record_verified=False,
+                record_issues=r.record_issues
+                + ("the audit chain disagrees with its anchored checkpoints",),
+            )
         if self.runtime.persist:
             payload = r.to_dict()
             self.store.save_replay(r.replay_id, decision_id, r.changed, r.created_at, payload)
@@ -1809,7 +1888,11 @@ class SentinelApp:
                 "keys": self.runtime.trust.summary(),
                 "demo_issuer": self.issuer.key.key_id if self.issuer is not None else None,
             },
-            "audit": to_dict(self.verify_audit()),
+            # anchoring re-reads the whole chain and the anchor: GET /v1/audit/verify runs it
+            "audit": {
+                **to_dict(self.verify_audit()),
+                "anchor": self.anchor.name if self.anchor is not None else None,
+            },
             "metrics": METRICS.snapshot(),
             # the file name only: where it lives on disk is not the API's business
             "store": Path(self.store.path).name if self.store.path != ":memory:" else ":memory:",
