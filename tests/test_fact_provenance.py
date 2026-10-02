@@ -472,19 +472,21 @@ def test_the_auto_limit_is_policy_not_a_ledger_fact():
 
 
 def test_forged_kyb_records_on_a_real_merchant_do_not_onboard_it(app):
+    """Forged body records for a stored merchant are refused outright (they were once
+    accepted as UNTRUSTED, which still let a reviewer approve them; release audit)."""
     k = app.store.kyb_applications(limit=50)[0]
-    b = app.evaluate_merchant(
-        "We are a bakery.",
-        {
-            "registration_status": "verified",
-            "domain_age_days": 400,
-            "business_age_days": 900,
-            "prior_flags": 0,
-            "mcc_risk": "low",
-        },
-        merchant_id=k.merchant_id,
-    )
-    assert b.decision.provenance.status is ProvenanceStatus.UNTRUSTED and not b.decision.executed
+    with pytest.raises(ValueError, match="held by the record store"):
+        app.evaluate_merchant(
+            "We are a bakery.",
+            {
+                "registration_status": "verified",
+                "domain_age_days": 400,
+                "business_age_days": 900,
+                "prior_flags": 0,
+                "mcc_risk": "low",
+            },
+            merchant_id=k.merchant_id,
+        )
 
 
 def test_the_api_takes_signed_facts_and_refuses_ambiguous_bodies(app):

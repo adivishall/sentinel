@@ -268,6 +268,12 @@ def build_routes(app: SentinelApp) -> Router:
         if d.get("document"):
             docs = docs + (S.req_str(d, "document"),)
         env = S.envelope(d, exclusive=("records", "application_id"))
+        if d.get("application_id") and "records" in d:
+            # never silently drop one of them (release audit)
+            raise S.ValidationError(
+                "pass application_id (a stored application) or records (a new, unsigned "
+                "application), not both"
+            )
         if env is not None:
             return to_dict(
                 app.evaluate_merchant(

@@ -92,13 +92,13 @@ class MemoryExecutions:
         self._lock = threading.Lock()
 
     def holder(self, key: str) -> str | None:
-        return self._held.get(key)
+        return self._held.get(key.lower())
 
     def claim(self, key: str, by: str) -> str | None:
-        with self._lock:
-            if key in self._held:
-                return self._held[key]
-            self._held[key] = by
+        with self._lock:  # one subject is one execution, whatever the case of its id
+            if key.lower() in self._held:
+                return self._held[key.lower()]
+            self._held[key.lower()] = by
             return None
 
 
