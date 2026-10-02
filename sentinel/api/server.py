@@ -64,8 +64,22 @@ from sentinel.security.provenance import UntrustedContent
 
 _log = get_logger("sentinel.api")
 MAX_BODY = 256 * 1024
-UI_DIR = Path(__file__).resolve().parents[2] / "ui"
-RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
+
+
+def _asset_dir(name: str, env: str, here: Path = Path(__file__)) -> Path:
+    """Where the console's static files live: ``$SENTINEL_UI_DIR`` / ``$SENTINEL_RESULTS_DIR``
+    when set; the source checkout when running from one; otherwise the working directory.
+    An installed package has no ``ui/`` next to it (the Docker image copies ``ui/`` and
+    ``results/`` into its working directory, /app): the console was a 404 there (release
+    audit)."""
+    if os.environ.get(env):
+        return Path(os.environ[env])
+    src = here.resolve().parents[2] / name
+    return src if src.is_dir() else Path.cwd() / name
+
+
+UI_DIR = _asset_dir("ui", "SENTINEL_UI_DIR")
+RESULTS_DIR = _asset_dir("results", "SENTINEL_RESULTS_DIR")
 
 
 _ERROR_CODES = {
@@ -146,15 +160,25 @@ def api_key() -> str | None:
     path = os.environ.get("SENTINEL_API_KEY_FILE")
     if not path:
         return None
-    mtime = Path(path).stat().st_mtime
-    cached = _KEY_FILE_CACHE.get(path)
-    if cached is None or cached[0] != mtime:
-        _KEY_FILE_CACHE[path] = (mtime, Path(path).read_text(encoding="utf-8").strip())
+    try:
+        mtime = Path(path).stat().st_mtime
+        cached = _KEY_FILE_CACHE.get(path)
+        if cached is None or cached[0] != mtime:
+            _KEY_FILE_CACHE[path] = (mtime, Path(path).read_text(encoding="utf-8").strip())
+    except OSError as e:
+        raise ApiKeyUnavailable(
+            f"SENTINEL_API_KEY_FILE {path} cannot be read ({e.strerror or e}); refusing to "
+            "serve without the configured key"
+        ) from None
     return _KEY_FILE_CACHE[path][1] or None
 
 
 def _authorized(headers: Any) -> bool:
-    key = api_key()
+    try:
+        key = api_key()
+    except ApiKeyUnavailable:
+        _log.error("api key file unreadable: refusing every request")
+        return False  # a configured key that cannot be read fails closed, never open
     if not key:
         return True
     auth = headers.get("Authorization", "")
@@ -168,6 +192,10 @@ def _authorized(headers: Any) -> bool:
 
 class InsecureBindError(RuntimeError):
     """A network-reachable bind with no API key and no explicit ``--insecure-demo``."""
+
+
+class ApiKeyUnavailable(InsecureBindError):
+    """``SENTINEL_API_KEY_FILE`` is set but cannot be read: refuse, never serve open."""
 
 
 def is_loopback(host: str) -> bool:
@@ -1203,7 +1231,9 @@ def server_config(app: SentinelApp, host: str, port: int, *, insecure_demo: bool
         "api_key_source": (
             None if not key else "env" if os.environ.get("SENTINEL_API_KEY") else "file"
         ),
-        "insecure_demo": bool(insecure_demo and not is_loopback(host)),
+        # a key makes the service authenticated whatever the flag says (the start record
+        # said "without authentication" for a keyed server started with the flag)
+        "insecure_demo": bool(insecure_demo and not key and not is_loopback(host)),
         "mode": info.get("mode"),
         "provider": info.get("provider"),
         "store": Path(app.store.path).name if app.store.path != ":memory:" else ":memory:",

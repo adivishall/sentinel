@@ -453,4 +453,13 @@ def policy_trust() -> TrustStore:
     return TrustStore.load(path) if path else TrustStore.load(SHIPPED_POLICY_ROOT)
 
 
-DEFAULT_REGISTRY = PolicyRegistry(autoload=POLICY_DIR, signed=require_signed_policy())
+def policy_dir() -> Path:
+    """The policy directory a server loads: ``SENTINEL_POLICY_DIR`` -- an operator's copy of
+    the policies, released and activated under their own root (``SENTINEL_POLICY_TRUST``) --
+    else the directory shipped with Sentinel. An operator re-releasing the shipped versions
+    must not have to write into the installed package (release audit)."""
+    path = os.environ.get("SENTINEL_POLICY_DIR")
+    return Path(path) if path else POLICY_DIR
+
+
+DEFAULT_REGISTRY = PolicyRegistry(autoload=policy_dir(), signed=require_signed_policy())
