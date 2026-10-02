@@ -63,10 +63,10 @@ _STATIC: dict[str, dict[str, str]] = {
         "limitations": "a property of the composer, not of any model's robustness",
     },
     "temporal": {
-        "kind": "structural (synthetic data)",
-        "dataset": "two seeded synthetic worlds (seeds 42 and 7), a stratified transaction sample (half fraud-labelled)",
+        "kind": "synthetic invariant check (empirical: 0 observed is evidence, not a proof)",
+        "dataset": "four seeded synthetic worlds (seeds 42, 7, 11 and 23), a stratified transaction sample per world (half fraud-labelled)",
         "method": "truncation equivalence, then nine kinds of future record at +1/7/30/90 days, one kind at a time; the transaction assessment and the account monitor at T1 must be byte-identical; exact counts with a one-sided 95% Clopper-Pearson bound when zero",
-        "limitations": "a deterministic check over two generator worlds, not a proof over every record; comparisons from one sample are correlated (read the per-sample bound); a current-state field with no recorded start (legacy account status) cannot be point-in-time",
+        "limitations": "a deterministic check over four generator worlds, not a proof over every record; comparisons from one sample are correlated (read the per-sample bound); a current-state field with no recorded start (legacy account status) cannot be point-in-time",
     },
     "performance": {
         "kind": "empirical, machine-dependent",

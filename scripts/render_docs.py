@@ -267,7 +267,7 @@ def evaluation_categories(R: dict[str, Any]) -> str:
                 "legitimate claims read as their type; the rest held for a human",
                 f"{cl['n']} phrasings; {cl['uncommon_n']} held-out unusual phrasings",
                 "hand-authored",
-                f"held-out: first (blind) run 7/{cl['uncommon_n']}; "
+                f"held-out: first run 7/{cl['uncommon_n']}; "
                 f"{cl['uncommon_recognised']}/{cl['uncommon_n']} after the patterns were extended by "
                 f"an author who had seen the misses; FN {cl['false_negatives']}/{cl['false_negative_n']}, "
                 f"FP {cl['false_positives']}/{cl['false_positive_n']}",
@@ -802,13 +802,14 @@ hostile document.
 
 ## Three kinds of numbers
 
-Read every table with this distinction in mind; each results file records the
-kind of each headline metric under `kinds`.
+Read every table with this distinction in mind; each results file records its
+kind, dataset, method and limitations under `methodology` (and, where a file
+mixes kinds, each headline metric's kind under `kinds`).
 
 | Kind | What it is | Where it appears |
 |---|---|---|
 | **STRUCTURAL GUARANTEE** | 0 by construction under the design. A consequential capability executes only when the trusted records support the claim, and every attack sits on records that do not. These rows are regression checks that the implementation honours the design (`tests/test_results_regression.py` recomputes them), not detection results. | guarded attack success, off-surface execution, the integrity suite's structural rows |
-| **SYNTHETIC EVALUATION** | Empirical, but on hand-authored corpora, a seeded synthetic dataset and the **offline simulated agent** (`OfflineProvider`, a deterministic regex model of a gullible tool-calling agent that shares an author with the corpus). These numbers can move and describe this simulator and this generator, not the world. | unguarded attack success, detection recall, false positives, KYB outcomes, everything in the financial suite, the claim classifier, the temporal-leakage checks (a tested invariant over two synthetic worlds: 0 observed is evidence, not a proof), performance |
+| **SYNTHETIC EVALUATION** | Empirical, but on hand-authored corpora, a seeded synthetic dataset and the **offline simulated agent** (`OfflineProvider`, a deterministic regex model of a gullible tool-calling agent that shares an author with the corpus). These numbers can move and describe this simulator and this generator, not the world. | unguarded attack success, detection recall, false positives, KYB outcomes, everything in the financial suite, the claim classifier, the temporal-leakage checks (a tested invariant over four synthetic worlds: 0 observed is evidence, not a proof), performance |
 | **LIVE MODEL EVALUATION** | The identical suite against a real model on the operator's own key (`SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models`). | `results/models.json` -- current status of the live configurations: **{live['status']}** (`{live.get('model', '—')}`); {_live_note(live)} |
 
 ## What "attack success" means
@@ -856,7 +857,11 @@ The development corpus and the detector share an author, so a 0% there could
 be circular. The held-out set ({h['n_attacks']} attacks, {h['n_controls']} controls of which
 {h['n_deserved_controls']} deserve a refund) was written after the development corpus, by the same
 author, with wording that never appears in the detector's patterns; a test
-asserts it is disjoint from the corpus and the detector is never tuned to it.
+asserts that it is disjoint from the corpus (nothing tests "never tuned"). Four of
+its cases (HO-MO-1, HO-MO-2, HO-FE-1, HO-SY-1) were added in the same commit as
+new detector signals for their classes (b83d166), so held-out detection recall
+on those classes is not independent of the detector. The guarded 0% does not
+depend on detection.
 
 | Metric | Value |
 |---|---:|
@@ -962,8 +967,10 @@ Dataset: seed {f['dataset']['seed']}, {f['dataset']['customers']} customers, {f[
 generator's injected scenarios and are read only by this suite.
 
 **The point values of the rule model were tuned while looking at seed {f['dataset']['seed']}**, so
-the tables below are development figures; the held-out seeds further down
-were never inspected. Nothing about the model is an industry standard
+the tables below are development figures. The held-out seeds further down were
+not used to set the point values, but their results were published (92ac376)
+the day before the txn-2.0 rules were designed (12a2fc3): they are partially
+informed, not unseen. Nothing about the model is an industry standard
 (`docs/RISK_ENGINE.md`).
 
 ### Ground truth
@@ -1010,7 +1017,7 @@ Family precision when fired: {fam_line}.
 
 {slices}
 
-### Held-out seeds (point values never inspected against these)
+### Held-out seeds (not used to set the point values; partially informed)
 
 {held_rows}
 
@@ -1075,7 +1082,7 @@ readable false claim is denied, and nothing executes.
 ## I. Temporal correctness (`results/temporal.json`)
 
 The invariant: **data available after T must never influence a decision made
-at T.** Two generator worlds (seeds {seeds}; {td['transactions']:,} transactions), a stratified sample
+at T.** {len(td['seeds'])} generator worlds (seeds {seeds}; {td['transactions']:,} transactions), a stratified sample
 of {td['sample']} transactions (half fraud-labelled, half legitimate, spread over the timeline).
 Every sampled transaction is re-scored with records truncated to its own
 timestamp, then again with one kind of future record appended at every offset
@@ -1125,8 +1132,9 @@ Sequential, single-threaded, persistence excluded; machine-dependent.
 
 {perf_rows}
 
-A live LLM call (hundreds of milliseconds) dominates real latency by three
-orders of magnitude; Sentinel's own controls are not the bottleneck.
+These are Sentinel's own controls with the offline agent. A live model call
+would add its own latency, which this repository does not measure (the live
+rows are NOT RUN), so no ratio between the two is claimed.
 
 {_meth(p, "performance")}
 
@@ -1185,10 +1193,11 @@ extended against: a fit, reported apart and excluded from the error rates.
 long-winded, terse, indirect, plus ambiguous messages and non-claims) were
 written, labelled and committed *before* the classifier first ran on them, and
 are never to be used to change it. Their author has seen the classifier, so
-the set is **partially informed, not blind**. First run: **{cl['frozen']['correct']} / {cl['frozen']['n']}**
-correct; {cl['frozen']['false_negatives']} of {cl['frozen']['false_negative_n']} legitimate claims not
-recognised ({cl['frozen']['misread_as_another_type']} misread as another type -- every miss abstained, i.e. a
-human reads it); {cl['frozen']['false_positives']} of {cl['frozen']['false_positive_n']} ambiguous or non-claim messages
+the set is **partially informed, not blind**. The fixture is pinned by its SHA-256
+(`tests/test_claims_frozen.py`) and its first run is recorded in the code
+(fixture {cl['frozen']['first_run']['fixture_commit']}, result {cl['frozen']['first_run']['result_commit']}). First run: **{cl['frozen']['first_run']['correct']} / {cl['frozen']['first_run']['n']}**
+correct{'' if cl['frozen']['correct'] == cl['frozen']['first_run']['correct'] else ' (current classifier: ' + str(cl['frozen']['correct']) + ' / ' + str(cl['frozen']['n']) + ')'}; {cl['frozen']['first_run']['false_negatives']} of {cl['frozen']['first_run']['false_negative_n']} legitimate claims not
+recognised ({cl['frozen']['first_run']['misread_as_another_type']} misread as another type{' -- every miss abstained, i.e. a human reads it' if cl['frozen']['first_run']['misread_as_another_type'] == 0 else ''}); {cl['frozen']['first_run']['false_positives']} of {cl['frozen']['first_run']['false_positive_n']} ambiguous or non-claim messages
 read as a claim, and {sum(1 for x in cl['frozen']['failures'] if x['expected'] == 'non_claim' and x['got'] == 'abstain')} of {cl['frozen']['by_label']['non_claim']['n']} non-claims abstained instead of being
 recognised as non-claims (held for a human: a cost, not a misreading). That is the estimate to quote for unfamiliar wording: about
 half of honest claims phrased in ways the patterns have not seen go to a
@@ -1339,9 +1348,9 @@ machine-dependent -- reproduce locally.
 
 {rows}
 
-Context: a real back-office LLM call is 300–2,000 ms. The full protected
-pipeline adds ≈{e2e['p95_ms']} ms at p95 -- about three orders of magnitude
-below the decision it protects. The per-decision SQLite writes (risk
+Context: the full protected pipeline adds ≈{e2e['p95_ms']} ms at p95 on this
+machine. A live model call's latency is not measured here (the live rows are
+NOT RUN), so no comparison with it is claimed. The per-decision SQLite writes (risk
 assessment, evidence, decision + snapshot, audit event) are not in this
 figure; the API's in-process metrics (`GET /v1/system`) report them live.
 "ops/s" is 1000 / mean over a sequential loop, not a concurrency figure.
@@ -2404,7 +2413,8 @@ source system. The score is a *recommendation to policy*, never an action.
 It is **not** a trained model and the point values are **not industry
 standards**. They are Sentinel heuristics chosen while looking at the
 development seed of the synthetic generator; `docs/EVALUATION.md` §G reports
-how they behave on that seed and on two seeds they never saw. Nothing here is
+how they behave on that seed and on two held-out seeds (not used to set the values,
+though their results were visible before txn-2.0 was designed). Nothing here is
 calibrated on real payment data.
 
 {bands}
@@ -3383,7 +3393,8 @@ pattern families with a confidence; an abstain goes to a human
 (INSUFFICIENT), a recognised non-claim is UNSUPPORTED; whatever it reads,
 nothing executes unless the selected field supports the claim. A misreading
 is a cost (a human review), not a breach. **SIMULATED:** its benchmark shares its
-author; on {cl['uncommon_n']} held-out unusual phrasings it read 7 on the first, blind run and
+author; on {cl['uncommon_n']} held-out unusual phrasings it read 7 on its first run (already
+partially informed: the set's author knew the classifier) and
 {cl['uncommon_recognised']} after the patterns were extended by someone who had seen the misses --
 partially informed, not a clean benchmark. It is defence in depth.
 
@@ -3546,7 +3557,7 @@ and reports a confidence. On a
 {cl['n']}-phrasing benchmark that shares its author it reads {pct(cl['coverage'])} of ordinary legitimate
 paraphrases and never reads attack prose as a claim it does not assert
 ({pct(cl['adversarial_wrong_type_rate'])}); ambiguous and contradictory messages abstain. On a **held-out**
-set of {cl['uncommon_n']} uncommon legitimate phrasings it recognised 7 on the first, blind run
+set of {cl['uncommon_n']} uncommon legitimate phrasings it recognised 7 on its first run
 and {cl['uncommon_recognised']} after the patterns were extended against a separate development set --
 partially informed (the author had seen the misses), so {cl['uncommon_recognised']}/{cl['uncommon_n']} is not a clean
 independent benchmark; every miss abstains, i.e. goes to a human -- a cost,
@@ -3577,9 +3588,9 @@ positives {cl['false_positives']} / {cl['false_positive_n']} (`docs/EVALUATION.m
   merchant onboarding, account security): agents may recommend, but only
   verified facts, a signed and activated policy and a capability registry can
   authorize, and the authoritative decision is computed from a view with no
-  field for untrusted text or model output. Across {i['n_attacks']} attacks (main and
-  held-out corpora), attacker text loosened {pct(i['text_influence_permissive_protected'])} of protected decisions, against
-  {pct(i['text_influence_permissive_unguarded'])} with no controls.
+  field for untrusted text or model output. Across {i['n_attacks']} synthetic attacks
+  against a simulated agent, attacker text loosened {pct(i['text_influence_permissive_protected'])} of protected decisions (0 by
+  construction, checked by regression tests), against {pct(i['text_influence_permissive_unguarded'])} with no controls.
 - **Cryptographic provenance and accountable review.** Made every decision state
   what establishes its facts: Ed25519-signed issuer statements verified against
   a trust store (scopes, rotation, revocation, expiry, anti-rollback), signed
@@ -3679,7 +3690,8 @@ approved -- deserved refunds, whatever the prose around them."""
         "interview-financial"
     ] = f"""They characterise a hand-weighted rule model on a synthetic generator. The
 point values were tuned while looking at seed {seed}, so the suite also runs two
-seeds they never saw and reports the range (transaction precision
+held-out seeds (not used to set them, though their results were published before
+txn-2.0 was designed) and reports the range (transaction precision
 {rng(sr['transaction_level']['precision'])}, recall {rng(sr['transaction_level']['recall'])}). Transaction-level recall is {pct(tl['recall'])}
 on the development seed and the misses are {missed_scn} transactions; a burst's
 first transactions carry no short-window signal, and the account-level monitor

@@ -41,10 +41,12 @@ NR, IT, DUP, CAN, UN = (
     ClaimType.UNAUTHORIZED,
 )
 
-# Written and labelled in the 2.2.0 release review BEFORE the classifier was run on them,
-# and never used to change it: uncommon but legitimate wording (Indian English, slang,
-# typos, formal register, indirect phrasing). This is the held-out estimate of how often
-# an honest customer is sent to a human because the wording was not recognised.
+# Written and labelled in the 2.2.0 release review BEFORE the classifier was run on them:
+# uncommon but legitimate wording (Indian English, slang, typos, formal register,
+# indirect phrasing). Partially informed: the author knew the classifier, and its first-
+# run misses were seen before the patterns were extended against a separate development
+# set (47eda69), so the current score is optimistic. The never-tuned estimate is the
+# frozen set (claims_frozen.json).
 UNCOMMON: tuple[tuple[str, str, object], ...] = (
     (
         "uncommon_legitimate",
@@ -305,14 +307,34 @@ def _correct(expected: object, kind: str, claim_type: ClaimType) -> bool:
     return kind == "claim" and claim_type is expected
 
 
+# The frozen fixture is pinned: an edit to it fails tests/test_claims_frozen.py. Its first
+# run is recorded here, so a later classifier change shows up as "current" beside it
+# instead of silently replacing the number reported as the first run.
+FROZEN_SHA256 = "9d26674fc3a50d3a24b7ef0dbb7cb526049ff48a32c5b316b99e653172bc025e"
+FROZEN_FIRST_RUN: dict[str, Any] = {
+    "date": "2026-10-01",
+    "fixture_commit": "1ac0171",  # the fixture, committed alone
+    "result_commit": "7990033",  # its first run, committed after it
+    "correct": 24,
+    "n": 40,
+    "false_negatives": 14,
+    "false_negative_n": 28,
+    "misread_as_another_type": 0,
+    "false_positives": 0,
+    "false_positive_n": 12,
+}
+
+
 def frozen() -> dict[str, Any]:
     """The fixture frozen on 2026-10-01 (``attacks/claims_frozen.json``): committed before
     the classifier first ran on it and never used to change it. Reported apart from every
-    other number, misses included."""
+    other number, misses included, beside its recorded first run."""
+    import hashlib
     import json
     from pathlib import Path
 
-    doc = json.loads((Path(__file__).parent / "attacks" / "claims_frozen.json").read_text())
+    raw = (Path(__file__).parent / "attacks" / "claims_frozen.json").read_bytes()
+    doc = json.loads(raw)
     by: dict[str, Counter[str]] = {}
     failures: list[dict[str, Any]] = []
     fn = fp = misread = 0
@@ -349,6 +371,8 @@ def frozen() -> dict[str, Any]:
         "false_positives": fp,
         "false_positive_n": n_neg,
         "failures": failures,
+        "fixture_sha256": hashlib.sha256(raw).hexdigest(),
+        "first_run": FROZEN_FIRST_RUN,
     }
 
 
@@ -452,7 +476,7 @@ def run() -> dict[str, Any]:
         "category_notes": {
             "uncommon_legitimate": (
                 "held-out: written and labelled in the 2.2.0 review before the classifier was run "
-                "on it. First run, with the classifier as of commit 9693433: 7/21 recognised, 14 "
+                "on it. First run, with the classifier as of commit 59c56fa: 7/21 recognised, 14 "
                 "abstained, 0 misread. The patterns were then extended against the separate "
                 "development set, by an author who had seen those 14 misses, so the current "
                 "number is optimistic; the remaining misses were deliberately not fitted"
