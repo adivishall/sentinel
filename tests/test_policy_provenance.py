@@ -623,8 +623,8 @@ def test_r11_a_repeat_on_an_executed_subject_is_a_denial_not_a_case():
     svc_rt = Runtime(trust=TRUST)
     req = _signed({**SUPPORTING, "amount": 60_000}, "DSP-R11")  # over the limit: review
     b = run_dispute(svc_rt, req)
-    c = svc_rt.cases.transition(b.case.case_id, CaseStatus.INVESTIGATING, actor="analyst")
-    svc_rt.cases.record_human_decision(c.case_id, reviewer="alice", outcome="approve")
+    c = svc_rt.cases.transition(b.case.case_id, CaseStatus.INVESTIGATING, by=ANALYST)
+    svc_rt.cases.record_human_decision(c.case_id, by=ALICE, outcome="approve")
     again = run_dispute(svc_rt, req)
     assert again.decision.final_action is FinalAction.DENY
     assert "already executed" in again.decision.authorization.reason
