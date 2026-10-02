@@ -57,3 +57,13 @@ jobs:
           python -m sentinel --trust-store /tmp/trust.json audit verify --anchor /tmp/anchor --require-anchored
       - name: Docker build
         run: docker build -t sentinel .
+      - name: Docker run smoke (the image starts and serves the API and the console)
+        run: |
+          docker run -d --name sentinel-smoke -p 127.0.0.1:8000:8000 \
+            -e SENTINEL_INSECURE_DEMO=1 -e SENTINEL_DEMO_DATA=1 sentinel
+          for i in $(seq 1 45); do curl -sf http://127.0.0.1:8000/health && break; sleep 2; done
+          curl -sf http://127.0.0.1:8000/health
+          curl -sf http://127.0.0.1:8000/ | grep -qi "sentinel"
+          curl -sf http://127.0.0.1:8000/v1/system > /dev/null
+          docker logs sentinel-smoke 2>&1 | tail -20
+          docker rm -f sentinel-smoke

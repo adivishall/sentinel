@@ -33,7 +33,7 @@ sentinel = "sentinel.cli.main:main"
 include = ["sentinel*"]
 
 [tool.setuptools.package-data]
-sentinel = ["policy/policies/*.json", "evaluation/attacks/*.json"]
+sentinel = ["policy/policies/*.json", "evaluation/attacks/*.json", "trust/*.json"]
 
 [tool.ruff]
 line-length = 100

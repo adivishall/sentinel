@@ -31,6 +31,7 @@ def ledger(**over: Any) -> dict[str, Any]:
 
 def kyb_record(**over: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
+        "application_id": "APP-TEST-1",  # a signed statement names its application
         "registration_status": "verified",
         "domain_age_days": 900,
         "business_age_days": 1600,

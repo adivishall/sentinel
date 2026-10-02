@@ -79,7 +79,7 @@ docker-build:     ## build the container image
 	docker build -t sentinel .
 
 docker-run:       ## run the demo container, published on 127.0.0.1:8000 only (an insecure demo: no API key)
-	docker run --rm -p 127.0.0.1:8000:8000 -e SENTINEL_INSECURE_DEMO=1 sentinel
+	docker run --rm -p 127.0.0.1:8000:8000 -e SENTINEL_INSECURE_DEMO=1 -e SENTINEL_DEMO_DATA=1 sentinel
 
 clean:
 	rm -rf data/*.db results/*.png .coverage .pytest_cache .mypy_cache .ruff_cache
