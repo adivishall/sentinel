@@ -1,0 +1,184 @@
+{
+  "policy_id": "transaction-authorization",
+  "version": 3,
+  "workflow": "transaction",
+  "default_outcome": "ALLOW",
+  "effective_from": "2026-09-29",
+  "description": "Transaction authorization v3: v2 plus fact provenance -- a failed or revoked signature blocks; unverified facts go to a human; a payment above 100,000 needs the switch's signed statement.",
+  "required_fields": [
+    "amount",
+    "risk_score",
+    "risk_level",
+    "security_severity",
+    "account_status",
+    "merchant_risk_level"
+  ],
+  "rules": [
+    {
+      "id": "block-failed-fact-provenance",
+      "when": [
+        {
+          "field": "facts_provenance",
+          "op": "in",
+          "value": [
+            "INVALID",
+            "REVOKED"
+          ]
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "The record's signed statement failed verification or its key was revoked: a tamper signal, never a basis for action."
+    },
+    {
+      "id": "review-unverified-facts",
+      "when": [
+        {
+          "field": "facts_provenance",
+          "op": "in",
+          "value": [
+            "UNTRUSTED",
+            "EXPIRED",
+            "SUPERSEDED",
+            "NONE"
+          ]
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Nothing establishes these facts (request-body, expired or superseded, or none recorded): a human must, before anything executes."
+    },
+    {
+      "id": "review-high-value-unsigned-facts",
+      "when": [
+        {
+          "field": "amount",
+          "op": ">",
+          "value": 100000
+        },
+        {
+          "field": "facts_provenance",
+          "op": "==",
+          "value": "TRUSTED_LOCAL"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "A payment above 100,000 needs the issuer's signed statement (VERIFIED_EXTERNAL); an unsigned stored record goes to a human."
+    },
+    {
+      "id": "block-critical-ai-security",
+      "when": [
+        {
+          "field": "security_severity",
+          "op": "==",
+          "value": "CRITICAL"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Critical AI-security finding on the untrusted input."
+    },
+    {
+      "id": "block-capability-escalation",
+      "when": [
+        {
+          "field": "capability_escalation",
+          "op": "is_true"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "The model requested a capability outside its surface."
+    },
+    {
+      "id": "block-frozen-account",
+      "when": [
+        {
+          "field": "account_status",
+          "op": "==",
+          "value": "frozen"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Account is frozen."
+    },
+    {
+      "id": "block-closed-account",
+      "when": [
+        {
+          "field": "account_status",
+          "op": "==",
+          "value": "closed"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "The account is closed: nothing is authorised on it."
+    },
+    {
+      "id": "review-over-auto-limit",
+      "when": [
+        {
+          "field": "amount",
+          "op": ">",
+          "value": 150000
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Amount exceeds the ₹1,50,000 auto-approval limit."
+    },
+    {
+      "id": "review-critical-merchant",
+      "when": [
+        {
+          "field": "merchant_risk_level",
+          "op": "==",
+          "value": "CRITICAL"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Merchant risk is CRITICAL."
+    },
+    {
+      "id": "block-risk-70",
+      "when": [
+        {
+          "field": "risk_score",
+          "op": ">=",
+          "value": 70
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Transaction risk >= 70."
+    },
+    {
+      "id": "review-risk-40",
+      "when": [
+        {
+          "field": "risk_score",
+          "op": ">=",
+          "value": 40
+        },
+        {
+          "field": "risk_score",
+          "op": "<",
+          "value": 70
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Transaction risk 40-69."
+    },
+    {
+      "id": "stepup-risk-25",
+      "when": [
+        {
+          "field": "risk_score",
+          "op": ">=",
+          "value": 25
+        },
+        {
+          "field": "risk_score",
+          "op": "<",
+          "value": 40
+        }
+      ],
+      "outcome": "STEP_UP",
+      "reason": "Transaction risk 25-39."
+    }
+  ]
+}

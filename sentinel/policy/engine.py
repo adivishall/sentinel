@@ -8,10 +8,12 @@ composer turns into a fail-safe human review rather than a silent ALLOW."""
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 
 from sentinel.domain.decisions import PolicyDecision
-from sentinel.domain.enums import Capability, PolicyOutcome, Workflow
+from sentinel.domain.enums import Capability, PolicyOutcome
 from sentinel.domain.ids import content_hash
+from sentinel.domain.vocab import CONTEXT_VALUES
 from sentinel.policy.models import CONTEXT_FIELDS, FIELD_CATALOG, OPS, Condition, Policy, Rule
 
 
@@ -132,19 +134,9 @@ def validate(policy: Policy) -> None:
 
 
 _CAPABILITY_FIELDS = frozenset({"requested_capability"})
-_ENUM_VALUES: dict[str, frozenset[str]] = {
-    "risk_level": frozenset({"LOW", "MEDIUM", "HIGH", "CRITICAL"}),
-    "security_severity": frozenset({"NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"}),
-    "evidence_verdict": frozenset({"SUPPORTED", "UNSUPPORTED", "CONTRADICTED", "INSUFFICIENT"}),
-    "registration_status": frozenset({"verified", "unverified", "shell"}),
-    "mcc_risk": frozenset({"low", "medium", "high"}),
-    "refund_state": frozenset({"none", "pending", "refunded"}),
-    "transaction_status": frozenset({"settled", "pending", "reversed"}),
-    "merchant_response": frozenset({"none", "accepted", "contested"}),
-    "auth_strength": frozenset({"none", "password", "otp", "biometric", "unknown"}),
-    "account_status": frozenset({"active", "frozen", "closed"}),
-    "workflow": frozenset(w.value for w in Workflow),
-}
+# One source with the record validation (sentinel.domain.vocab), so a value a record may
+# hold is exactly a value a rule may name.
+_ENUM_VALUES: dict[str, frozenset[str]] = CONTEXT_VALUES
 
 
 def lint(policy: Policy) -> list[str]:
@@ -206,21 +198,65 @@ def lint(policy: Policy) -> list[str]:
     return findings
 
 
+def _named(*problems: list[str]) -> set[str]:
+    return {p.split("=", 1)[0] for group in problems for p in group}
+
+
+def _decisive_block(policy: Policy, context: Mapping[str, object], *, bad: set[str]):
+    """The first BLOCK rule that can be evaluated on this context (none of its fields is
+    missing, mistyped or outside its vocabulary) and matches; None otherwise."""
+    for r in policy.rules:
+        if r.outcome is not PolicyOutcome.BLOCK:
+            continue
+        fields = {c.field for c in r.when}
+        if fields & bad or not fields <= set(context):
+            continue
+        if rule_matches(r, context):
+            return PolicyDecision(
+                policy_id=policy.policy_id,
+                version=policy.version,
+                outcome=PolicyOutcome.BLOCK,
+                matched_rules=(r.rule_id,),
+                explanations=(f"[{r.rule_id}] {r.describe()}: {r.reason}",),
+                context_hash=content_hash({k: context[k] for k in sorted(context)}),
+                policy_hash=policy.content_hash,
+            )
+    return None
+
+
 def evaluate(policy: Policy, context: Mapping[str, object]) -> PolicyDecision:
     """Fail-closed: every field a rule reads must be present AND of its catalog type. A
     missing or mistyped input can never silently disable a rule (a string risk score
     would otherwise make ``risk_score >= 75`` quietly false)."""
     needed = set(policy.required_fields) | policy.referenced_fields
     missing = sorted(f for f in needed if f not in context)
-    if missing:
-        raise PolicyEvaluationError(f"{policy.key}: context missing fields {missing}")
     mistyped = sorted(
         f"{f}={context[f]!r} (expected {FIELD_CATALOG[f][0]})"
         for f in needed
-        if f in FIELD_CATALOG and not _type_ok(FIELD_CATALOG[f][0], context[f])
+        if f in context and f in FIELD_CATALOG and not _type_ok(FIELD_CATALOG[f][0], context[f])
     )
-    if mistyped:
-        raise PolicyEvaluationError(f"{policy.key}: context fields of the wrong type {mistyped}")
+    # A value outside a field's vocabulary makes every rule on it silently false (a BLOCK on
+    # refund_state == "refunded" never fires for "REFUNDED"): fail closed instead.
+    unknown = sorted(
+        f"{f}={context[f]!r}"
+        for f in needed
+        if f in context and f in _ENUM_VALUES and context[f] not in _ENUM_VALUES[f]
+    )
+    if missing or mistyped or unknown:
+        # A context problem never lowers the outcome: a BLOCK rule whose own fields are all
+        # present and valid, and which matches, is decisive -- the policy said BLOCK, and no
+        # field the context lacks could have said anything stronger. (A failed-signature
+        # BLOCK is not masked by the facts that failed with it.)
+        problem = (
+            (f"context missing fields {missing}" if missing else "")
+            + (f" context fields of the wrong type {mistyped}" if mistyped else "")
+            + (f" context values outside the vocabulary {unknown}" if unknown else "")
+        ).strip()
+        decisive = _decisive_block(policy, context, bad=set(missing) | _named(mistyped, unknown))
+        if decisive is not None:
+            note = f"[fail-closed] the context could not be fully evaluated ({problem})"
+            return replace(decisive, explanations=decisive.explanations + (note,))
+        raise PolicyEvaluationError(f"{policy.key}: {problem}")
     matched = [r for r in policy.rules if rule_matches(r, context)]
     outcome = policy.default_outcome
     for r in matched:

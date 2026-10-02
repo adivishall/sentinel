@@ -2,8 +2,17 @@
 
 import pytest
 
-from sentinel.domain.enums import ActorKind, AuthorizationStatus, Capability, PolicyOutcome
+from sentinel.domain.enums import (
+    ActorKind,
+    AuthorizationStatus,
+    Capability,
+    PolicyOutcome,
+    ProvenanceStatus,
+)
 from sentinel.security import capabilities as caps
+
+# the facts these calls authorize on are the institution's own records
+LOCAL = ProvenanceStatus.TRUSTED_LOCAL
 
 
 def test_ai_agent_never_allowed_on_consequential_capabilities():
@@ -22,6 +31,7 @@ def test_refund_within_limit_and_supported_is_granted_to_system():
         actor=ActorKind.SYSTEM,
         amount=18_000,
         policy_outcome=PolicyOutcome.ALLOW,
+        facts_provenance=LOCAL,
         evidence_supported=True,
     )
     assert a.status is AuthorizationStatus.GRANTED
@@ -33,6 +43,7 @@ def test_refund_over_threshold_is_pending_human():
         actor=ActorKind.SYSTEM,
         amount=185_000,
         policy_outcome=PolicyOutcome.ALLOW,
+        facts_provenance=LOCAL,
         evidence_supported=True,
     )
     assert a.status is AuthorizationStatus.PENDING_HUMAN and a.requires_human
@@ -44,6 +55,7 @@ def test_unsupported_evidence_denies_consequential():
         actor=ActorKind.SYSTEM,
         amount=1,
         policy_outcome=PolicyOutcome.ALLOW,
+        facts_provenance=LOCAL,
         evidence_supported=False,
     )
     assert a.status is AuthorizationStatus.DENIED
@@ -55,6 +67,7 @@ def test_policy_block_denies_even_supported():
         actor=ActorKind.SYSTEM,
         amount=1,
         policy_outcome=PolicyOutcome.BLOCK,
+        facts_provenance=LOCAL,
         evidence_supported=True,
     )
     assert a.status is AuthorizationStatus.DENIED
@@ -76,6 +89,7 @@ def test_human_only_capabilities_never_granted_to_system(cap):
         actor=ActorKind.SYSTEM,
         amount=0,
         policy_outcome=PolicyOutcome.ALLOW,
+        facts_provenance=LOCAL,
         evidence_supported=True,
     )
     assert a.status is not AuthorizationStatus.GRANTED
@@ -88,6 +102,7 @@ def test_skip_review_has_no_allowed_actor():
             actor=actor,
             amount=0,
             policy_outcome=PolicyOutcome.ALLOW,
+            facts_provenance=LOCAL,
             evidence_supported=True,
         )
         assert a.status is AuthorizationStatus.DENIED
@@ -99,6 +114,7 @@ def test_no_capability_is_trivially_granted():
         actor=ActorKind.AI_AGENT,
         amount=0,
         policy_outcome=PolicyOutcome.ALLOW,
+        facts_provenance=LOCAL,
         evidence_supported=False,
     )
     assert a.status is AuthorizationStatus.GRANTED and a.capability is None

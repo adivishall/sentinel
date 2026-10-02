@@ -191,7 +191,7 @@ duplicate conditions and missing effective dates. Every rule of every shipped
 version is listed in `docs/POLICY_ENGINE.md`.
 
 <!-- gen:shipped-policies -->
-Shipped policies: `account-security` v1, `dispute-refund` v1/v2/v3, `investigation` v1, `merchant-onboarding` v1, `transaction-authorization` v1/v2 (8 versions, all lint-clean; every rule is listed in `docs/POLICY_ENGINE.md`).
+Shipped policies: `account-security` v1/v2, `dispute-refund` v1/v2/v3/v4, `investigation` v1, `merchant-onboarding` v1/v2, `transaction-authorization` v1/v2/v3 (12 versions, all lint-clean; every rule is listed in `docs/POLICY_ENGINE.md`).
 <!-- /gen:shipped-policies -->
 
 ## Risk (`risk/`)

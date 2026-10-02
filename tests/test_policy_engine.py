@@ -45,9 +45,9 @@ def _doc(**over):
 
 def test_builtin_policies_load_and_validate():
     keys = [p.key for p in DEFAULT_REGISTRY.all()]
-    assert {"dispute-refund@v1", "dispute-refund@v2", "dispute-refund@v3"} <= set(keys)
-    assert DEFAULT_REGISTRY.versions("dispute-refund") == [1, 2, 3]
-    assert DEFAULT_REGISTRY.get("dispute-refund").version == 3  # latest by default
+    assert {f"dispute-refund@v{v}" for v in (1, 2, 3, 4)} <= set(keys)
+    assert DEFAULT_REGISTRY.versions("dispute-refund") == [1, 2, 3, 4]
+    assert DEFAULT_REGISTRY.get("dispute-refund").version == 4  # latest by default
     covered = {p.workflow for p in DEFAULT_REGISTRY.all()}
     assert covered == set(Workflow) - {Workflow.AI_SECURITY}
 
@@ -194,7 +194,12 @@ def test_operators():
         Workflow.DISPUTE,
         "",
         (
-            Rule("in", (Condition("evidence_verdict", "in", ["A", "B"]),), PolicyOutcome.BLOCK, ""),
+            Rule(
+                "in",
+                (Condition("evidence_verdict", "in", ["UNSUPPORTED", "CONTRADICTED"]),),
+                PolicyOutcome.BLOCK,
+                "",
+            ),
             Rule("notin", (Condition("claim_type", "not_in", ["x"]),), PolicyOutcome.STEP_UP, ""),
             Rule(
                 "contains",
@@ -213,7 +218,7 @@ def test_operators():
     d = evaluate(
         p,
         {
-            "evidence_verdict": "A",
+            "evidence_verdict": "CONTRADICTED",
             "claim_type": "y",
             "threat_classes": ["direct_injection"],
             "new_device": False,

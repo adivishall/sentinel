@@ -40,6 +40,11 @@ FIELD_CATALOG: dict[str, tuple[str, str]] = {
     "risk_factors": ("list", "Factor codes that fired"),
     "evidence_verdict": ("str", "SUPPORTED | UNSUPPORTED | CONTRADICTED | INSUFFICIENT"),
     "evidence_supports_claim": ("bool", "Verdict is SUPPORTED"),
+    "facts_provenance": (
+        "str",
+        "What establishes the primary record (sentinel.trust): VERIFIED_EXTERNAL | "
+        "TRUSTED_LOCAL | UNTRUSTED | EXPIRED | SUPERSEDED | REVOKED | INVALID | NONE",
+    ),
     "contradiction_count": ("int", "Claims contradicted by trusted records"),
     "claim_type": ("str", "Claim label derived from untrusted text (selector only)"),
     "security_severity": ("str", "NONE | LOW | MEDIUM | HIGH | CRITICAL"),
@@ -89,6 +94,7 @@ CONTEXT_FIELDS: frozenset[str] = frozenset(
         "risk_factors",
         "evidence_verdict",
         "evidence_supports_claim",
+        "facts_provenance",
         "contradiction_count",
         "claim_type",
         "security_severity",

@@ -24,7 +24,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -54,7 +54,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -84,7 +84,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -114,7 +114,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -144,7 +144,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -175,7 +175,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -206,7 +206,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -237,7 +237,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -268,7 +268,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -299,7 +299,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -329,7 +329,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -359,7 +359,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -389,7 +389,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -419,7 +419,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -449,7 +449,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -479,7 +479,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -509,7 +509,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -539,7 +539,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -569,7 +569,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -599,7 +599,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -630,7 +630,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -662,7 +662,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -694,7 +694,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -726,7 +726,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -758,7 +758,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -790,7 +790,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -821,7 +821,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -852,7 +852,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -883,7 +883,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -914,7 +914,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -942,7 +942,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -970,7 +970,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -998,7 +998,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -1026,7 +1026,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -1054,7 +1054,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -1082,7 +1082,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -1110,7 +1110,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -1138,7 +1138,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -1166,7 +1166,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -1194,7 +1194,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -1223,7 +1223,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -1252,7 +1252,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -1281,7 +1281,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -1310,7 +1310,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -1339,7 +1339,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -1490,7 +1490,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -1522,7 +1522,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -1554,7 +1554,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -1586,7 +1586,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -1618,7 +1618,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -1650,7 +1650,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -1682,7 +1682,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -1714,7 +1714,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -1746,7 +1746,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -1778,7 +1778,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -1808,7 +1808,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -1837,7 +1837,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -1866,7 +1866,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -1895,7 +1895,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -1924,7 +1924,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2074,7 +2074,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2104,7 +2104,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2134,7 +2134,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2164,7 +2164,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2194,7 +2194,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2225,7 +2225,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2255,7 +2255,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2286,7 +2286,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2317,7 +2317,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2348,7 +2348,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2377,7 +2377,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2406,7 +2406,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2435,7 +2435,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2464,7 +2464,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2493,7 +2493,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2523,7 +2523,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2553,7 +2553,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2583,7 +2583,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2613,7 +2613,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2643,7 +2643,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2671,7 +2671,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2699,7 +2699,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2727,7 +2727,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2755,7 +2755,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2783,7 +2783,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2809,7 +2809,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2835,7 +2835,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2861,7 +2861,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2887,7 +2887,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2913,7 +2913,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2941,7 +2941,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2969,7 +2969,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -2997,7 +2997,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3025,7 +3025,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3053,7 +3053,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3081,7 +3081,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3109,7 +3109,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3137,7 +3137,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3165,7 +3165,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3193,7 +3193,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3224,7 +3224,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -3256,7 +3256,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -3288,7 +3288,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -3320,7 +3320,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -3352,7 +3352,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -3383,7 +3383,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -3414,7 +3414,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -3445,7 +3445,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -3476,7 +3476,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -3507,7 +3507,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -3538,7 +3538,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3568,7 +3568,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3598,7 +3598,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3628,7 +3628,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3658,7 +3658,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3690,7 +3690,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -3723,7 +3723,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -3756,7 +3756,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -3789,7 +3789,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -3822,7 +3822,7 @@
     "blocked_by": [
       "trusted_evidence",
       "ai_security_gateway",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization",
       "capability_registry"
     ],
@@ -3849,7 +3849,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3875,7 +3875,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3901,7 +3901,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3927,7 +3927,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3953,7 +3953,7 @@
     "evidence_verdict": "CONTRADICTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -3979,7 +3979,7 @@
     "evidence_verdict": "UNSUPPORTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -4005,7 +4005,7 @@
     "evidence_verdict": "UNSUPPORTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -4031,7 +4031,7 @@
     "evidence_verdict": "UNSUPPORTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -4057,7 +4057,7 @@
     "evidence_verdict": "UNSUPPORTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -4083,7 +4083,7 @@
     "evidence_verdict": "UNSUPPORTED",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -4238,7 +4238,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -4268,7 +4268,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -4298,7 +4298,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -4328,7 +4328,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -4358,7 +4358,7 @@
     "evidence_verdict": "INSUFFICIENT",
     "blocked_by": [
       "trusted_evidence",
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -4427,7 +4427,7 @@
     "ai_recommendation": "approve_refund",
     "evidence_verdict": "SUPPORTED",
     "blocked_by": [
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -4496,7 +4496,7 @@
     "ai_recommendation": "approve_refund",
     "evidence_verdict": "SUPPORTED",
     "blocked_by": [
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false
@@ -4565,7 +4565,7 @@
     "ai_recommendation": "approve_refund",
     "evidence_verdict": "SUPPORTED",
     "blocked_by": [
-      "policy:dispute-refund@v3",
+      "policy:dispute-refund@v4",
       "capability_authorization"
     ],
     "fp": false

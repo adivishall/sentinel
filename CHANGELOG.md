@@ -86,6 +86,58 @@ can be trusted (roadmap issues #11–#20).
   methods. The internal `run_*` workflow layer trusts its caller's transport label, as
   it always did.
 
+### Security — provenance-aware policy and the structured-channel bypasses (#12)
+- **Policy.** `facts_provenance` is a policy context field on every decision. New
+  versions `dispute-refund@v4`, `transaction-authorization@v3`, `merchant-onboarding@v2`
+  and `account-security@v2` state what each outcome requires:
+  - a failed or revoked signature → BLOCK;
+  - unverified facts → human review;
+  - high-value money movement (refund > ₹25,000, payment > ₹100,000) or any onboarding on
+    an unsigned stored record → human review.
+- **Registry floor.** `CapabilitySpec.min_fact_provenance` is `TRUSTED_LOCAL` for every
+  consequential capability, and `authorize()` enforces it under every policy version.
+  Failed or missing provenance is denied for every actor; for the system, facts below the
+  floor go to a human. Nobody approves a case whose facts failed verification; a human
+  may establish unverified ones.
+- **Fixed: a caller-chosen `FREEZE_ACCOUNT` executed on stored sessions** (17 of 20 in the
+  audit). A requested account capability must be evidenced by the session record
+  (`payout_change`, `freeze_request`, ...); otherwise INSUFFICIENT, human review.
+- **Fixed: an out-of-vocabulary value disabled a BLOCK rule.** `refund_state: "REFUNDED"`
+  paid a second refund. Record fields are validated against one set of vocabularies
+  (`sentinel.domain.vocab`), and the policy engine fails closed on any context value
+  outside a field's vocabulary. An unknown account's status, which no rule named, now
+  fails safe as well.
+- **Fixed: caller-controlled time.** `Account.status_at` compared ISO strings, so
+  `"2026-08-15 10:00:00"` sorted before a freeze that started that day; it now compares
+  instants. An unsigned caller transaction or session is assessed as of the system's
+  time, so backdating past a freeze changes nothing.
+- **Execution is idempotent.** A consequential capability executes once per workflow,
+  subject and capability (an execution ledger: `executions` table, in memory for a bare
+  runtime). The system claims the key when it executes; a human approval claims it when a
+  case resolves; a repeat evaluation is `DENY` "already executed". The snapshot records
+  `prior_execution`; replay restores it.
+- **Adversarial review of this branch** (the registry floor, SESSION_EVIDENCE, the
+  execution ledger under concurrency and what-if isolation held). Found and fixed, each
+  with a regression test:
+  - the conversation route re-pointed a stored dispute, and the attack simulator
+    recorded executed refunds on fabricated disputes (fixed on #11, 12325a5);
+  - `closed` accounts and `unknown` merchant categories were in the vocabularies but
+    named by no rule, so they were allowed: `block-closed-account` and
+    `review-unknown-mcc`, and a test that every vocabulary value an active policy reads
+    is named by a rule or explicitly accepted with a reason;
+  - a list- or dict-valued vocabulary field was a 500 (unhashable) on three routes;
+  - replay re-derived ALLOW for a decision that was DENY "already executed", because
+    `prior_execution` was not restored and the lost race was snapshotted without it;
+  - a signed statement that failed verification went to a fail-safe review nobody could
+    approve (a dead case). The engine now lets a decisive BLOCK outrank a context error:
+    `block-failed-fact-provenance` fires although the facts cannot be evaluated → DENY,
+    no case;
+  - `tx-000123`, `TX‑000123` (U+2011) and `ＴＸ-000123` were new subjects for a stored
+    payment, one execution key each. Caller-named ids are in one grammar, and an
+    ASCII-case variant of a stored id is refused like the stored id.
+  The four policy versions on this branch (unreleased) were edited in place and re-pinned;
+  `NONE` provenance is now named by their review rule.
+
 ### Evaluation
 - The corpora's ledgers and acquirer records are signed by an ephemeral evaluation
   issuer and verified in every case, so the suites measure text and model influence on

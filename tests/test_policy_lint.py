@@ -4,11 +4,20 @@ from __future__ import annotations
 
 import pytest
 
-from sentinel.domain.enums import ActorKind, AuthorizationStatus, Capability, PolicyOutcome
+from sentinel.domain.enums import (
+    ActorKind,
+    AuthorizationStatus,
+    Capability,
+    PolicyOutcome,
+    ProvenanceStatus,
+)
 from sentinel.policy import DEFAULT_REGISTRY, evaluate, lint
 from sentinel.policy.engine import PolicyEvaluationError
 from sentinel.policy.loader import policy_from_dict
 from sentinel.security import capabilities
+
+# the facts these calls authorize on are the institution's own records
+LOCAL = ProvenanceStatus.TRUSTED_LOCAL
 
 
 def _doc(rules, **over):
@@ -248,7 +257,12 @@ def test_malformed_field_values_never_match_and_missing_fields_fail_closed():
 )
 def test_authorization_matrix(cap, actor, outcome, supported, expect):
     a = capabilities.authorize(
-        cap, actor=actor, amount=1000, policy_outcome=outcome, evidence_supported=supported
+        cap,
+        actor=actor,
+        amount=1000,
+        policy_outcome=outcome,
+        facts_provenance=LOCAL,
+        evidence_supported=supported,
     )
     assert a.status is expect, a.reason
 
@@ -263,6 +277,7 @@ def test_human_review_threshold_boundary(amount, expect):
         actor=ActorKind.SYSTEM,
         amount=amount,
         policy_outcome=PolicyOutcome.ALLOW,
+        facts_provenance=LOCAL,
         evidence_supported=True,
     )
     assert a.status is expect

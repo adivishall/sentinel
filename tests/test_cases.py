@@ -6,12 +6,13 @@ from sentinel.cases.rules import should_open_case
 from sentinel.cases.service import CaseService, InvalidTransition
 from sentinel.decision.composer import FULL, DecisionInputs, compose
 from sentinel.domain.decisions import AIRecommendation
-from sentinel.domain.enums import Capability, CasePriority, CaseStatus, Workflow
+from sentinel.domain.enums import Capability, CasePriority, CaseStatus, FactKind, Workflow
 from sentinel.evidence.reconcile import reconcile_dispute
 from sentinel.policy import DEFAULT_REGISTRY
 from sentinel.security.gateway import GATEWAY
 from sentinel.security.provenance import UntrustedContent
 from sentinel.security.trust_boundary import DisputeFacts, UntrustedText
+from sentinel.trust import local
 
 
 def _decision(text, ledger, ai_action="approve_refund", ai_cap=Capability.APPROVE_REFUND):
@@ -40,6 +41,7 @@ def _decision(text, ledger, ai_action="approve_refund", ai_cap=Capability.APPROV
             controls=FULL,
             input_hash="h",
             claim_type=claim.claim_type.value,
+            provenance=local(FactKind.DISPUTE_LEDGER, "D-1", ledger),
         )
     )
 

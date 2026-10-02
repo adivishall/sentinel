@@ -1,0 +1,137 @@
+{
+  "policy_id": "account-security",
+  "version": 2,
+  "workflow": "account_security",
+  "default_outcome": "ALLOW",
+  "effective_from": "2026-09-29",
+  "description": "Account security v2: v1 plus fact provenance -- a failed or revoked signature blocks; an unverified session goes to a human.",
+  "required_fields": [
+    "risk_level",
+    "security_severity",
+    "payout_change",
+    "new_device"
+  ],
+  "rules": [
+    {
+      "id": "block-failed-fact-provenance",
+      "when": [
+        {
+          "field": "facts_provenance",
+          "op": "in",
+          "value": [
+            "INVALID",
+            "REVOKED"
+          ]
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "The record's signed statement failed verification or its key was revoked: a tamper signal, never a basis for action."
+    },
+    {
+      "id": "review-unverified-facts",
+      "when": [
+        {
+          "field": "facts_provenance",
+          "op": "in",
+          "value": [
+            "UNTRUSTED",
+            "EXPIRED",
+            "SUPERSEDED",
+            "NONE"
+          ]
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Nothing establishes these facts (request-body, expired or superseded, or none recorded): a human must, before anything executes."
+    },
+    {
+      "id": "block-critical-ai-security",
+      "when": [
+        {
+          "field": "security_severity",
+          "op": "==",
+          "value": "CRITICAL"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "Critical AI-security finding on the untrusted input."
+    },
+    {
+      "id": "block-capability-escalation",
+      "when": [
+        {
+          "field": "capability_escalation",
+          "op": "is_true"
+        }
+      ],
+      "outcome": "BLOCK",
+      "reason": "The model requested a capability outside its surface."
+    },
+    {
+      "id": "hold-critical",
+      "when": [
+        {
+          "field": "risk_level",
+          "op": "==",
+          "value": "CRITICAL"
+        }
+      ],
+      "outcome": "TEMPORARY_HOLD",
+      "reason": "Login risk is CRITICAL; hold the account pending review."
+    },
+    {
+      "id": "hold-payout-change-new-device",
+      "when": [
+        {
+          "field": "payout_change",
+          "op": "is_true"
+        },
+        {
+          "field": "new_device",
+          "op": "is_true"
+        }
+      ],
+      "outcome": "TEMPORARY_HOLD",
+      "reason": "Payout changed from a new device."
+    },
+    {
+      "id": "review-high",
+      "when": [
+        {
+          "field": "risk_level",
+          "op": "==",
+          "value": "HIGH"
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Login risk is HIGH."
+    },
+    {
+      "id": "stepup-medium",
+      "when": [
+        {
+          "field": "risk_level",
+          "op": "==",
+          "value": "MEDIUM"
+        }
+      ],
+      "outcome": "STEP_UP",
+      "reason": "Login risk is MEDIUM; step up authentication."
+    },
+    {
+      "id": "review-sensitive-capability",
+      "when": [
+        {
+          "field": "requested_capability",
+          "op": "in",
+          "value": [
+            "UNFREEZE_ACCOUNT",
+            "CHANGE_PAYOUT"
+          ]
+        }
+      ],
+      "outcome": "REQUIRE_HUMAN_REVIEW",
+      "reason": "Unfreezing or changing payout always needs a human."
+    }
+  ]
+}

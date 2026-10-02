@@ -2,12 +2,16 @@
   "algorithm": "sha256",
   "policies": {
     "account-security@v1": "4e8a7c54b8064d52297aaeb67ff61a64440caeeb962d1743f4a39a775178f521",
+    "account-security@v2": "d54c955d85afe50ac258bba79198e74dadeefd4aaf3eed8eb79331444e0a06b3",
     "dispute-refund@v1": "a856d00b4987488498543ce8df1704d60e9e0dd4e06d5ce75d900798fa9b6cf3",
     "dispute-refund@v2": "3cd95f7fa9b6482f29301a4ff439c9731fc5ffa815c691bad4238afc5cfc925a",
     "dispute-refund@v3": "1c37ac159eabbc0a34b3af131845d02390f7bfd6e99700acbd9b10967b660648",
+    "dispute-refund@v4": "5c2839ef5ac4c45ee69f89b6a695b6ce5adf67a1336880feff60f010ba83f9ff",
     "investigation@v1": "80f52ddf4bddba7c33f02b4ef698b359a0bd44f20cfa6f238dd3060520888b98",
     "merchant-onboarding@v1": "199f8087247b76ab7e81ce6d6e99f556fdbfcfae06c056b8659ad7d97225881b",
+    "merchant-onboarding@v2": "9b4c9b5c2834ad6df30acd7fe8b25dcf94767169fa8be00238a06a0f2f901307",
     "transaction-authorization@v1": "36ca2e834433045bc6bdc15c3913c47b32626085a088fc67e1f84d087cc34c8f",
-    "transaction-authorization@v2": "64b50c9ae7cecd910c44c70ed669316fa6cd5ed081d7a974b77b9356b1a7a1cd"
+    "transaction-authorization@v2": "64b50c9ae7cecd910c44c70ed669316fa6cd5ed081d7a974b77b9356b1a7a1cd",
+    "transaction-authorization@v3": "c408816022a1824fcab0d4ab8fe6ed1909d46f81cccfb0c6009f221903097281"
   }
 }

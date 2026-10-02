@@ -7,6 +7,7 @@ from sentinel.domain.enums import (
     AuthorizationStatus,
     Capability,
     EvidenceVerdict,
+    FactKind,
     FinalAction,
     PolicyOutcome,
     Severity,
@@ -19,6 +20,7 @@ from sentinel.policy import DEFAULT_REGISTRY
 from sentinel.security.gateway import GATEWAY
 from sentinel.security.provenance import UntrustedContent
 from sentinel.security.trust_boundary import DisputeFacts, UntrustedText
+from sentinel.trust import local
 
 POLICY = DEFAULT_REGISTRY.get("dispute-refund", 1)
 
@@ -52,6 +54,7 @@ def _inputs(text, ledger, *, ai=None, controls=FULL, security=None):
         controls=controls,
         input_hash="abc",
         claim_type=claim.claim_type.value,
+        provenance=local(FactKind.DISPUTE_LEDGER, "D-1", ledger),
     )
 
 

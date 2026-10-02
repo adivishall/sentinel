@@ -24,6 +24,7 @@ from sentinel.decision.workflows import (
 from sentinel.domain.entities import Account, LoginSession, Merchant, PaymentInstrument, Transaction
 from sentinel.domain.enums import (
     Capability,
+    FactKind,
     FactsSource,
     FinalAction,
     Severity,
@@ -35,6 +36,9 @@ from sentinel.risk import transaction as txn_risk
 from sentinel.risk.behavioral import BehavioralBaseline
 from sentinel.risk.graph import EntityGraph
 from sentinel.security.provenance import UntrustedContent
+from sentinel.trust.issuer import Issuer
+from sentinel.trust.keys import TrustStore
+from tests.records import kyb_record
 
 T0 = datetime(2026, 9, 1, 10, 0)
 
@@ -171,7 +175,7 @@ def test_dispute_session_multi_turn():
 
 
 # ---- transaction ------------------------------------------------------------------
-def _txn_request(amount=2500, device="DEV-1", country="IN", untrusted=(), auth="otp"):
+def _txn_request(amount=2500, device="DEV-1", country="IN", untrusted=(), auth="otp", tid="TX-NEW"):
     hist = [
         Transaction(
             f"TX-{i}",
@@ -196,7 +200,7 @@ def _txn_request(amount=2500, device="DEV-1", country="IN", untrusted=(), auth="
         last_country_ts=_ts(hours=-1),
     )
     t = Transaction(
-        "TX-NEW", "ACC-1", "M-1", "INS-1", device, amount, "INR", _ts(), country, auth_strength=auth
+        tid, "ACC-1", "M-1", "INS-1", device, amount, "INR", _ts(), country, auth_strength=auth
     )
     return TransactionRequest(t, ctx, untrusted=tuple(untrusted), facts_source=SOR)
 
@@ -208,10 +212,12 @@ def test_transaction_allow_review_block():
         ok.decision.final_action is FinalAction.ALLOW
         and ok.decision.executed_capability is Capability.APPROVE_TRANSACTION
     )
-    big = run_transaction(rt, _txn_request(amount=185000))
+    # each payment its own id: one transaction executes once (a repeat is "already executed")
+    big = run_transaction(rt, _txn_request(amount=185000, tid="TX-BIG"))
     assert big.decision.final_action is FinalAction.REQUIRE_HUMAN_REVIEW
     ato = run_transaction(
-        rt, _txn_request(amount=180000, device="DEV-X", country="RO", auth="password")
+        rt,
+        _txn_request(amount=180000, device="DEV-X", country="RO", auth="password", tid="TX-ATO"),
     )
     assert (
         ato.decision.final_action in (FinalAction.DENY, FinalAction.BLOCK)
@@ -280,9 +286,24 @@ def test_kyb_document_cannot_onboard_shell_merchant():
             facts_source=SOR,
         ),
     )
-    assert (
-        good.decision.executed and good.decision.executed_capability is Capability.APPROVE_MERCHANT
+    # onboarding decides on the acquirer's own statement: a stored copy goes to a human
+    assert good.decision.final_action is FinalAction.REQUIRE_HUMAN_REVIEW
+    assert not good.decision.executed
+    acquirer = Issuer.ephemeral("acquirer", scopes=("kyb_record",))
+    signed = run_kyb(
+        Runtime(trust=TrustStore.empty().with_key(acquirer.key)),
+        KYBRequest(
+            _u(
+                "We are a long-running bookstore applying to accept cards.",
+                TrustClass.MERCHANT_CONTROLLED,
+                "application",
+            ),
+            {},
+            "MER-BOOKS",
+            envelope=acquirer.sign(FactKind.KYB_RECORD, "MER-BOOKS", kyb_record()),
+        ),
     )
+    assert signed.decision.executed_capability is Capability.APPROVE_MERCHANT
     border = run_kyb(
         rt,
         KYBRequest(

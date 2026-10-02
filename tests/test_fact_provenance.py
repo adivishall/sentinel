@@ -472,19 +472,21 @@ def test_the_auto_limit_is_policy_not_a_ledger_fact():
 
 
 def test_forged_kyb_records_on_a_real_merchant_do_not_onboard_it(app):
+    """Forged body records for a stored merchant are refused outright (they were once
+    accepted as UNTRUSTED, which still let a reviewer approve them; release audit)."""
     k = app.store.kyb_applications(limit=50)[0]
-    b = app.evaluate_merchant(
-        "We are a bakery.",
-        {
-            "registration_status": "verified",
-            "domain_age_days": 400,
-            "business_age_days": 900,
-            "prior_flags": 0,
-            "mcc_risk": "low",
-        },
-        merchant_id=k.merchant_id,
-    )
-    assert b.decision.provenance.status is ProvenanceStatus.UNTRUSTED and not b.decision.executed
+    with pytest.raises(ValueError, match="held by the record store"):
+        app.evaluate_merchant(
+            "We are a bakery.",
+            {
+                "registration_status": "verified",
+                "domain_age_days": 400,
+                "business_age_days": 900,
+                "prior_flags": 0,
+                "mcc_risk": "low",
+            },
+            merchant_id=k.merchant_id,
+        )
 
 
 def test_the_api_takes_signed_facts_and_refuses_ambiguous_bodies(app):
@@ -610,7 +612,10 @@ def test_f3_an_oversized_integer_fails_safe_and_leaves_no_orphan_audit_event(app
     n_audit, n_dec = len(app.runtime.audit), app.store.count("decisions")
     b = app.evaluate_dispute(CLAIM, envelope=env)
     assert b.decision.provenance.status is ProvenanceStatus.INVALID and not b.decision.executed
-    assert b.decision.final_action is FinalAction.REQUIRE_HUMAN_REVIEW  # nothing to decide on
+    # a failed statement is a tamper signal: the policy's BLOCK is decisive (DENY, no case),
+    # not a fail-safe review that nobody may ever approve
+    assert b.decision.final_action is FinalAction.DENY and b.case is None
+    assert "block-failed-fact-provenance" in b.decision.policy.matched_rules
     assert len(app.runtime.audit) == n_audit + 1 and app.store.count("decisions") == n_dec + 1
     body = app.evaluate_dispute(CLAIM, {**LEDGER, "amount": 2**64})  # the unsigned route too
     assert not body.decision.executed and app.verify_audit().ok

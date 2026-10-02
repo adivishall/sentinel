@@ -8,8 +8,15 @@ evaluation only and are never read by any risk or decision code.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from sentinel.domain.enums import RiskLevel
+
+
+def _instant(ts: str) -> datetime:
+    """An ISO time as an aware UTC instant (naive times are UTC, as the dataset's are)."""
+    t = datetime.fromisoformat(ts.strip())
+    return t if t.tzinfo else t.replace(tzinfo=UTC)
 
 
 @dataclass(frozen=True)
@@ -36,10 +43,17 @@ class Account:
     status_since: str | None = None
 
     def status_at(self, at: str) -> str:
-        """The account's status as of ``at``."""
-        if self.status != "active" and self.status_since is not None and self.status_since > at:
-            return "active"
-        return self.status
+        """The account's status as of ``at``. Times are compared as instants, not strings:
+        "2026-08-15 10:00:00" and "2026-08-15T10:00:00" are the same moment, and a string
+        comparison put the first one before the freeze. An unreadable time reads the
+        current status (the stricter answer for a frozen account)."""
+        if self.status == "active" or self.status_since is None:
+            return self.status
+        try:
+            since, when = _instant(self.status_since), _instant(at)
+        except ValueError:
+            return self.status
+        return "active" if since > when else self.status
 
 
 @dataclass(frozen=True)
