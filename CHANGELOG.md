@@ -120,7 +120,7 @@ can be trusted (roadmap issues #11–#20).
   execution ledger under concurrency and what-if isolation held). Found and fixed, each
   with a regression test:
   - the conversation route re-pointed a stored dispute, and the attack simulator
-    recorded executed refunds on fabricated disputes (fixed on #11, 12325a5);
+    recorded executed refunds on fabricated disputes (fixed on the fact-provenance branch, PR #21, e207a93);
   - `closed` accounts and `unknown` merchant categories were in the vocabularies but
     named by no rule, so they were allowed: `block-closed-account` and
     `review-unknown-mcc`, and a test that every vocabulary value an active policy reads
@@ -280,7 +280,7 @@ can be trusted (roadmap issues #11–#20).
   stored-record check never ran there (a new, `UNTRUSTED` dispute was evaluated; no
   bypass). It is now checked like every other route.
 - **Adversarial review of this branch.** It found no bypass by the search, and one real
-  bypass by hand, fixed at its origin on #12 (feat/policy-provenance) and pinned by tests:
+  bypass by hand, fixed at its origin on the policy-provenance branch (PR #22) and pinned by tests:
   - **a trailing newline passed the record-id grammar.** `^...$` with `match()` accepts
     `"DSP-000002\n"` (`$` also matches before a final newline), so a dispute the system
     had already refunded could be named again with a body ledger; a human approval of
@@ -371,6 +371,40 @@ can be trusted (roadmap issues #11–#20).
     coverage; a checkpoint issued in the future was accepted.
 - `sentinel audit checkpoint --sign-key --signer --anchor`, `audit verify --anchor
   [--require-anchored]`, `trust keygen --purpose audit-checkpoint`, `SENTINEL_AUDIT_ANCHOR`.
+
+### Release audit (2026-10-02)
+A five-perspective audit of the release candidate (security, compliance, README,
+operations, evaluation) found these; each is fixed with a regression test on the
+branch that introduced the code and merged forward (`docs/FAILURE_ANALYSIS.md`).
+- **Security (HIGH):** unsigned body records naming a stored merchant, or a case
+  variant of its id, opened an onboarding case one reviewer could approve --
+  once per spelling of the id. They are refused; `application_id` with `records`
+  is a 400; the execution ledgers compare keys case-insensitively.
+- **Security:** a repeat on a subject whose capability already executed opened a
+  case that could never be approved; it is DENY "already executed". A KYB
+  statement that names no application is `INVALID`. A different `submission` on
+  the stored-dispute route is refused like a different `narrative`.
+- **Critical (operations):** the policy trust root was missing from the wheel, so
+  the Docker image could not start; CI now runs the image, not only builds it.
+  The console was a 404 from an installed package. Read-only commands no longer
+  create or seed a store; a named store gets synthetic data only with
+  `--demo-data`. A key overrides `--insecure-demo` in the start record; an
+  unreadable key file refuses. `SENTINEL_POLICY_DIR` makes the policy-release
+  runbook work under an operator's own root (`tests/test_policy_runbook.py`
+  executes it). `audit list` takes `--action` and `--json`.
+- **Evaluation honesty:** the temporal suite is labelled empirical (it had been
+  "structural" in one place and "empirical" in another); the financial held-out
+  seeds and the classifier's held-out set are described as partially informed
+  (the seeds' results were published before txn-2.0 was designed; the classifier
+  set's author knew the classifier); four security held-out cases were added
+  with detector signals for their classes, which is now stated; the frozen claims
+  fixture is pinned by its SHA-256 and its first run recorded in code; an
+  unsourced live-latency comparison was removed.
+- **Docs:** `docs/FAILURE_ANALYSIS.md` (every defect with its fix commit and
+  test), `SECURITY.md` (private vulnerability reporting), issue and PR
+  templates, a reviewer's path and external-validation plan in the README, a
+  complete `.env.example` and `docs/TESTING.md`, the real flagship-demo output,
+  and commit ids in the docs updated to the current history.
 
 ### Decision lineage, risk-model provenance, the system-of-record boundary
 - **`GET /v1/decisions/{id}/lineage`** (`SentinelApp.decision_lineage`): one view of a
@@ -553,7 +587,7 @@ because the data or the evaluation became more honest.
   regenerated world ("text changed a protected outcome" 38.2% → 58.2%,
   tightening only; surfaces "tightened vs baseline" 43.3% → 30.0%); the
   structural rows and every guarded attack-success rate stay 0.0%.
-- `make eval` failed after the ablation suite since `0b08279` (the
+- `make eval` failed after the ablation suite since `2923890` (the
   methodology record was read as a configuration); fixed.
 - Dead code and write-only state removed: the unused `EventBus`, write-only
   `Runtime.decisions` / `security_events` (unbounded in a long-running

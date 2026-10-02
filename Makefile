@@ -7,7 +7,7 @@ export SENTINEL_FORCE_OFFLINE ?= 1
 help:             ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-install:          ## install dev tooling and the `sentinel` command (the core has no runtime deps)
+install:          ## install dev tooling and the `sentinel` command (one runtime dependency: cryptography)
 	$(PY) -m pip install -r requirements-dev.txt
 	$(PY) -m pip install -e .
 

@@ -54,6 +54,23 @@ make lint        # ruff + black --check + mypy over the whole package
 | `test_facts_provenance.py` | every decision says where its facts came from (system of record / caller-supplied / demo fixture) in the decision, the audit event, the API, the review packet and the console; a past `as_of` investigation is never recorded |
 | `test_live_provider.py` | the live Anthropic provider verified offline against a stub SDK: request shape, parsing, token accounting, the live-evaluation pipeline; without a key the live row is `not_run` |
 | `test_generator_chronology.py` | the synthetic world on five seed / profile worlds: nothing before what it needs or after the clock, dormant accounts silent, scenario gaps and sizes vary, fraud timestamps not recognisable from the clock, legitimate behaviour varies, determinism |
+| `test_fact_provenance.py` | signed fact statements: the fail-closed verification order, anti-rollback, revocation, expiry, KYB statements naming their application; INV-PROV-1 (no mutation of a signed statement verifies) |
+| `test_policy_provenance.py` | provenance floors per capability (INV-PROV-2), the structured-channel bypasses (stored-record re-pointing, id spellings incl. a trailing newline, stored merchants with body records), one execution per subject, a repeat on an executed subject is DENY |
+| `test_reviewer_identity.py` | authenticated reviewers: identity from the credential only (INV-REVIEW-1), four eyes by distinct people (INV-REVIEW-2), escalation, authority limits, the registry's grammar |
+| `test_policy_release.py` | signed policy releases and activations (INV-POLICY-1): a modified policy, a fake activation, a rollback or an unknown signer cannot decide |
+| `test_policy_runbook.py` | the operator's policy-release runbook in docs/DEPLOYMENT.md, executed step by step under an operator's own root |
+| `test_secure_deploy.py` | loopback by default, a key or an audited `--insecure-demo` for a network bind (INV-DEPLOY-1), Host/Origin checks against DNS rebinding, JSON-only POSTs, key rotation, SIGHUP reload |
+| `test_ops_hardening.py` | operator defects: the console from an installed package, no synthetic data in a named store, a key overriding `--insecure-demo`, an unreadable key file failing closed, `audit list --action --json` |
+| `test_packaging.py` | every runtime data file ships in the wheel (the policy trust root once did not) |
+| `test_audit_anchoring.py` | signed checkpoints in an append-only anchor: corruption detected (INV-AUDIT-1), a rewrite detected exactly where a checkpoint covers it (INV-AUDIT-2), revoked keys, missing publications |
+| `test_redteam.py` | the adaptive red team: four separate metrics, a baseline per seed, no repeated or no-op queries, real multi-turn submission, the id spellings that once paid a refund twice |
+| `test_invariant_table.py` | every test docs/INVARIANTS.md names exists; replay never changes the recorded decision (INV-REPLAY-1) |
+| `test_claims_frozen.py` | the frozen claim-classifier fixture is byte-for-byte the one committed before its first run, and its first run stays recorded |
+| `test_decision_lineage.py` | the lineage view of a recorded decision; replay names its drift and drift class |
+| `test_risk_model_provenance.py` | a risk assessment pins its model's configuration digest; replay reports configuration drift |
+| `test_providers_boundary.py` | the system-of-record interfaces: the decision packages never import storage |
+| `test_providers_agents.py` | the provider abstraction and the deliberately naive agents |
+| `test_generator_profiles.py` | synthetic-data profiles are deterministic by seed and comparable |
 
 ## The regression tests that matter most
 
@@ -67,6 +84,8 @@ make lint        # ruff + black --check + mypy over the whole package
 
 `.github/workflows/ci.yml`: ruff → black → mypy → pytest with coverage gate →
 invariants → evaluation smoke (security, held-out, surfaces, KYB, ablation,
-integrity, temporal, claims) → CLI + audit-chain smoke (generate, analyse, the
-flagship attack, verify, checkpoint export and verification) → Docker build.
+integrity, temporal, claims, red team) → `policy verify` → CLI + audit-chain
+smoke (generate, analyse, the flagship attack, verify, checkpoint export and
+verification, a signed checkpoint in an anchor) → Docker build → Docker run
+(`/health`, the console and the API must answer).
 Live model calls are never made in CI.

@@ -15,7 +15,7 @@ must be a function of trusted evidence, risk state, policy and authorization
 |---|---|---|
 | Malicious cardholder / fraudster | dispute narratives, chat turns, forms, "claims" about facts | the ledger, the policy, tool wiring |
 | Malicious merchant | applications, uploaded documents, descriptors, site copy | acquirer records |
-| API caller / compromised integration | request bodies: record facts, fact envelopes, timestamps, capability fields | a `VERIFIED_EXTERNAL` fact (that takes an issuer's private key); body facts are `UNTRUSTED` and never execute |
+| API caller / compromised integration | request bodies: record facts, fact envelopes, timestamps, capability fields | a `VERIFIED_EXTERNAL` fact (that takes an issuer's private key); body facts are `UNTRUSTED`: the system never executes on them, only an authenticated reviewer's approval can |
 | Third-party content | emails, pages, order-status text the agent reads | anything trusted |
 | Compromised / over-permissive AI agent | its own output: recommendations and tool calls | authorization |
 | Malicious model output | the same channel as above | evidence status |
@@ -169,8 +169,8 @@ closes them.
   suite); lower-severity text does not stop an approval the records support
   (the other 7). The KYB suite reports the cost as the any-input
   false-positive rate (`docs/LIMITATIONS.md`).
-- The temporal-leakage suite is a deterministic check over two generator
-  worlds (192 sampled transactions, nine record kinds, four offsets); the
+- The temporal-leakage suite is a deterministic check over several seeded
+  generator worlds (nine record kinds, four offsets; sizes in EVALUATION §I); the
   per-feature tests cover the mechanisms, but it is not a proof over every
   record. A status with no recorded start and a merchant's registration-time
   flags are current-state by nature.

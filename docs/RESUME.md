@@ -63,7 +63,7 @@ claims were attacked rather than asserted, including against time (bullet 3). Th
 | "the red team proved it unbreakable" | 0 bypasses in a seeded search whose zero is structural; the one real bypass of the release was found by an adversarial review and fixed |
 | "SSO", "enterprise identity" | authenticated reviewer credentials from a registry; no SSO / OIDC |
 | "0 temporal leaks proves correctness" | "0 observed temporal leaks across the tested synthetic benchmark" |
-| "the classifier reads 17/21 unseen phrasings" | 7/21 on the first, blind run; 17/21 after changes by an author who had seen the misses |
+| "the classifier reads 17/21 unseen phrasings" | 7/21 on its first run; 17/21 after changes by an author who had seen the misses; 24/40 on a set frozen before its first run |
 | "revolutionary", "enterprise-grade", "production-ready", "bank-grade" | lab-grade, with production-shaped boundaries |
 
 **Stack:** Python 3.11+ · dataclasses / typing (mypy-checked) · SQLite ·

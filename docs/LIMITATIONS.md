@@ -173,7 +173,7 @@ block.
     upload on bad records is never approved. The empirical content of the
     security suite is the false-positive rates, the detection recall, the KYB
     any-input cost and the claim classifier's held-out coverage (partially
-    informed: 7/21 on the first, blind run, 17/21 after changes).
+    informed: 7/21 on its first run, 17/21 after changes).
 20. **The financial figures are development figures with an honest range.**
     <!-- gen:financial-caveats -->
     The point values were tuned on seed 42; the suite also runs seeds
@@ -206,8 +206,8 @@ block.
 22. **The temporal-leakage suite is a deterministic check, not a proof.** Its
     result is "0 observed temporal leaks across the tested synthetic
     benchmark": a tested invariant, not a fully event-sourced history. It
-    samples 192 transactions over two generator worlds and nine kinds of
-    future record at four offsets; the per-feature tests
+    samples transactions over several seeded generator worlds and nine kinds
+    of future record at four offsets (sizes in EVALUATION §I); the per-feature tests
     (`test_temporal_leakage.py`, `test_entity_pointintime.py`,
     `test_graph_temporal.py`) cover the mechanisms, but the suite does not
     re-score every record under every possible future. Its 2.2.0 extension

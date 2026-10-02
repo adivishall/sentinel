@@ -131,7 +131,7 @@ event records both, together with the payload digest.
 |---|---|---|
 | `{dispute_id}`, `{application_id}`, `{transaction_id}`, `{session_id}` | `system_of_record` | `VERIFIED_EXTERNAL` when the store holds the issuer's signed statement for the record (verified again now, and checked against the stored row; a mismatch is `INVALID`), otherwise `TRUSTED_LOCAL`. With `require_signed_facts`, a record whose statement is missing is `INVALID`. |
 | `{facts_envelope}`: an issuer's signed statement carried by the caller | `caller_supplied` | `VERIFIED_EXTERNAL` only if it verifies against the operator's trust store, and only for the record it names. Otherwise `INVALID`, `EXPIRED`, `REVOKED` or `SUPERSEDED`. |
-| `{ledger}`, `{records}`, `{transaction}`, `{session}` objects in the body | `caller_supplied` | `UNTRUSTED`: a claim about the records. It can make an outcome stricter (a refunded ledger still denies) but never support one: what it would support is held for human review, and nothing executes. |
+| `{ledger}`, `{records}`, `{transaction}`, `{session}` objects in the body | `caller_supplied` | `UNTRUSTED`: a claim about the records. It can make an outcome stricter (a refunded ledger still denies) but never support one: what it would support is held for human review: the system executes nothing on it, and only an authenticated reviewer's approval can. |
 | `/v1/attacks/simulate` presets | `demo_fixture` | the demo issuer signs the preset's ledger, so `VERIFIED_EXTERNAL` (labelled as the ephemeral demo issuer) |
 
 `facts_envelope` is accepted on the dispute, merchant, transaction and account
