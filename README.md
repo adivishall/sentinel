@@ -263,7 +263,7 @@ engine output over the synthetic demo dataset, nothing drawn by hand.
 ```bash
 git clone https://github.com/adivishall/sentinel.git && cd sentinel
 make install          # dev tooling + the `sentinel` command; the one runtime dependency is pyca/cryptography
-make test             # 1011 tests, offline
+make test             # the whole suite, offline (count in the badge above)
 make attack-compare   # the flagship demo, no key needed
 make api              # API + console at http://localhost:8000 (in-memory demo dataset)
 ```
