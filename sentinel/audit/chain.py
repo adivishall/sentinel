@@ -106,7 +106,7 @@ class AuditEvent:
     security_severity: str
     input_hash: str
     case_id: str | None = None
-    kind: str = "decision"  # decision | case | human_decision | system
+    kind: str = "decision"  # decision | case | human_decision | system | replay | backtest
     detail: dict[str, object] = field(default_factory=dict)
 
     def body(self) -> dict[str, object]:

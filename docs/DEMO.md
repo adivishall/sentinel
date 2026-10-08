@@ -95,7 +95,7 @@ investigation workflow scores CRITICAL (circular transfers, a device shared
 with the other ring accounts, a burst of activity, high-risk merchant
 exposure) and opens a case.
 
-## 4. Three closing moves
+## 4. Four closing moves
 
 - **Replay**: Console → **Replay** → *Replay it under v1*. A dispute that
   `dispute-refund@v3` denied because the ledger already shows a refund is
@@ -105,6 +105,14 @@ exposure) and opens a case.
   that changed. That is also why no caller may select v1 on an evaluate route.
   Then replay the blocked attack with the AI recommendation forced to
   `approve_refund` or `release_funds`: nothing changes.
+- **Backtest** (needs a persistent store: `make data && make analyze` first):
+  `sentinel --db data/sentinel.db replay backtest --policy-version 1 --workflow dispute`.
+  The same question over the whole recorded history: which decisions would
+  change under v1, and -- listed first -- which would *newly execute* a refund
+  that the active policy did not pay. Add `--fail-on-loosening` and the exit
+  code is 3: a policy change that would pay out where the current one does
+  not cannot pass a CI gate. The audit chain gains exactly one `backtest`
+  event; `audit verify` still passes.
 - **Review packet**: Console → **Investigations** → open the case. The packet
   separates trusted evidence from untrusted claims, lists the contradictions,
   and shows the model's recommendation marked MODEL_GENERATED -- recorded for
