@@ -28,19 +28,20 @@ hostile document.
 | **Decision integrity** | structural (0 by construction; a regression check) | attacker text or model output loosening a protected decision | 170 attacks (main 150 + held-out 20); 360 model-recommendation replays (60 main-corpus attacks × 6 recommendations) | the security corpora | **0.0%** (no controls: 83.5%) | [§H](#h-decision-integrity-resultsintegrityjson) |
 | **Financial risk** | synthetic benchmark (empirical) | precision / recall / FPR against the generator's scenario labels | seed 42: 3,183 transactions, 157 accounts; two held-out seeds of similar size | dev 42 (point values tuned on it); held-out 7, 2024 | transactions P 86.7% R 67.2% FPR 0.19%; accounts P 90.0% R 90.0% | [§G](#g-financial-risk-on-labelled-synthetic-data-resultsfinancialjson) |
 | **Temporal correctness** | synthetic invariant check (empirical; not a proof) | a record dated after T changing a decision at T | 497 transactions; 9 kinds of future record at 4 offsets; 9,443 checks | seeds 42, 7, 11, 23 | **0 observed leaks** (95% upper bound 0.032% per check, 0.60% per sampled transaction) | [§I](#i-temporal-correctness-resultstemporaljson) |
-| **Claim classifier** | synthetic, same author; defence in depth, not the foundation | legitimate claims read as their type; the rest held for a human | 117 phrasings; 21 held-out unusual phrasings | hand-authored | held-out: first (blind) run 7/21; 17/21 after the patterns were extended by an author who had seen the misses; FN 4/56, FP 0/28 | [§L](#l-claim-classifier-resultsclaimsjson) |
-| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.2396 ms | [PERFORMANCE.md](PERFORMANCE.md) |
+| **Claim classifier** | synthetic, same author; defence in depth, not the foundation | legitimate claims read as their type; the rest held for a human | 117 phrasings; 21 held-out unusual phrasings | hand-authored | held-out: first run 7/21; 17/21 after the patterns were extended by an author who had seen the misses; FN 4/56, FP 0/28 | [§L](#l-claim-classifier-resultsclaimsjson) |
+| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.3412 ms | [PERFORMANCE.md](PERFORMANCE.md) |
 | **Live LLM** | live-model evaluation | the same suites against a real model | -- | `claude-opus-5-5/effort-low, claude-sonnet-5-5/effort-low` | **NOT RUN** -- no live number is quoted anywhere | [§K](#k-model--provider-evaluation-resultsmodelsjson) |
 
 ## Three kinds of numbers
 
-Read every table with this distinction in mind; each results file records the
-kind of each headline metric under `kinds`.
+Read every table with this distinction in mind; each results file records its
+kind, dataset, method and limitations under `methodology` (and, where a file
+mixes kinds, each headline metric's kind under `kinds`).
 
 | Kind | What it is | Where it appears |
 |---|---|---|
 | **STRUCTURAL GUARANTEE** | 0 by construction under the design. A consequential capability executes only when the trusted records support the claim, and every attack sits on records that do not. These rows are regression checks that the implementation honours the design (`tests/test_results_regression.py` recomputes them), not detection results. | guarded attack success, off-surface execution, the integrity suite's structural rows |
-| **SYNTHETIC EVALUATION** | Empirical, but on hand-authored corpora, a seeded synthetic dataset and the **offline simulated agent** (`OfflineProvider`, a deterministic regex model of a gullible tool-calling agent that shares an author with the corpus). These numbers can move and describe this simulator and this generator, not the world. | unguarded attack success, detection recall, false positives, KYB outcomes, everything in the financial suite, the claim classifier, the temporal-leakage checks (a tested invariant over two synthetic worlds: 0 observed is evidence, not a proof), performance |
+| **SYNTHETIC EVALUATION** | Empirical, but on hand-authored corpora, a seeded synthetic dataset and the **offline simulated agent** (`OfflineProvider`, a deterministic regex model of a gullible tool-calling agent that shares an author with the corpus). These numbers can move and describe this simulator and this generator, not the world. | unguarded attack success, detection recall, false positives, KYB outcomes, everything in the financial suite, the claim classifier, the temporal-leakage checks (a tested invariant over four synthetic worlds: 0 observed is evidence, not a proof), performance |
 | **LIVE MODEL EVALUATION** | The identical suite against a real model on the operator's own key (`SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models`). | `results/models.json` -- current status of the live configurations: **not_run** (`claude-opus-5-5/effort-low, claude-sonnet-5-5/effort-low`); no live number is quoted anywhere in this repository |
 
 ## What "attack success" means
@@ -110,7 +111,11 @@ The development corpus and the detector share an author, so a 0% there could
 be circular. The held-out set (20 attacks, 6 controls of which
 4 deserve a refund) was written after the development corpus, by the same
 author, with wording that never appears in the detector's patterns; a test
-asserts it is disjoint from the corpus and the detector is never tuned to it.
+asserts that it is disjoint from the corpus (nothing tests "never tuned"). Four of
+its cases (HO-MO-1, HO-MO-2, HO-FE-1, HO-SY-1) were added in the same commit as
+new detector signals for their classes (b83d166), so held-out detection recall
+on those classes is not independent of the detector. The guarded 0% does not
+depend on detection.
 
 | Metric | Value |
 |---|---:|
@@ -278,8 +283,10 @@ Dataset: seed 42, 150 customers, 30 merchants, 3,183 transactions; risk model
 generator's injected scenarios and are read only by this suite.
 
 **The point values of the rule model were tuned while looking at seed 42**, so
-the tables below are development figures; the held-out seeds further down
-were never inspected. Nothing about the model is an industry standard
+the tables below are development figures. The held-out seeds further down were
+not used to set the point values, but their results were published (92ac376)
+the day before the txn-2.0 rules were designed (12a2fc3): they are partially
+informed, not unseen. Nothing about the model is an industry standard
 (`docs/RISK_ENGINE.md`).
 
 ### Ground truth
@@ -395,7 +402,7 @@ Family precision when fired: anomaly 2.1%, velocity 35.0%, device_geo 49.0%, ent
 | low | 2404 | 30 | 46.7% | 0.17% |
 | medium | 396 | 12 | 75.0% | 0.00% |
 
-### Held-out seeds (point values never inspected against these)
+### Held-out seeds (not used to set the point values; partially informed)
 
 | Seed | Level | Precision | Recall | FPR | tp / fp / fn / tn |
 |---|---|---:|---:|---:|---|
@@ -486,7 +493,7 @@ readable false claim is denied, and nothing executes.
 ## I. Temporal correctness (`results/temporal.json`)
 
 The invariant: **data available after T must never influence a decision made
-at T.** Two generator worlds (seeds 42, 7, 11, 23; 10,342 transactions), a stratified sample
+at T.** 4 generator worlds (seeds 42, 7, 11, 23; 10,342 transactions), a stratified sample
 of 497 transactions (half fraud-labelled, half legitimate, spread over the timeline).
 Every sampled transaction is re-scored with records truncated to its own
 timestamp, then again with one kind of future record appended at every offset
@@ -540,32 +547,33 @@ device knowledge, entity profiles, graph edges, monitoring windows). This is a
 deterministic check over the generator's world: "0 observed temporal leaks
 across the tested synthetic benchmark", not a proof over every record.
 
-> **Methodology** (`results/temporal.json`): structural (synthetic data). *Dataset:* two seeded synthetic worlds (seeds 42 and 7), a stratified transaction sample (half fraud-labelled). *Method:* truncation equivalence, then nine kinds of future record at +1/7/30/90 days, one kind at a time; the transaction assessment and the account monitor at T1 must be byte-identical; exact counts with a one-sided 95% Clopper-Pearson bound when zero. *Limitations:* a deterministic check over two generator worlds, not a proof over every record; comparisons from one sample are correlated (read the per-sample bound); a current-state field with no recorded start (legacy account status) cannot be point-in-time. *Sample:* comparisons=4473, decisions_tested=9443, dataset_transactions=10342, dataset_sample=497.
+> **Methodology** (`results/temporal.json`): synthetic invariant check (empirical: 0 observed is evidence, not a proof). *Dataset:* four seeded synthetic worlds (seeds 42, 7, 11 and 23), a stratified transaction sample per world (half fraud-labelled). *Method:* truncation equivalence, then nine kinds of future record at +1/7/30/90 days, one kind at a time; the transaction assessment and the account monitor at T1 must be byte-identical; exact counts with a one-sided 95% Clopper-Pearson bound when zero. *Limitations:* a deterministic check over four generator worlds, not a proof over every record; comparisons from one sample are correlated (read the per-sample bound); a current-state field with no recorded start (legacy account status) cannot be point-in-time. *Sample:* comparisons=4473, decisions_tested=9443, dataset_transactions=10342, dataset_sample=497.
 
 ## J. Performance (`results/performance.json`)
 
-macOS-26.5.2-arm64-arm-64bit-Mach-O, Python 3.13.7; offline agent; workloads: 310-char injected
+macOS-27.0.1-arm64-arm-64bit-Mach-O, Python 3.13.7; offline agent; workloads: 310-char injected
 narrative, 40-transaction baseline, graph of 8,403 nodes / 14,638 edges,
 17-rule policy over a 27-field context, 500 end-to-end iterations.
 Sequential, single-threaded, persistence excluded; machine-dependent.
 
 | Component | p50 ms | p95 ms | p99 ms | ops/s |
 |---|---:|---:|---:|---:|
-| `normalize` | 0.0176 | 0.0183 | 0.0202 | 56,436 |
-| `gateway_inspect` | 0.2255 | 0.235 | 0.2459 | 4,421 |
-| `claim_classify` | 0.2608 | 0.2713 | 0.2802 | 3,818 |
-| `evidence_reconcile` | 0.0352 | 0.0377 | 0.041 | 28,000 |
-| `fact_verify` | 0.1753 | 0.1834 | 0.1914 | 5,629 |
-| `risk_score_transaction` | 0.0147 | 0.0154 | 0.0201 | 66,621 |
-| `graph_linked_accounts` | 0.0039 | 0.0041 | 0.0049 | 250,431 |
-| `graph_neighborhood_d2` | 0.0538 | 0.0568 | 0.0608 | 18,290 |
-| `policy_evaluate` | 0.0168 | 0.0178 | 0.0217 | 58,472 |
-| `decision_compose` | 0.0418 | 0.0448 | 0.0494 | 23,600 |
-| `audit_append` | 0.0088 | 0.0102 | 0.0143 | 109,714 |
-| `e2e_dispute_pipeline` | 0.228 | 0.2396 | 0.2892 | 4,343 |
+| `normalize` | 0.0171 | 0.0185 | 0.0233 | 57,487 |
+| `gateway_inspect` | 0.2238 | 0.2401 | 0.2609 | 4,425 |
+| `claim_classify` | 0.2569 | 0.2734 | 0.2927 | 3,850 |
+| `evidence_reconcile` | 0.0365 | 0.0402 | 0.0485 | 26,604 |
+| `fact_verify` | 0.1807 | 0.192 | 0.2126 | 5,462 |
+| `risk_score_transaction` | 0.0235 | 0.0254 | 0.0312 | 41,804 |
+| `graph_linked_accounts` | 0.004 | 0.0042 | 0.0051 | 243,140 |
+| `graph_neighborhood_d2` | 0.0541 | 0.0576 | 0.0612 | 18,112 |
+| `policy_evaluate` | 0.0187 | 0.0194 | 0.0241 | 52,648 |
+| `decision_compose` | 0.0493 | 0.055 | 0.069 | 19,867 |
+| `audit_append` | 0.0088 | 0.0104 | 0.0159 | 108,423 |
+| `e2e_dispute_pipeline` | 0.317 | 0.3412 | 0.4072 | 3,111 |
 
-A live LLM call (hundreds of milliseconds) dominates real latency by three
-orders of magnitude; Sentinel's own controls are not the bottleneck.
+These are Sentinel's own controls with the offline agent. A live model call
+would add its own latency, which this repository does not measure (the live
+rows are NOT RUN), so no ratio between the two is claimed.
 
 > **Methodology** (`results/performance.json`): empirical, machine-dependent. *Dataset:* fixed workloads (narrative, baseline, graph, policy) on the local machine. *Method:* sequential single-threaded loops; percentiles over n iterations; persistence excluded. *Limitations:* the platform's own overhead only; a live model call dominates real latency. *Sample:* text_chars=310, baseline_transactions=40, graph_nodes=8403, graph_edges=14638, policy_rules=17, policy_context_fields=27, e2e_iterations=500.
 
@@ -573,9 +581,9 @@ orders of magnitude; Sentinel's own controls are not the bottleneck.
 
 | Configuration | Date | Status | Served model | Measured (attacks / controls / errors) | ASR no controls | ASR Sentinel | FP | Latency p50 / p95 ms | Refusals / truncated / parse failures | Tokens in / out | Cost (USD) | Note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `offline-simulator` | 2026-10-01 | OK | — | 150 / 10 / 0 | 90.0% | 0.0% | 0.0% | 0.068 / 0.139 | 0 / 0 / 0 | — | — |  |
-| `claude-opus-5-5/effort-low` | 2026-10-01 | NOT RUN | — | — | — | — | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
-| `claude-sonnet-5-5/effort-low` | 2026-10-01 | NOT RUN | — | — | — | — | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
+| `offline-simulator` | 2026-10-08 | OK | — | 150 / 10 / 0 | 90.0% | 0.0% | 0.0% | 0.068 / 0.141 | 0 / 0 / 0 | — | — |  |
+| `claude-opus-5-5/effort-low` | 2026-10-08 | NOT RUN | — | — | — | — | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
+| `claude-sonnet-5-5/effort-low` | 2026-10-08 | NOT RUN | — | — | — | — | — | — | — | — | — | no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1 |
 
 One row per exact configuration (provider, requested model, effort,
 `max_tokens`), all measured against the same prompts, corpus, policy and risk
@@ -609,7 +617,7 @@ regression floors on these phrasings, not a generalisation claim -- with one
 exception made as honest as an author can make it: `uncommon_legitimate` is a
 held-out set of 21 unusual but legitimate phrasings (Indian English, slang,
 typos, formal register) written and labelled *before* the classifier was run on
-it. Held-out: written and labelled in the 2.2.0 review before the classifier was run on it. First run, with the classifier as of commit 9693433: 7/21 recognised, 14 abstained, 0 misread. The patterns were then extended against the separate development set, by an author who had seen those 14 misses, so the current number is optimistic; the remaining misses were deliberately not fitted. `development` is the set the patterns were then
+it. Held-out: written and labelled in the 2.2.0 review before the classifier was run on it. First run, with the classifier as of commit 59c56fa: 7/21 recognised, 14 abstained, 0 misread. The patterns were then extended against the separate development set, by an author who had seen those 14 misses, so the current number is optimistic; the remaining misses were deliberately not fitted. `development` is the set the patterns were then
 extended against: a fit, reported apart and excluded from the error rates.
 
 | Category | n | accuracy | read as claim | non-claim | abstain | misclassified |
@@ -636,10 +644,11 @@ extended against: a fit, reported apart and excluded from the error rates.
 long-winded, terse, indirect, plus ambiguous messages and non-claims) were
 written, labelled and committed *before* the classifier first ran on them, and
 are never to be used to change it. Their author has seen the classifier, so
-the set is **partially informed, not blind**. First run: **24 / 40**
+the set is **partially informed, not blind**. The fixture is pinned by its SHA-256
+(`tests/test_claims_frozen.py`) and its first run is recorded in the code
+(fixture 1ac0171, result 7990033). First run: **24 / 40**
 correct; 14 of 28 legitimate claims not
-recognised (0 misread as another type -- every miss abstained, i.e. a
-human reads it); 0 of 12 ambiguous or non-claim messages
+recognised (0 misread as another type -- every miss abstained, i.e. a human reads it); 0 of 12 ambiguous or non-claim messages
 read as a claim, and 2 of 6 non-claims abstained instead of being
 recognised as non-claims (held for a human: a cost, not a misreading). That is the estimate to quote for unfamiliar wording: about
 half of honest claims phrased in ways the patterns have not seen go to a
@@ -770,5 +779,5 @@ make eval                      # everything above (main + held-out + surfaces = 
 make docs                      # re-render this file and every generated block from results/ and the code
 sentinel eval run --suite security|heldout|surfaces|kyb|baselines|ablation|financial|integrity|temporal|claims|performance|models|redteam|charts
 sentinel eval run --suite financial --full     # larger dataset (400 customers / 12k transactions)
-make test                      # 1011 tests, incl. tests/test_results_regression.py which recomputes the headline claims
+make test                      # 1041 tests, incl. tests/test_results_regression.py which recomputes the headline claims
 ```

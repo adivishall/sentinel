@@ -290,7 +290,7 @@ model's version name.
 | Parameter class | Parameters | Where accepted |
 |---|---|---|
 | user-controllable | `hardened`, `skip_agent` | every route and command |
-| what-if (system-controlled on the authoritative path) | `controls`, `policy_version`, `risk_model`, `unguarded`, top-level `unguarded`, investigation `as_of` | `/v1/attacks/simulate`, `/v1/scenarios/{key}/run`, `/v1/replay`, `sentinel security attack`, `sentinel scenario run`, `sentinel replay run`, `sentinel replay backtest` -- never recorded as decisions |
+| what-if (system-controlled on the authoritative path) | `controls`, `policy_version`, `risk_model`, `unguarded`, top-level `unguarded`, investigation `as_of` | `/v1/attacks/simulate`, `/v1/scenarios/{key}/run`, `/v1/replay`, `sentinel security attack`, `sentinel scenario run`, `sentinel replay run` -- never recorded as decisions |
 | unknown option keys | anything else | refused (400) |
 
 The evaluate routes answer a what-if switch with 403; the authoritative CLI

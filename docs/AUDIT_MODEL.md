@@ -13,13 +13,12 @@ named** -- and the trust root is a checkpoint stored outside the store.
 
 ## The record
 
-One `AuditEvent` per recorded event, of four kinds: `decision` (every
+One `AuditEvent` per recorded event, of three kinds: `decision` (every
 authoritative decision; the case it opened is linked to it), `case` (every
 human case action: a case opened by hand `CASE_OPENED`, a status change
 `CASE_<STATUS>`, a human decision `HUMAN_APPROVE` / `HUMAN_DENY` /
 `HUMAN_ESCALATE`, with the reviewer id, role, credential id and authority limit the reviewer registry resolved -- never the credential -- and hashes of any note or title) and
-`replay` (one per replay) and `backtest` (one per backtest, carrying its
-overrides and counts). What-if runs are never chained. The hash covers every field except
+`replay`. What-if runs are never chained. The hash covers every field except
 the two hashes: `event_id`, `sequence`, `timestamp`, `decision_id`, `actor`, `workflow`, `subject_id`, `risk_score`, `risk_level`, `policy_id`, `policy_version`, `capability`, `action`, `evidence_ids`, `security_severity`, `input_hash`, `case_id`, `kind`, `detail`.
 `event_hash = SHA-256(canonical_json(body) ‖ previous_hash)`; the first
 event's `previous_hash` is the genesis constant; `sequence` is contiguous
@@ -33,41 +32,6 @@ version. Replay checks the stored snapshot against that hash and takes the
 recorded side of its comparison from the event, so a decision row and a
 snapshot edited consistently in the database cannot replay as "no change"
 (`tests/test_replay_integrity.py`).
-
-### Backtest: a candidate policy over the recorded history
-
-`sentinel replay backtest --policy-version N | --risk-model M | --rule id=value
-[--workflow W] [--limit N] [--fail-on-loosening]` (`SentinelApp.backtest`,
-`sentinel/replay/backtest.py`) replays the newest `limit` recorded decisions
-(500 by default; one workflow when named) under the candidate and reports, by
-decision id:
-
-- **loosening**: decisions that executed nothing as recorded but would execute a
-  consequential capability under the candidate (a refund paid, a merchant
-  onboarded, a payment released, an account acted on). This is the list a risk
-  team reads first, and `--fail-on-loosening` exits 3 when it is not empty, so a
-  policy change can be gated in CI;
-- **tightening**: the reverse; and every other change with its direction
-  (`more_permissive`, `less_permissive`, `lateral` by `FinalAction.permissiveness`),
-  a transition table (recorded → candidate final action), the rules the candidate
-  newly matches or no longer matches, and every named drift between the record and
-  the replay (`policy_release_artifact` is expected whenever the candidate is another
-  version: an override is not the released document);
-- **not replayable**, each with its reason: the stored record disagrees with its
-  audit event (the recorded side cannot be trusted, so it is not compared), the
-  chain disagrees with its anchored checkpoints (then no decision is replayed), the
-  decision's policy has no such version or rule. Nothing is skipped silently.
-
-Every row goes through the same code path as a single replay (`SentinelApp._replay`:
-the recorded side anchored to the audit event, the snapshot checked against the
-hash the event recorded, the facts re-verified), so a row equals `replay run` for
-that decision; `tests/test_backtest.py` checks that row by row. A backtest is a
-what-if: it never records a decision, never executes a capability and never changes
-a recorded decision, snapshot, replay record or audit event. It appends exactly one
-event of kind `backtest` (action `BACKTEST`, subject the backtest id) whose `detail`
-is the summary -- overrides, counts, the loosening and tightening ids, the
-transition and rule tables, the drift histogram -- never prose (INV-BACKTEST-1).
-Two runs over the same store give the same report, ignoring the id and timestamp.
 
 ## Verification (`sentinel audit verify [--file PATH]`, `GET /v1/audit/verify`)
 

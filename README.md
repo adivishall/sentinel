@@ -10,7 +10,7 @@
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 ![Runs offline](https://img.shields.io/badge/runs_offline-no_API_key-2e8b57)
 ![Runtime deps](https://img.shields.io/badge/runtime_deps-1_(cryptography)-2e6da4)
-![Tests](https://img.shields.io/badge/tests-1011_passing-2e8b57)
+![Tests](https://img.shields.io/badge/tests-1041_passing-2e8b57)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
 [Console (static snapshot)](https://adivishall.github.io/sentinel/) · [Screenshots](#screenshots) · [Evaluation](docs/EVALUATION.md) · [Security model](docs/SECURITY_MODEL.md) · [Limitations](docs/LIMITATIONS.md) · [Interview guide](docs/INTERVIEW.md)
@@ -172,8 +172,8 @@ seeds, method and limitations.
 | **Decision integrity** | structural (0 by construction; a regression check) | attacker text or model output loosening a protected decision | 170 attacks (main 150 + held-out 20); 360 model-recommendation replays (60 main-corpus attacks × 6 recommendations) | the security corpora | **0.0%** (no controls: 83.5%) | [§H](docs/EVALUATION.md#h-decision-integrity-resultsintegrityjson) |
 | **Financial risk** | synthetic benchmark (empirical) | precision / recall / FPR against the generator's scenario labels | seed 42: 3,183 transactions, 157 accounts; two held-out seeds of similar size | dev 42 (point values tuned on it); held-out 7, 2024 | transactions P 86.7% R 67.2% FPR 0.19%; accounts P 90.0% R 90.0% | [§G](docs/EVALUATION.md#g-financial-risk-on-labelled-synthetic-data-resultsfinancialjson) |
 | **Temporal correctness** | synthetic invariant check (empirical; not a proof) | a record dated after T changing a decision at T | 497 transactions; 9 kinds of future record at 4 offsets; 9,443 checks | seeds 42, 7, 11, 23 | **0 observed leaks** (95% upper bound 0.032% per check, 0.60% per sampled transaction) | [§I](docs/EVALUATION.md#i-temporal-correctness-resultstemporaljson) |
-| **Claim classifier** | synthetic, same author; defence in depth, not the foundation | legitimate claims read as their type; the rest held for a human | 117 phrasings; 21 held-out unusual phrasings | hand-authored | held-out: first (blind) run 7/21; 17/21 after the patterns were extended by an author who had seen the misses; FN 4/56, FP 0/28 | [§L](docs/EVALUATION.md#l-claim-classifier-resultsclaimsjson) |
-| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.3237 ms | [PERFORMANCE.md](docs/PERFORMANCE.md) |
+| **Claim classifier** | synthetic, same author; defence in depth, not the foundation | legitimate claims read as their type; the rest held for a human | 117 phrasings; 21 held-out unusual phrasings | hand-authored | held-out: first run 7/21; 17/21 after the patterns were extended by an author who had seen the misses; FN 4/56, FP 0/28 | [§L](docs/EVALUATION.md#l-claim-classifier-resultsclaimsjson) |
+| **Performance** | local benchmark (one machine) | the platform's own latency, offline agent | 500 end-to-end iterations | macOS | dispute pipeline p95 0.3412 ms | [PERFORMANCE.md](docs/PERFORMANCE.md) |
 | **Live LLM** | live-model evaluation | the same suites against a real model | -- | `claude-opus-5-5/effort-low, claude-sonnet-5-5/effort-low` | **NOT RUN** -- no live number is quoted anywhere | [§K](docs/EVALUATION.md#k-model--provider-evaluation-resultsmodelsjson) |
 <!-- /gen:evaluation-categories -->
 
@@ -334,9 +334,9 @@ are `{error, code, request_id}`; no stack trace ever leaves the server.
 <!-- gen:performance -->
 ### Performance (offline, own overhead)
 
-Full protected dispute pipeline: **p50 0.3089 ms · p95 0.3237 ms · 3,213/s**
-sequential single-thread; policy evaluation 0.0187 ms p95 over the composer's real
-27-field context; gateway inspection 0.2347 ms p95 ([all components](docs/PERFORMANCE.md)).
+Full protected dispute pipeline: **p50 0.317 ms · p95 0.3412 ms · 3,111/s**
+sequential single-thread; policy evaluation 0.0194 ms p95 over the composer's real
+27-field context; gateway inspection 0.2401 ms p95 ([all components](docs/PERFORMANCE.md)).
 <!-- /gen:performance -->
 
 ## Limitations

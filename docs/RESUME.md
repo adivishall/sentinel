@@ -16,9 +16,9 @@ transactions, fraud savings or regulatory compliance are claimed.
   merchant onboarding, account security): agents may recommend, but only
   verified facts, a signed and activated policy and a capability registry can
   authorize, and the authoritative decision is computed from a view with no
-  field for untrusted text or model output. Across 170 attacks (main and
-  held-out corpora), attacker text loosened 0.0% of protected decisions, against
-  83.5% with no controls.
+  field for untrusted text or model output. Across 170 synthetic attacks
+  against a simulated agent, attacker text loosened 0.0% of protected decisions (0 by
+  construction, checked by regression tests), against 83.5% with no controls.
 - **Cryptographic provenance and accountable review.** Made every decision state
   what establishes its facts: Ed25519-signed issuer statements verified against
   a trust store (scopes, rotation, revocation, expiry, anti-rollback), signed

@@ -81,7 +81,8 @@ pattern families with a confidence; an abstain goes to a human
 (INSUFFICIENT), a recognised non-claim is UNSUPPORTED; whatever it reads,
 nothing executes unless the selected field supports the claim. A misreading
 is a cost (a human review), not a breach. **SIMULATED:** its benchmark shares its
-author; on 21 held-out unusual phrasings it read 7 on the first, blind run and
+author; on 21 held-out unusual phrasings it read 7 on its first run (already
+partially informed: the set's author knew the classifier) and
 17 after the patterns were extended by someone who had seen the misses --
 partially informed, not a clean benchmark. It is defence in depth.
 
@@ -547,7 +548,8 @@ rate limit -- fine for a demo, not a production edge.
 <!-- gen:interview-financial -->
 They characterise a hand-weighted rule model on a synthetic generator. The
 point values were tuned while looking at seed 42, so the suite also runs two
-seeds they never saw and reports the range (transaction precision
+held-out seeds (not used to set them, though their results were published before
+txn-2.0 was designed) and reports the range (transaction precision
 77.3%–87.8%, recall 65.4%–67.2%). Transaction-level recall is 67.2%
 on the development seed and the misses are burst transactions; a burst's
 first transactions carry no short-window signal, and the account-level monitor

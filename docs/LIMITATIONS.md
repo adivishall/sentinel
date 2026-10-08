@@ -56,7 +56,7 @@ block.
    117-phrasing benchmark that shares its author it reads 100.0% of ordinary legitimate
    paraphrases and never reads attack prose as a claim it does not assert
    (0.0%); ambiguous and contradictory messages abstain. On a **held-out**
-   set of 21 uncommon legitimate phrasings it recognised 7 on the first, blind run
+   set of 21 uncommon legitimate phrasings it recognised 7 on its first run
    and 17 after the patterns were extended against a separate development set --
    partially informed (the author had seen the misses), so 17/21 is not a clean
    independent benchmark; every miss abstains, i.e. goes to a human -- a cost,

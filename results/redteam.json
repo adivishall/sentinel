@@ -796,7 +796,7 @@
     "structured_campaign_recording_api": 0
   },
   "bypasses": [],
-  "seconds": 11.8,
+  "seconds": 12.5,
   "n_attacks": 240,
   "methodology": {
     "kind": "synthetic (seeded black-box search against the offline simulated agent); the bypass count is structural, detector evasion is empirical",
