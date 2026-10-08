@@ -4,7 +4,7 @@ All notable changes to Sentinel. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [Semantic Versioning](https://semver.org/).
 
-## [2.3.0] — unreleased (on the pull-request stack; not yet merged to main)
+## [2.3.0] — 2026-10-09
 
 A trust audit asked why Sentinel should trust the facts it decides on. The answer was
 that nothing proved any of them: trust labels came from code paths, and request-body

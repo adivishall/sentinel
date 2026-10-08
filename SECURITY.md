@@ -1,7 +1,9 @@
 # Security policy
 
 Sentinel is a security project, so findings against it are welcome. It is a
-study project on synthetic data, not a deployed service, and has no SLA.
+study project on synthetic data; the public demo instance (`render.yaml`) is a
+synthetic, ephemeral world behind an API key, not a production service, and
+nothing has an SLA.
 
 ## In scope
 

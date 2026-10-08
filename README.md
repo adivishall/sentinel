@@ -342,7 +342,7 @@ sequential single-thread; policy evaluation 0.0194 ms p95 over the composer's re
 ## Limitations
 
 - Everything is synthetic or offline: the dataset, the scenarios, the KYB
-  records and the agents. No deployment, bank integration, real transaction,
+  records and the agents. No production deployment (the public instance is a synthetic demo), bank integration, real transaction,
   fraud saving or regulatory compliance is claimed.
 - The "no controls" victim is a simulator that shares an author with the
   attack corpus; the live-model row is **not run**.
