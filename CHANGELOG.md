@@ -372,6 +372,24 @@ can be trusted (roadmap issues #11–#20).
 - `sentinel audit checkpoint --sign-key --signer --anchor`, `audit verify --anchor
   [--require-anchored]`, `trust keygen --purpose audit-checkpoint`, `SENTINEL_AUDIT_ANCHOR`.
 
+### Policy backtest (#29)
+- **`sentinel replay backtest`** (`SentinelApp.backtest`, `sentinel/replay/backtest.py`)
+  replays a candidate policy version, risk model or rule threshold over the recorded
+  history (newest `--limit` decisions, one `--workflow` or all) and reports, by decision
+  id: **loosening** -- decisions that executed nothing as recorded but would newly execute
+  a consequential capability under the candidate -- and tightening, every other change
+  with its direction, a transition table (recorded → candidate final action), the rules
+  newly matched or no longer matched, the named drift between record and replay, and
+  every decision that could not be replayed with its reason (a record that disagrees
+  with its audit event, a chain that disagrees with its anchor, a policy without that
+  version or rule). `--fail-on-loosening` exits 3 when the loosening list is not empty:
+  a gate on policy changes in CI. `--json` prints the whole report.
+- Every row goes through the same code path as a single replay (`SentinelApp.replay`
+  is now the recorded wrapper around `_replay`), so a row equals `replay run` for that
+  decision; a backtest records nothing but one audit event of kind `backtest` whose
+  detail is the summary (counts and ids). INV-BACKTEST-1 in `docs/INVARIANTS.md`;
+  `tests/test_backtest.py`. No HTTP route yet.
+
 ### Release audit (2026-10-02)
 A five-perspective audit of the release candidate (security, compliance, README,
 operations, evaluation) found these; each is fixed with a regression test on the

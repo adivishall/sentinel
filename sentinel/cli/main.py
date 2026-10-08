@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from sentinel import __version__
+from sentinel.domain.enums import Workflow
 from sentinel.domain.serialization import to_dict
 
 DEFAULT_DB = os.environ.get("SENTINEL_DB", "data/sentinel.db")
@@ -928,11 +929,7 @@ def cmd_audit(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_replay(args: argparse.Namespace) -> int:
-    app = _app(args)
-    from sentinel.domain.enums import Capability
-    from sentinel.replay.engine import ReplayOverrides
-
+def _rule_overrides(args: argparse.Namespace) -> dict[str, object]:
     rules: dict[str, object] = {}
     for kv in args.rule or []:
         k, _, v = kv.partition("=")
@@ -940,6 +937,17 @@ def cmd_replay(args: argparse.Namespace) -> int:
             rules[k] = int(v)
         except ValueError:
             rules[k] = v
+    return rules
+
+
+def cmd_replay(args: argparse.Namespace) -> int:
+    if args.replay_command == "backtest":
+        return cmd_backtest(args)
+    app = _app(args)
+    from sentinel.domain.enums import Capability
+    from sentinel.replay.engine import ReplayOverrides
+
+    rules = _rule_overrides(args)
     ov = ReplayOverrides(
         args.policy_version,
         args.risk_model,
@@ -967,6 +975,72 @@ def cmd_replay(args: argparse.Namespace) -> int:
         f"Replay {r.replay_id} of {r.decision_id}\n  before: {r.original['final_action']} ({r.original['policy']}, risk {r.original['risk_score']})\n  after:  {r.replayed['final_action']} ({r.replayed['policy']}, risk {r.replayed['risk_score']})\n  {r.explanation}\n  diffs: "
         + (", ".join(f"{d.field}: {d.before} -> {d.after}" for d in r.diffs) or "none"),
     )
+    return 0
+
+
+def cmd_backtest(args: argparse.Namespace) -> int:
+    """``replay backtest``: a candidate policy over the recorded history. Exit 3 with
+    ``--fail-on-loosening`` when any decision would newly execute."""
+    app = _app(args)
+    from sentinel.replay.engine import ReplayOverrides
+
+    ov = ReplayOverrides(args.policy_version, args.risk_model, _rule_overrides(args))
+    report = app.backtest(ov, workflow=args.workflow, limit=args.limit)
+    lines = [
+        f"Backtest {report.backtest_id}: {'; '.join(report.overrides)}"
+        + (f" (workflow {report.workflow})" if report.workflow else ""),
+        f"  {report.considered} decisions considered, {report.replayed} replayed, "
+        f"{len(report.unreplayable)} not replayable; {report.changed} would change",
+    ]
+    lines.append(f"  LOOSENING (would newly execute): {len(report.loosening)}")
+    for o in report.loosening:
+        lines.append(
+            f"    {o.decision_id:<22} {o.workflow:<20} {o.recorded} -> {o.candidate}  "
+            f"executes {o.executed_candidate}"
+            + (f"  drift: {', '.join(o.drift)}" if o.drift else "")
+        )
+    lines.append(f"  tightening (would no longer execute): {len(report.tightening)}")
+    for o in report.tightening:
+        lines.append(
+            f"    {o.decision_id:<22} {o.workflow:<20} {o.recorded} -> {o.candidate}  "
+            f"no longer executes {o.executed_recorded}"
+            + (f"  drift: {', '.join(o.drift)}" if o.drift else "")
+        )
+    other = {k: v for k, v in report.directions.items() if k not in ("loosening", "tightening")}
+    lines.append(
+        "  other changes: " + (", ".join(f"{k} {v}" for k, v in other.items() if v) or "0")
+    )
+    if report.transitions:
+        lines.append(
+            "  transitions: " + "; ".join(f"{k}: {v}" for k, v in report.transitions.items())
+        )
+    if report.rules_removed:
+        lines.append(
+            "  rules no longer matched: "
+            + ", ".join(f"{k} ({v})" for k, v in report.rules_removed.items())
+        )
+    if report.rules_added:
+        lines.append(
+            "  rules newly matched: "
+            + ", ".join(f"{k} ({v})" for k, v in report.rules_added.items())
+        )
+    if report.drift:
+        lines.append(
+            "  drift between record and replay: "
+            + ", ".join(f"{k} ({v})" for k, v in sorted(report.drift.items()))
+        )
+    if report.unreplayable:
+        lines.append(f"  not replayable: {len(report.unreplayable)}")
+        for u in report.unreplayable:
+            lines.append(f"    {u.decision_id:<22} {u.reason}")
+    _out(args, report.to_dict(), "\n".join(lines))
+    if args.fail_on_loosening and report.loosening:
+        print(
+            f"[sentinel] {len(report.loosening)} decision(s) would newly execute under this "
+            "candidate (--fail-on-loosening)",
+            file=sys.stderr,
+        )
+        return 3
     return 0
 
 
@@ -1510,11 +1584,8 @@ def build_parser() -> argparse.ArgumentParser:
     al.add_argument("--action", help="only events with this action, e.g. SERVER_START")
     al.add_argument("--json", action="store_true", help="whole events, including detail")
 
-    rp = (
-        sub.add_parser("replay")
-        .add_subparsers(dest="replay_command", required=True)
-        .add_parser("run")
-    )
+    rps = sub.add_parser("replay").add_subparsers(dest="replay_command", required=True)
+    rp = rps.add_parser("run", help="re-run one recorded decision under other versions")
     rp.add_argument("decision_id")
     rp.add_argument("--policy-version", type=int)
     rp.add_argument("--risk-model")
@@ -1522,6 +1593,26 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("--ai", help="override the recorded AI recommendation")
     rp.add_argument("--ai-capability")
     rp.add_argument("--unguarded", action="store_true")
+    bt = rps.add_parser(
+        "backtest",
+        help="replay a candidate policy over the recorded history: what would change, "
+        "and what would newly execute",
+    )
+    bt.add_argument("--policy-version", type=int)
+    bt.add_argument("--risk-model")
+    bt.add_argument("--rule", action="append", help="rule_id=value threshold override")
+    bt.add_argument(
+        "--workflow",
+        choices=[w.value for w in Workflow],
+        help="only decisions of this workflow (default: every workflow)",
+    )
+    bt.add_argument("--limit", type=int, default=500, help="newest N decisions (default 500)")
+    bt.add_argument(
+        "--fail-on-loosening",
+        action="store_true",
+        help="exit 3 when any decision would newly execute a consequential capability "
+        "(a gate on policy changes in CI)",
+    )
 
     sc = sub.add_parser("scenario").add_subparsers(dest="scenario_command", required=True)
     sc.add_parser("list")

@@ -37,6 +37,7 @@ make lint        # ruff + black --check + mypy over the whole package
 | `test_policy_lint.py` | every lint finding and the exhaustive boundary tests of the shipped policies |
 | `test_model_output_separation.py` | model output never reaches the trusted view, the policy context, evidence or authorization; output-format mimicry is a finding, not a decision |
 | `test_replay_determinism.py` | identical input / facts / configuration / policy / engine reproduce the decision; policy drift, engine drift and the field-level diff against the stored original |
+| `test_backtest.py` | a candidate policy over the recorded history: every row equals the single replay of that decision; the known block-already-refunded example is loosening under v1 and an over-limit threshold is tightening; nothing recorded changes and exactly one `backtest` event is added (INV-BACKTEST-1); unreplayable decisions (a rule the policy lacks, a snapshot that disagrees with its audit event, an anchor mismatch) are counted with their reason; deterministic; the CLI report and the `--fail-on-loosening` gate |
 | `test_audit_indexing.py` | indexed lookups return the same records as a full read; the indexed path never skips tamper detection; checkpoints and signatures |
 | `test_api_path_containment.py` | static file serving cannot escape the console directory |
 | `test_ui_api_contract.py` | the console holds no decision logic and every route it calls exists |

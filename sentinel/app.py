@@ -66,6 +66,7 @@ from sentinel.domain.serialization import to_dict
 from sentinel.observability import METRICS, get_logger, log_decision
 from sentinel.policy.loader import DEFAULT_REGISTRY, PolicyIntegrityError
 from sentinel.presets import ATTACKS, SCENARIOS
+from sentinel.replay.backtest import BacktestReport
 from sentinel.replay.engine import ReplayEngine, ReplayOverrides, ReplayResult
 from sentinel.risk import account_security, monitoring, scoring
 from sentinel.risk import transaction as txn_risk
@@ -1885,6 +1886,60 @@ class SentinelApp:
         return stmt
 
     def replay(self, decision_id: str, overrides: ReplayOverrides) -> ReplayResult:
+        """One what-if replay, recorded: a replay record and an audit event of kind
+        ``replay``, never a change to the decision it replays (INV-REPLAY-1)."""
+        r = self._replay(decision_id, overrides)
+        if self.runtime.persist:
+            payload = r.to_dict()
+            self.store.save_replay(r.replay_id, decision_id, r.changed, r.created_at, payload)
+            self.runtime.audit.append(
+                actor="sentinel",
+                workflow=r.replayed_decision.workflow.value,
+                action=f"REPLAY:{r.replayed['final_action']}",
+                decision_id=decision_id,
+                subject_id=r.replay_id,
+                policy_id=r.replayed_decision.policy.policy_id,
+                policy_version=r.replayed_decision.policy.version,
+                kind="replay",
+                detail={
+                    "overrides": r.overrides,
+                    "changed": r.changed,
+                    "policy_drift": r.policy_drift,
+                    "original_drift": r.original_drift,
+                    "record_verified": r.record_verified,
+                    "facts_signature_now": r.facts.get("signature_now"),
+                },
+            )
+        return r
+
+    def backtest(
+        self, overrides: ReplayOverrides, *, workflow: str | None = None, limit: int = 500
+    ) -> BacktestReport:
+        """A candidate policy replayed over the recorded history
+        (``sentinel.replay.backtest``): every row is what ``replay`` returns for that
+        decision. A what-if: no decision, snapshot, replay record or audit event changes;
+        exactly one audit event of kind ``backtest`` is appended (INV-BACKTEST-1)."""
+        from sentinel.replay.backtest import backtest as run_backtest
+
+        report = run_backtest(self, overrides, workflow=workflow, limit=limit)
+        if self.runtime.persist:
+            self.runtime.audit.append(
+                actor="sentinel",
+                workflow=report.workflow or "system",
+                action="BACKTEST",
+                subject_id=report.backtest_id,
+                kind="backtest",
+                detail=report.summary(),
+            )
+        return report
+
+    def _replay(
+        self, decision_id: str, overrides: ReplayOverrides, *, anchored: Anchoring | None = None
+    ) -> ReplayResult:
+        """The replay itself, with nothing written: the recorded side anchored to the
+        decision's audit event, the facts re-verified, the event's anchoring status.
+        ``anchored`` lets a backtest check the chain against its anchor once for every
+        decision instead of once per decision."""
         original = self.store.decision(decision_id)
         snap = self.store.decision_snapshot(decision_id)
         if original is None or snap is None:
@@ -1907,7 +1962,7 @@ class SentinelApp:
         r = replace(
             r, facts=self._reverify_facts(snap, ev.to_dict() if ev else None, r.record_verified)
         )
-        anchored = self.audit_anchoring()
+        anchored = anchored if anchored is not None else self.audit_anchoring()
         status = anchored.for_event(ev.sequence if ev else None)
         r = replace(r, anchoring={**anchored.to_dict(), "decision_event": status})
         if status == "anchor_mismatch":
@@ -1916,27 +1971,6 @@ class SentinelApp:
                 record_verified=False,
                 record_issues=r.record_issues
                 + ("the audit chain disagrees with its anchored checkpoints",),
-            )
-        if self.runtime.persist:
-            payload = r.to_dict()
-            self.store.save_replay(r.replay_id, decision_id, r.changed, r.created_at, payload)
-            self.runtime.audit.append(
-                actor="sentinel",
-                workflow=r.replayed_decision.workflow.value,
-                action=f"REPLAY:{r.replayed['final_action']}",
-                decision_id=decision_id,
-                subject_id=r.replay_id,
-                policy_id=r.replayed_decision.policy.policy_id,
-                policy_version=r.replayed_decision.policy.version,
-                kind="replay",
-                detail={
-                    "overrides": r.overrides,
-                    "changed": r.changed,
-                    "policy_drift": r.policy_drift,
-                    "original_drift": r.original_drift,
-                    "record_verified": r.record_verified,
-                    "facts_signature_now": r.facts.get("signature_now"),
-                },
             )
         return r
 

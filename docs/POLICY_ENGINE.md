@@ -163,6 +163,13 @@ stay loadable only so a recorded decision can be replayed under the policy it
 was made with, or compared with another; replay, the attack simulator and
 scenario runs are **what-ifs** and are never recorded as decisions.
 
+Before a new version is signed and activated, `sentinel replay backtest
+--policy-version N --workflow W` replays the recorded history under it and lists
+every decision that would change -- above all the ones that would **newly
+execute** a consequential capability (`docs/AUDIT_MODEL.md`, "Backtest");
+`--fail-on-loosening` makes that a gate. A backtest records nothing but one
+audit event describing itself.
+
 | Policy | Active (authoritative) | Historical (replay / what-if only) |
 |---|---|---|
 | `account-security` | v2 | v1 |

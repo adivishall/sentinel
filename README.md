@@ -150,7 +150,7 @@ monitoring cycle finder is bounded to 30 days ([details](docs/EVALUATION.md#g-fi
 | **Capability registry** | per capability: risk, reversibility, allowed actors, review level and the workflows that may execute it; no AI actor may execute a consequential capability, and a login decision can never approve a refund | [capability matrix](docs/SECURITY_MODEL.md#capability-security-matrix) |
 | **Evaluation authority** | only a run with every control, the active policy and the active risk model is recorded; what-ifs (replay, the attack simulator) never persist | [authority](docs/SECURITY_MODEL.md#evaluation-authority-sentineldecisionauthoritypy) |
 | **Human review** | only an **authenticated** reviewer resolves a case: identity, role and authority limit come from a credential, never the request; four eyes where the registry asks; a policy BLOCK is final for everyone; every action is chained | [case lifecycle](docs/SECURITY_MODEL.md#case-lifecycle-sentinelcasesservicepy) |
-| **Audit and replay** | a **tamper-evident application audit chain** (not a blockchain, not an immutable ledger): SHA-256-chained events that store hashes, never prose, with **Ed25519 checkpoints in an append-only anchor** (`anchored` / `not_anchored` / `anchor_mismatch` per decision); replay re-runs any decision and names its drift; a decision's full lineage in one view | [AUDIT_MODEL](docs/AUDIT_MODEL.md) |
+| **Audit and replay** | a **tamper-evident application audit chain** (not a blockchain, not an immutable ledger): SHA-256-chained events that store hashes, never prose, with **Ed25519 checkpoints in an append-only anchor** (`anchored` / `not_anchored` / `anchor_mismatch` per decision); replay re-runs any decision and names its drift; a **backtest** replays a candidate policy over the recorded history and lists what would newly execute; a decision's full lineage in one view | [AUDIT_MODEL](docs/AUDIT_MODEL.md) |
 | **Secure by default** | loopback unless an API key (or an explicit, audited `--insecure-demo`); JSON-only, same-origin POSTs and a Host check against DNS rebinding; the configuration a server ran with is chained into the audit log | [DEPLOYMENT](docs/DEPLOYMENT.md) |
 
 Every consequential capability is traced from input to audit in
@@ -274,6 +274,7 @@ make docs             # re-render every published number and code table
 make data && make analyze && sentinel --db data/sentinel.db serve   # a persistent world
 sentinel --db data/sentinel.db audit verify
 sentinel --db data/sentinel.db replay run DEC-… --policy-version 1
+sentinel --db data/sentinel.db replay backtest --policy-version 1 --workflow dispute --fail-on-loosening
 ```
 
 ## API

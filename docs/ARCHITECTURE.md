@@ -68,7 +68,7 @@ AUTHORITATIVE_DECISION ≠ f(MODEL_OUTPUT)
                             ▼
                     ┌───────────────┐
                     │ Audit / Case  │  tamper-evident audit chain + signed
-                    │ / Replay      │  checkpoints; replay from input snapshots
+                    │ / Replay      │  checkpoints; replay and backtest from input snapshots
                     └───────────────┘
 ```
 
