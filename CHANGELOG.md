@@ -390,6 +390,23 @@ can be trusted (roadmap issues #11–#20).
   detail is the summary (counts and ids). INV-BACKTEST-1 in `docs/INVARIANTS.md`;
   `tests/test_backtest.py`. No HTTP route yet.
 
+### Deployment (final sprint, 2026-10-09)
+- **A public deployment configuration**: `render.yaml`, a Render blueprint for the
+  same Docker image -- HTTPS at Render's edge, a health check on `/health`, redeploy
+  on push, the free plan, and secure mode: `SENTINEL_API_KEY` is generated as a secret,
+  so the image starts, every data route needs the key and the console asks for it
+  once; `/health`, `/version` and the console's code stay public. The store is in
+  memory and synthetic (the free plan has no disk); demo mode is one documented
+  env-var change. `docs/DEPLOYMENT.md`, "Public deployment (Render)".
+- **Demo reviewers behind a key.** The two demo reviewer credentials (alice, sam) are
+  issued for an ephemeral (`:memory:`) store on a loopback bind, under
+  `--insecure-demo`, *or* behind an API key -- a public demo needs them for the
+  console's case form, and the credentials go to the operator's log. A persistent
+  store never gets them (`tests/test_ops_hardening.py`).
+- OCI labels on the image (title, description, source, licence).
+- `docs/INTERVIEW.md`: twenty one-paragraph answers, each pointing at the longer one
+  or at the code, including the two most serious defects found and how.
+
 ### Release audit (2026-10-02)
 A five-perspective audit of the release candidate (security, compliance, README,
 operations, evaluation) found these; each is fixed with a regression test on the

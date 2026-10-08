@@ -3421,8 +3421,13 @@ field-level diff and a named `drift`: policy content, risk-model configuration
 release artifact, audit anchor, fact signature (re-verified now: a key revoked
 since shows). The recorded side is read from the audit event, and the original
 is never changed (INV-REPLAY-1). It proves what another rule *would* have done
-and whether the record still matches what was audited. **NOT IMPLEMENTED:**
-bulk backtesting over a history; scheduled drift monitoring.
+and whether the record still matches what was audited. A **backtest**
+(`sentinel replay backtest --policy-version N`) is the same replay over the
+recorded history: which decisions would change, which would *newly execute* a
+consequential capability (the loosening list, which `--fail-on-loosening`
+turns into a CI gate on policy changes), which cannot be replayed and why; one
+`backtest` audit event, nothing recorded changed (INV-BACKTEST-1).
+**NOT IMPLEMENTED:** scheduled drift monitoring.
 
 **8. What can Sentinel actually guarantee?**
 **IMPLEMENTED, structural and tested** (`docs/INVARIANTS.md`): no consequential

@@ -277,6 +277,19 @@ sentinel --db data/sentinel.db replay run DEC-… --policy-version 1
 sentinel --db data/sentinel.db replay backtest --policy-version 1 --workflow dispute --fail-on-loosening
 ```
 
+## Deployment
+
+Three ways, one engine ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)):
+
+| | What | Exposure |
+|---|---|---|
+| **Local** | `make api`: loopback, in-memory demo world, no key | your machine only |
+| **Docker** | `make docker-build && make docker-run`: `python:3.11-slim`, non-root, `HEALTHCHECK`, a `/data` volume; CI builds the image and checks `/health`, the console and `/v1/system` on every push | the image **refuses to start** on a network address without `SENTINEL_API_KEY` (or an explicit, audited `SENTINEL_INSECURE_DEMO=1`) |
+| **Public** | `render.yaml`: a Render blueprint for the same image, HTTPS, health check, redeploy on push, the API key generated as a secret; synthetic, ephemeral data | `/health`, `/version` and the console's code are public; every data route needs the key |
+
+The static console at [adivishall.github.io/sentinel](https://adivishall.github.io/sentinel/)
+is a read-only snapshot of what the engine computed, with no API behind it.
+
 ## API
 
 Production-shaped calls name records by id; the facts are read from the record

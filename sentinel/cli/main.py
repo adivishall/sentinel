@@ -1107,7 +1107,11 @@ def cmd_serve(args: argparse.Namespace) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 2
     app = _app(args)
-    demo_ok = is_loopback(args.host) or insecure
+    # an ephemeral store is a demo world whatever the bind: the two demo reviewers exist on a
+    # loopback bind, under --insecure-demo, or behind an API key (a public demo on a host:
+    # the credentials go to the operator's log, the API needs the key, and the world is
+    # synthetic); never on a persistent store, which needs a real reviewer registry
+    demo_ok = is_loopback(args.host) or insecure or bool(api_key())
     if not app.reviewers.reviewers() and app.store.path == ":memory:" and demo_ok:
         # the in-memory demo gets two demo reviewers; their credentials exist only in this
         # process and are printed once, for the console's case-review form

@@ -217,6 +217,119 @@ trained risk model as an extra signal; regulatory review. None of it is
 claimed.
 <!-- /gen:interview-core -->
 
+## Twenty questions, one paragraph each
+
+Short answers, each pointing at the longer one above or at the code. Say what is
+simulated before you are asked.
+
+1. **What problem does Sentinel solve?** A high-impact financial decision --
+   refund, payment, onboarding, account action -- reads attacker-controlled
+   information through legitimate channels, and an AI agent in the loop can be
+   talked into it. Sentinel makes the authoritative decision a function of trusted
+   facts, deterministic policy and authorization, with no field for the
+   attacker's prose or the model's output (README, "Core principle").
+2. **Why not trust the LLM?** Its output is a function of its input, and the
+   attacker writes part of the input; it cannot be replayed or audited like a
+   rule. It recommends; the recommendation is recorded and never read by the
+   decision (Q1; INV-CAP-1).
+3. **Why is provenance necessary?** Because "the ledger says refunded" is only
+   worth what established it. A fact's provenance -- who stated it, through which
+   channel, verified against what -- decides how far it may carry: a request-body
+   fact is `UNTRUSTED` and goes to a human; a signed, verified statement may
+   execute (Q10; INV-PROV-1/2).
+4. **How does a signed fact envelope work?** An issuer signs canonical JSON of the
+   record with Ed25519, domain-separated, as a `sentinel.fact/1` envelope: kind,
+   subject, sequence, issued/expires, key id, payload digest. Verification runs in
+   a fixed fail-closed order: shape and digest, kind and subject binding, the
+   signer in the trust store (purpose, scope), the signature, revocation and
+   validity window, skew / lifetime / expiry, anti-rollback (`sentinel/trust/facts.py`).
+5. **What prevents a caller from fabricating "trusted" facts?** Trust is computed
+   by the workflow, never read from the request: a body fact is `UNTRUSTED` by
+   construction; a forged envelope fails verification; a statement about one
+   subject cannot be re-pointed at another; a stored row that differs from its
+   statement is `INVALID`; the capability registry holds a floor no policy can
+   lower (`tests/test_fact_provenance.py`, `tests/test_policy_provenance.py`).
+6. **What prevents reviewer spoofing?** Identity comes only from a credential in
+   the operator's registry (stored as SHA-256, compared in constant time); case
+   routes refuse identity fields in the body; reserved ids (`sentinel`, `system`,
+   a model) cannot be registered; the audit chain records the resolved identity,
+   never the token (Q12; INV-REVIEW-1/3).
+7. **Why are deterministic policies necessary?** So the same inputs always give the
+   same outcome, so an outcome can be explained by the rules it matched, replayed
+   under another version, backtested before activation, and signed as a release.
+   A model's judgement cannot be any of those (`docs/POLICY_ENGINE.md`).
+8. **Why are capabilities separate from recommendations?** A recommendation is a
+   string from the model; a capability is a registered consequential action with
+   an actor table, a fact-provenance floor and a four-eyes requirement. The
+   registry answers "who may execute this, from which workflow", and the model is
+   not an actor in it (`sentinel/policy/capabilities.py`; INV-CAP-1).
+9. **How does replay differ from backtesting?** Replay re-runs one recorded
+   decision from its snapshot under other versions and diffs it against what was
+   audited. A backtest is that replay over the recorded history: which decisions
+   change, which would newly execute (loosening), which cannot be replayed and
+   why; it records one audit event and changes nothing (Q7; INV-REPLAY-1,
+   INV-BACKTEST-1).
+10. **How is temporal leakage prevented?** Every feature is computed as of the
+    decision time: timestamped graph edges, `status_since`, bank accounts held at
+    T; a benchmark re-scores 9,443 checks against later records and found 0
+    leaks -- and found two current-state reads in 2.2.0, since fixed (Q4;
+    INV-TEMP-1).
+11. **How does the audit chain work?** Each event's hash covers its body and the
+    previous hash; prose is hashed before it is stored; verification names the
+    first bad record. An Ed25519 checkpoint in an append-only anchor fixes the
+    prefix it covers, so a consistent rewrite below it is detected and a decision
+    after it is reported `not_anchored`, never `anchored` (Q6; INV-AUDIT-1/2).
+12. **What happens when a policy changes?** A new version file; a signed release
+    naming the document's digest; an activation with a sequence and an effective
+    time. Before that, a backtest; after it, every decision records the version
+    and release it ran under, and replay shows what the old version would have
+    done. Rolling back is a new, higher activation; removing the newest one is
+    refused (Q15).
+13. **How does policy signing work?** `RELEASES.json` holds Ed25519 statements over
+    the manifest digest of each version, verified against a trust root outside
+    the policy directory (`SENTINEL_POLICY_TRUST`); an edited document no longer
+    matches its release and cannot decide; with signing required, an unsigned
+    version is never recorded as authoritative (INV-POLICY-1;
+    `docs/DEPLOYMENT.md`, "Policy releases").
+14. **What happens if required evidence is missing?** The claim is `INSUFFICIENT`:
+    policy routes it to a human (`review-insufficient-evidence`), the capability
+    floor refuses execution, and a reviewer may approve within their authority.
+    Missing never means allowed (`tests/test_evidence.py`, `tests/test_composer.py`).
+15. **How does fail-closed behaviour work?** Every check that cannot complete
+    refuses: an unreadable key file refuses every request, a malformed trust store
+    or reviewer registry refuses to load, a policy with an unverifiable release
+    does not decide, a malformed request is a 4xx, a corrupt audit record stops
+    appends, an anchor mismatch makes a backtest replay nothing (INV-API-1,
+    INV-DEPLOY-1, `docs/FAILURE_ANALYSIS.md`).
+16. **What was the most serious security bug found during development?** Two,
+    both in structured channels, neither in text: `"DSP-000002\n"` with a body
+    ledger passed the id grammar (`re.match` with `$` accepts a final newline),
+    opened a case on a dispute already refunded, and a human approval paid it
+    again; and body records naming a stored merchant opened an onboarding case
+    one reviewer could approve, once per spelling of the id
+    (`docs/FAILURE_ANALYSIS.md` #10, #12).
+17. **How was it discovered?** By reading the code against its invariants, not by
+    the automated search: the red team's mutation search found cosmetic defects;
+    the two bypasses came from an adversarial review of the id grammar and of the
+    held-record check (same document, "Patterns").
+18. **How was it fixed?** `fullmatch` on every grammar; the held-record check
+    extended to merchants and made case-insensitive; a unique, case-insensitive
+    index on the execution ledger; the composer treats a repeat on an executed
+    subject as a denial, not a case. Each fix has a regression test that failed
+    before it (`08fd230`, `925ae6c`).
+19. **What tradeoffs were made?** Standard library over frameworks (one runtime
+    dependency, an `http.server` that needs a TLS proxy in front); SQLite and an
+    in-memory graph over a database (one process); a deterministic offline agent
+    over a live model in the evaluation (reproducible, but every "persuaded
+    agent" number is simulated); synthetic data over real data (reproducible,
+    but the labels are the generator's); hand-authored corpora that share an
+    author with the detector (`docs/LIMITATIONS.md`).
+20. **What would be the next production step?** Adapters for the real systems of
+    record behind the provider interfaces, issuers signing real statements, SSO
+    for reviewers, a release pipeline with multi-party sign-off, an anchor nobody
+    can delete from, a real server behind a TLS proxy, and a live-model evaluation
+    on the operator's key -- in that order of leverage (Q17).
+
 ## Architecture
 
 **Why a modular monolith?**
