@@ -13,6 +13,7 @@ from sentinel.security.gateway import GATEWAY
 from sentinel.security.provenance import UntrustedContent
 from sentinel.security.trust_boundary import DisputeFacts, UntrustedText
 from sentinel.trust import local
+from tests.reviewers import ANALYST, SENIOR
 
 
 def _decision(text, ledger, ai_action="approve_refund", ai_cap=Capability.APPROVE_REFUND):
@@ -92,27 +93,29 @@ def test_lifecycle_and_human_decision():
     c = svc.open_for_decision(d, entities=("account:ACC-1",))
     assert c and c.status is CaseStatus.WAITING_HUMAN and "account:ACC-1" in c.entities
     assert c.decision_ids == (d.decision_id,) and c.events[0].kind == "created"
-    c = svc.transition(c.case_id, CaseStatus.INVESTIGATING, actor="analyst")
+    c = svc.transition(c.case_id, CaseStatus.INVESTIGATING, by=ANALYST)
     with pytest.raises(InvalidTransition):
-        svc.transition(c.case_id, CaseStatus.OPEN, actor="analyst")
+        svc.transition(c.case_id, CaseStatus.OPEN, by=ANALYST)
     c = svc.record_human_decision(
-        c.case_id, reviewer="senior", outcome="approve", note="verified with courier"
+        c.case_id, by=SENIOR, outcome="approve", note="verified with courier"
     )
+    assert c.status is CaseStatus.INVESTIGATING  # 185,000: four eyes -- a second reviewer
+    c = svc.record_human_decision(c.case_id, by=ANALYST, outcome="approve", note="agreed")
     assert (
         c.status is CaseStatus.RESOLVED
         and c.resolution == "approve"
         and c.human_decisions[0].reviewer == "senior"
     )
     with pytest.raises(InvalidTransition):
-        svc.transition(c.case_id, CaseStatus.INVESTIGATING, actor="analyst")
+        svc.transition(c.case_id, CaseStatus.INVESTIGATING, by=ANALYST)
     with pytest.raises(ValueError):
-        svc.record_human_decision(c.case_id, reviewer="x", outcome="maybe")
+        svc.record_human_decision(c.case_id, by=ANALYST, outcome="maybe")
     assert svc.list()[0].case_id == c.case_id and svc.list(status=CaseStatus.OPEN) == []
 
 
 def test_manual_case():
     svc = CaseService()
-    c = svc.open_manual(Workflow.INVESTIGATION, "manual look", ("account:A",))
+    c = svc.open_manual(Workflow.INVESTIGATION, "manual look", ("account:A",), by=ANALYST)
     assert c.status is CaseStatus.OPEN and c.decision_ids == ()
     with pytest.raises(KeyError):
-        svc.get_or_fail = svc.transition("nope", CaseStatus.TRIAGE, actor="a")
+        svc.get_or_fail = svc.transition("nope", CaseStatus.TRIAGE, by=ANALYST)

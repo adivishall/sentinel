@@ -17,7 +17,7 @@ One `AuditEvent` per recorded event, of three kinds: `decision` (every
 authoritative decision; the case it opened is linked to it), `case` (every
 human case action: a case opened by hand `CASE_OPENED`, a status change
 `CASE_<STATUS>`, a human decision `HUMAN_APPROVE` / `HUMAN_DENY` /
-`HUMAN_ESCALATE`, with the declared role and hashes of any note or title) and
+`HUMAN_ESCALATE`, with the reviewer id, role, credential id and authority limit the reviewer registry resolved -- never the credential -- and hashes of any note or title) and
 `replay`. What-if runs are never chained. The hash covers every field except
 the two hashes: `event_id`, `sequence`, `timestamp`, `decision_id`, `actor`, `workflow`, `subject_id`, `risk_score`, `risk_level`, `policy_id`, `policy_version`, `capability`, `action`, `evidence_ids`, `security_severity`, `input_hash`, `case_id`, `kind`, `detail`.
 `event_hash = SHA-256(canonical_json(body) ‖ previous_hash)`; the first

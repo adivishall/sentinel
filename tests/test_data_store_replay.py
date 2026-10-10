@@ -11,6 +11,7 @@ from sentinel.domain.enums import Capability, CaseStatus, FactsSource, FinalActi
 from sentinel.policy import DEFAULT_REGISTRY
 from sentinel.replay.engine import ReplayEngine, ReplayOverrides
 from sentinel.security.provenance import UntrustedContent
+from tests.reviewers import ANALYST
 
 
 def test_generator_is_deterministic_and_coherent():
@@ -112,7 +113,7 @@ def test_sqlite_backed_audit_and_cases_survive_reopen(tmp_path):
         and c.status is CaseStatus.WAITING_HUMAN
         and c.audit_event_ids == (b.audit_event.event_id,)
     )
-    rt2.cases.transition(c.case_id, CaseStatus.INVESTIGATING, actor="a")
+    rt2.cases.transition(c.case_id, CaseStatus.INVESTIGATING, by=ANALYST)
     assert rt2.cases.get(c.case_id).status is CaseStatus.INVESTIGATING
     # tamper directly in the database -> verification fails
     store2._exec(

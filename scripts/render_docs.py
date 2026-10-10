@@ -1715,12 +1715,41 @@ opens: {need_rows}; and the registry must allow the approval for that
 reviewer's actor kind given the recorded policy outcome and evidence (a policy
 BLOCK or CONTRADICTED records cannot be approved by anyone; a claim the
 classifier could not read -- INSUFFICIENT -- can). Denying or escalating needs
-any human; once escalated, the case is decided by a SENIOR_REVIEWER. Every
+any human; once escalated -- by a decision or by a status change -- the case
+is moved on and decided only by a SENIOR_REVIEWER, and it stays handed up
+when it moves back to investigation. Every
 human action -- a manual case, a status change, a decision -- is appended to
 the audit chain before the case is saved (notes and titles hashed), so a
 resolution cannot be written into the case table without a chained record.
-The reviewer's name and level are *declared* -- there is no identity system
-(`docs/LIMITATIONS.md`).
+**Who acts is authenticated, not declared** (`sentinel/cases/identity.py`).
+
+- **The registry.** A reviewer registry is operator configuration
+  (`SENTINEL_REVIEWERS`), apart from the case data. It holds each reviewer's
+  id, role, authority limit, active flag and one random 256-bit credential,
+  stored only as its SHA-256.
+- **Resolving the reviewer.** A case action presents the credential
+  (`X-Reviewer-Token`, or `SENTINEL_REVIEWER_TOKEN` for the CLI). The id,
+  role and limit on the record come from the registry. A request body that
+  names a reviewer, role or actor is refused.
+- **Approving** also needs:
+  - an authority limit that covers the case amount (account-security cases
+    carry no amount: they are bounded by role and by four eyes);
+  - four eyes where the capability registry asks for it (`dual_approval_at`):
+    two distinct reviewers must approve before the case resolves. One
+    identity cannot supply both, a deny resolves, an escalation of either
+    kind restarts the count, and an approval by a reviewer whose credential
+    has since been deactivated no longer counts. A case needs never fewer
+    approvals than the registry asks for its amount, whatever its stored
+    count says.
+- **The registry file is typed.** Every field has one type, the credential
+  id is derived from the credential's digest (it cannot be blank, shared or
+  the token itself), and an id with a reserved word or a model name as any
+  component (`sentinel-bot`, `ai-reviewer`, `claude`, `gpt-4o`) is refused.
+  The name check is hygiene for the audit trail, not the control: authority
+  comes from the credential the operator issued.
+- **Executing.** The deciding approval executes the case's capability, so it
+  claims the same once-per-subject key a decision would; a first of two
+  approvals executes nothing.
 
 ## Threat taxonomy ({len(TAXONOMY)} classes)
 
@@ -2774,7 +2803,7 @@ One `AuditEvent` per recorded event, of three kinds: `decision` (every
 authoritative decision; the case it opened is linked to it), `case` (every
 human case action: a case opened by hand `CASE_OPENED`, a status change
 `CASE_<STATUS>`, a human decision `HUMAN_APPROVE` / `HUMAN_DENY` /
-`HUMAN_ESCALATE`, with the declared role and hashes of any note or title) and
+`HUMAN_ESCALATE`, with the reviewer id, role, credential id and authority limit the reviewer registry resolved -- never the credential -- and hashes of any note or title) and
 `replay`. What-if runs are never chained. The hash covers every field except
 the two hashes: {fields_md}.
 `event_hash = SHA-256(canonical_json(body) ‖ previous_hash)`; the first
@@ -3168,14 +3197,24 @@ authenticated service calls with freshness checks, and record per fact the
 source system and record version.
 
 **12. How would reviewer authentication work?**
-**IMPLEMENTED:** the registry defines the level each capability needs; the case
-service refuses system and model names, checks the declared level and the
-registry's answer for a human actor, requires a senior once a case is
-escalated, and chains every human action with the declared role. **NOT
-IMPLEMENTED:** identity. Production would take the reviewer from an
-authenticated session (SSO / OIDC), roles from the identity provider rather
-than the request body, four-eyes approval (two distinct reviewers) above a
-threshold, and record the authenticated principal in the audit event.
+**IMPLEMENTED:**
+- A reviewer registry (operator configuration) holds id, role, authority
+  limit and an active flag. Its bearer credentials are stored only as SHA-256
+  and matched in constant time.
+- Every case action resolves who acts from the credential. A body naming a
+  reviewer or role is refused.
+- Approvals check the capability registry's level, the reviewer's authority
+  limit and, where the registry asks, four eyes: two distinct reviewers
+  before a case resolves.
+- Every human action is chained with the resolved reviewer id and credential
+  id.
+
+**NOT IMPLEMENTED:**
+- SSO / OIDC: the credential is a bearer token Sentinel issues, not a
+  session from the institution's identity provider.
+- Credential expiry and rotation schedules, and TLS termination (issue #20).
+- Binding a reviewer to the subjects they may not review, such as their own
+  account.
 
 **13. Why not just use a fraud model?**
 A fraud model answers "does this payment look like fraud?", not "is this

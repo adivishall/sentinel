@@ -25,7 +25,8 @@ class HumanDecision:
     outcome: str  # approve | deny | escalate
     note: str
     created_at: str
-    role: str = "HUMAN_REVIEWER"  # declared by the reviewer; see LIMITATIONS (no identity)
+    role: str = "HUMAN_REVIEWER"  # resolved from the reviewer registry, never declared
+    credential_id: str = ""  # the credential the action was authenticated with
 
 
 @dataclass(frozen=True)
@@ -59,3 +60,6 @@ class Case:
     evidence_verdict: str | None = None
     facts_provenance: str | None = None  # ProvenanceStatus of the decision's primary record
     subject_id: str | None = None  # what the decision was about (for execution idempotency)
+    amount: int = 0  # the decision's amount: checked against each approver's authority limit
+    # distinct reviewers who must approve before the case resolves approved (four-eyes)
+    approvals_required: int = 1

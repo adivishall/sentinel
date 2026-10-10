@@ -47,6 +47,8 @@ SENTINEL_FORCE_OFFLINE=0 sentinel eval run --suite models   # same corpus, real 
 | `SENTINEL_AUDIT_KEY` | unset | if set, `sentinel audit checkpoint` signs the exported checkpoint with HMAC-SHA256 and `audit verify --checkpoint` authenticates it; keep the key and the checkpoint outside the audit store |
 | `SENTINEL_TRUST_STORE` | unset (nothing trusted) | trust store JSON: the public keys of the issuers whose signed fact envelopes Sentinel accepts (`sentinel trust keygen`, `docs/SECURITY_MODEL.md`). Keep it outside any directory the data or policies live in |
 | `SENTINEL_REQUIRE_SIGNED_FACTS` | off (on for the in-memory demo) | every record read by id must come with its issuer's signed statement; a missing one is `INVALID` |
+| `SENTINEL_REVIEWERS` | unset (nobody can act on cases; the in-memory demo prints two demo credentials) | reviewer registry JSON: who may act on cases, their role and authority limit, their credential's SHA-256 (`sentinel reviewers add`). Keep it outside the data directory |
+| `SENTINEL_REVIEWER_TOKEN` | — | the CLI's reviewer credential for `case transition` / `case decide` |
 | `SENTINEL_LOG` | `WARNING` | `INFO` for structured per-decision JSON logs |
 | `PORT` | `8000` | listen port |
 

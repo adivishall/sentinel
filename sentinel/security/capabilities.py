@@ -51,6 +51,11 @@ class CapabilitySpec:
     # REVOKED) denies. Policy may demand more (e.g. VERIFIED_EXTERNAL above an amount);
     # this floor holds under every policy version.
     min_fact_provenance: ProvenanceStatus | None = None
+    # Four-eyes: from this amount up (0 = always), two distinct reviewers must approve.
+    dual_approval_at: int | None = None
+
+    def approvals_required(self, amount: int) -> int:
+        return 2 if self.dual_approval_at is not None and amount >= self.dual_approval_at else 1
 
     def __post_init__(self) -> None:
         if self.consequential and self.min_fact_provenance is None:
@@ -85,8 +90,11 @@ def _spec(
     actors: frozenset[ActorKind],
     threshold: int | None,
     desc: str,
+    dual_approval_at: int | None = None,
 ) -> CapabilitySpec:
-    return CapabilitySpec(cap, risk, irreversible, financial, auth, actors, threshold, desc)
+    return CapabilitySpec(
+        cap, risk, irreversible, financial, auth, actors, threshold, desc, None, dual_approval_at
+    )
 
 
 REGISTRY: dict[Capability, CapabilitySpec] = {
@@ -169,6 +177,7 @@ REGISTRY: dict[Capability, CapabilitySpec] = {
         actors=_SYSTEM_AND_HUMANS,
         threshold=50_000,
         desc="Pay a refund to the cardholder. Money leaves.",
+        dual_approval_at=100_000,
     ),
     Capability.APPROVE_TRANSACTION: _spec(
         Capability.APPROVE_TRANSACTION,
@@ -179,6 +188,7 @@ REGISTRY: dict[Capability, CapabilitySpec] = {
         actors=_SYSTEM_AND_HUMANS,
         threshold=150_000,
         desc="Authorise a payment to proceed.",
+        dual_approval_at=500_000,
     ),
     Capability.APPROVE_MERCHANT: _spec(
         Capability.APPROVE_MERCHANT,
@@ -219,6 +229,7 @@ REGISTRY: dict[Capability, CapabilitySpec] = {
         actors=_HUMANS,
         threshold=0,
         desc="Change where money is paid out to. Classic account-takeover target.",
+        dual_approval_at=0,
     ),
     Capability.RELEASE_FUNDS: _spec(
         Capability.RELEASE_FUNDS,
@@ -229,6 +240,7 @@ REGISTRY: dict[Capability, CapabilitySpec] = {
         actors=frozenset({ActorKind.SENIOR_REVIEWER}),
         threshold=0,
         desc="Release held funds. Senior human only.",
+        dual_approval_at=0,
     ),
     Capability.CLOSE_CASE: _spec(
         Capability.CLOSE_CASE,
@@ -249,6 +261,7 @@ REGISTRY: dict[Capability, CapabilitySpec] = {
         actors=frozenset({ActorKind.SENIOR_REVIEWER}),
         threshold=None,
         desc="Override a computed risk score.",
+        dual_approval_at=0,
     ),
     Capability.SKIP_REVIEW: _spec(
         Capability.SKIP_REVIEW,
@@ -323,6 +336,7 @@ def matrix() -> list[dict[str, Any]]:
                 "required_authorization": s.required_authorization.value,
                 "human_review_threshold": s.human_review_threshold,
                 "requires_verified_evidence": s.consequential,
+                "dual_approval_at": s.dual_approval_at,
                 "min_fact_provenance": (
                     s.min_fact_provenance.value if s.min_fact_provenance is not None else None
                 ),

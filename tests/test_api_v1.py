@@ -11,11 +11,16 @@ from sentinel.api.server import make_server
 from sentinel.app import SentinelApp
 from sentinel.domain.enums import FactKind
 from tests.records import ledger
+from tests.reviewers import registry
+
+REG, TOKENS = registry(("analyst", "HUMAN_REVIEWER", 10**9), ("senior", "SENIOR_REVIEWER", 10**9))
+AS_ANALYST = {"X-Reviewer-Token": TOKENS["analyst"]}
+AS_SENIOR = {"X-Reviewer-Token": TOKENS["senior"]}
 
 
 @pytest.fixture(scope="module")
 def app():
-    a = SentinelApp.demo(seed=42, customers=50, merchants=10, transactions=600)
+    a = SentinelApp.demo(seed=42, customers=50, merchants=10, transactions=600, reviewers=REG)
     a.analyze(transactions=15, disputes=8, applications=4, sessions=6, accounts=3)
     return a
 
@@ -211,23 +216,37 @@ def test_cases_lifecycle_over_http(server):
     s, created = _post(
         server + "/v1/cases",
         {"case_type": "investigation", "title": "manual", "entities": ["account:ACC-1"]},
+        AS_ANALYST,
     )
     s, moved = _post(
         server + f"/v1/cases/{created['case_id']}/transition",
-        {"status": "INVESTIGATING", "actor": "analyst"},
+        {"status": "INVESTIGATING"},
+        AS_ANALYST,
     )
     assert moved["status"] == "INVESTIGATING"
     code, body = _err(
         _post,
         server + f"/v1/cases/{created['case_id']}/transition",
-        {"status": "OPEN", "actor": "analyst"},
+        {"status": "OPEN"},
+        AS_ANALYST,
     )
     assert code == 409
-    s, done = _post(
-        server + f"/v1/cases/{created['case_id']}/decision",
-        {"reviewer": "senior", "outcome": "deny"},
+    # identity is the credential's: no credential is a 401, a named reviewer a 400
+    code, body = _err(
+        _post, server + f"/v1/cases/{created['case_id']}/decision", {"outcome": "deny"}
     )
-    assert done["status"] == "RESOLVED"
+    assert code == 401
+    code, body = _err(
+        _post,
+        server + f"/v1/cases/{created['case_id']}/decision",
+        {"reviewer": "senior", "role": "SENIOR_REVIEWER", "outcome": "deny"},
+        AS_ANALYST,
+    )
+    assert code == 400 and "credential" in body["error"]
+    s, done = _post(
+        server + f"/v1/cases/{created['case_id']}/decision", {"outcome": "deny"}, AS_SENIOR
+    )
+    assert done["status"] == "RESOLVED" and done["human_decisions"][-1]["reviewer"] == "senior"
 
 
 def test_policies_risk_graph_replay(server, app):
