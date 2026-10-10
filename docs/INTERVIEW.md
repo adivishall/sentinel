@@ -44,7 +44,7 @@ their output is typed `MODEL_GENERATED`, never enters an `EvidenceSet`, and the
 composer's `_TrustedView` has no field for it; an off-surface tool call is a
 CRITICAL escalation; 360 replays with a different recommendation changed no
 outcome (60 main-corpus attacks × 6 recommendations). **SIMULATED:** every "persuaded agent" number
-is the offline simulator. **NOT IMPLEMENTED:** a live-model result -- `not_run`.
+is the offline simulator. Live-model result: `not_run` (no live number is quoted anywhere in this repository).
 
 **2. Why isn't prompt hardening enough?**
 Hardening teaches a model to refuse *instructions*; a false claim contains
