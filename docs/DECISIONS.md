@@ -561,3 +561,44 @@ tokens, which costs more per call than the old 1,024 but is what current models 
 when they think. Without a key every live row is NOT RUN, which is the honest state of
 this repository.
 
+## D37 — The event boundary is the existing evaluate call, made idempotent; no broker
+
+**Context.** Sentinel decides synchronously: a request arrives, one decision is composed,
+recorded and chained. A production deployment would also consume asynchronous events
+(a card authorisation stream, a dispute queue). Issue #18 asked where that boundary
+belongs before anything is built.
+
+**Decision.** The boundary is a typed event envelope in front of the existing
+`evaluate_*` calls, not a new pipeline and not a broker:
+
+- **Envelope.** `{event_id, kind, subject_id, occurred_at, payload | facts_envelope,
+  delivery_attempt}`. `event_id` is the producer's; `kind` maps to one workflow.
+- **Idempotency.** The decision key is `(kind, event_id)`: a redelivered event returns the
+  recorded decision instead of composing a new one. Execution stays idempotent on its own
+  key, `(workflow, subject, capability)` (D32): two different events about one subject can
+  both be *decided*, but the capability *executes* once.
+- **Ordering.** Per subject only. Events about one subject are applied in `occurred_at`
+  order; nothing global is promised. A late event is decided as of its own time for a
+  signed statement, and as of arrival for unsigned facts (D32), so ordering cannot be
+  used to backdate.
+- **Duplicates and retries.** A retry carries the same `event_id`; it is a read of the
+  recorded decision. A failure before the audit append records nothing, so the retry
+  decides afresh; a failure after it is a duplicate, and the key returns the decision.
+- **Fact envelopes.** The anti-rollback sequence (D31) already rejects an older statement
+  arriving after a newer one was acted on: out-of-order delivery is `SUPERSEDED`, not a
+  second decision.
+- **Audit order.** The chain records the order decisions were made, not the order events
+  occurred; each decision event carries `event_id` and `occurred_at`, so both orders are
+  recoverable.
+- **Replay.** Unchanged: it re-derives one decision from its snapshot. Re-delivering a
+  stream is not replay.
+
+**Why not build it now.** Every property above already holds per call except the decision
+key, which is one table and one lookup. A broker (Kafka, Redis streams) would add an
+operational dependency and a second source of ordering truth for no new guarantee; the
+anti-scope rules say no infrastructure without a demonstrated requirement.
+
+**Trade-off.** Until the envelope exists, a redelivered event is a second evaluation:
+recorded twice, executed once (the execution key holds). The doc states it; the
+implementation is a small, separate change when a real producer exists.
+

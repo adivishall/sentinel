@@ -44,7 +44,7 @@ from urllib.parse import parse_qs, urlparse
 
 from sentinel import __version__
 from sentinel.api import schemas as S
-from sentinel.app import SentinelApp
+from sentinel.app import SentinelApp, UnknownRecord
 from sentinel.cases.service import InvalidTransition, ReviewerNotAuthorized
 from sentinel.decision.authority import ControlDowngrade
 from sentinel.domain.enums import CasePriority, CaseStatus, Workflow
@@ -352,13 +352,18 @@ def build_routes(app: SentinelApp) -> Router:
         messages = S.opt_str_list(d, "messages")
         env = S.envelope(d, exclusive=("ledger",))
         if messages:
+            did = S.opt_id(d, "dispute_id")
             if env is not None:
                 return to_dict(
-                    app.evaluate_dispute_conversation(messages, envelope=env, options=opts).decision
+                    app.evaluate_dispute_conversation(
+                        messages, envelope=env, options=opts, dispute_id=did
+                    ).decision
                 )
             ledger = S.req_obj(d, "ledger")
             return to_dict(
-                app.evaluate_dispute_conversation(messages, ledger, options=opts).decision
+                app.evaluate_dispute_conversation(
+                    messages, ledger, options=opts, dispute_id=did
+                ).decision
             )
         if env is not None:  # an issuer's signed ledger, carried by the caller
             b = app.evaluate_dispute(
@@ -387,6 +392,9 @@ def build_routes(app: SentinelApp) -> Router:
         b = app.evaluate_dispute(
             narrative,
             ledger,
+            # named with body facts: refused if the store holds it (it is evaluated by id),
+            # otherwise it names the new dispute -- never silently dropped
+            dispute_id=S.opt_id(d, "dispute_id"),
             documents=docs,
             source=S.opt_str(d, "source", "cardholder", max_len=64) or "cardholder",
             options=opts,
@@ -1135,6 +1143,8 @@ class SentinelHandler(BaseHTTPRequestHandler):
             result, status = _error(e.status, e.message, rid), e.status
         except ControlDowngrade as e:  # the engine refused to record a downgraded run
             result, status = _error(403, str(e), rid), 403
+        except UnknownRecord as e:  # a well-formed id the store does not hold
+            result, status = _error(404, str(e), rid), 404
         except PolicyIntegrityError:  # no trustworthy active policy: the service cannot decide
             result, status = (
                 _error(503, "no trustworthy active policy; see the server log", rid),

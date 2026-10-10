@@ -67,7 +67,7 @@ fact (`make attack-compare` then `--scenario adjudication_gaming`).
 A decision scored with data from its own future looks better than it was, in
 evaluation and in replay. **IMPLEMENTED:** every feature is as-of; graph edges are
 timestamped; account status counts from `status_since`; payout sharing reads the
-bank accounts held at T; a benchmark re-scores 3,648 checks against
+bank accounts held at T; a benchmark re-scores 9,443 checks against
 9 kinds of later record: **0 observed leaks across the tested synthetic
 benchmark** -- and its 2.2.0 extension first found two current-state reads, now
 fixed. **NOT IMPLEMENTED:** a fully event-sourced history; merchant registration,
@@ -415,7 +415,7 @@ and switch phones too, so the signals are not free. Account-level recall is 90.0
 disputes filed *after* the transaction; fixing that leak (and then every other
 aggregation) is why there is a temporal-leakage benchmark; extending it in 2.2.0 found two
 more current-state reads (account status, payout destination), now fixed: 0 observed
-leaks in 3,648 checks -- evidence for the invariant, not a proof.
+leaks in 9,443 checks -- evidence for the invariant, not a proof.
 <!-- /gen:interview-financial -->
 
 **Why not use an LLM for everything?**
@@ -468,7 +468,7 @@ detected. Empirical ones, on synthetic data: 0.0% false positives on the 10
 deserved refunds of the main corpus and 0.0% on the 4 of the held-out corpus;
 26.3% of records-approve KYB applications not approved because of a hostile
 upload; the financial figures with their held-out-seed range; 0 observed
-temporal leaks in 3,648 checks (a tested invariant, not a proof). Nothing about
+temporal leaks in 9,443 checks (a tested invariant, not a proof). Nothing about
 a live model: the live row is `not_run`. `docs/EVALUATION.md` separates the
 three kinds.
 <!-- /gen:interview-claims -->
