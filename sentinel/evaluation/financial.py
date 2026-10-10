@@ -17,7 +17,8 @@ generator, nothing more.
 
 The rule weights were hand-tuned while looking at the seed-42 dataset, so the
 seed-42 figures are development figures. The same suite therefore also runs on
-held-out seeds the weights were never inspected against, and reports the range;
+held-out seeds that were not used to set the weights (their results were published
+before the txn-2.0 rules were designed, so they are partially informed), and reports the range;
 a large gap between development and held-out seeds would mean the weights fit
 one dataset rather than the scenario patterns."""
 

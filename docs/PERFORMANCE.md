@@ -6,26 +6,26 @@ and written to `results/performance.json`; this file is rendered from it by
 `make docs`. Sequential, single-threaded, persistence excluded;
 machine-dependent -- reproduce locally.
 
-## Measured (macOS-26.5.2-arm64-arm-64bit-Mach-O, Python 3.13.7)
+## Measured (macOS-27.0.1-arm64-arm-64bit-Mach-O, Python 3.13.7)
 
 | Component | Workload | p50 ms | p95 ms | p99 ms | ops/s |
 |---|---|---:|---:|---:|---:|
-| `normalize` | 310-char narrative | 0.0176 | 0.0183 | 0.0202 | 56,436 |
-| `gateway_inspect` | same narrative, 13 signals | 0.2255 | 0.235 | 0.2459 | 4,421 |
-| `claim_classify` | same narrative | 0.2608 | 0.2713 | 0.2802 | 3,818 |
-| `evidence_reconcile` | ledger facts + claim | 0.0352 | 0.0377 | 0.041 | 28,000 |
-| `fact_verify` | Ed25519 fact envelope: canonical JSON, digest, signature, times | 0.1753 | 0.1834 | 0.1914 | 5,629 |
-| `risk_score_transaction` | 40-txn baseline, 33 rules | 0.0147 | 0.0154 | 0.0201 | 66,621 |
-| `graph_linked_accounts` | 8,403-node graph | 0.0039 | 0.0041 | 0.0049 | 250,431 |
-| `graph_neighborhood_d2` | depth-2 neighbourhood | 0.0538 | 0.0568 | 0.0608 | 18,290 |
-| `policy_evaluate` | 17 rules, 27-field context (the composer's real context) | 0.0168 | 0.0178 | 0.0217 | 58,472 |
-| `decision_compose` | full DecisionInputs | 0.0418 | 0.0448 | 0.0494 | 23,600 |
-| `audit_append` | in-memory chain | 0.0088 | 0.0102 | 0.0143 | 109,714 |
-| `e2e_dispute_pipeline` | fact verification → gateway → agent → evidence → policy → authorization | 0.228 | 0.2396 | 0.2892 | 4,343 |
+| `normalize` | 310-char narrative | 0.0171 | 0.0185 | 0.0233 | 57,487 |
+| `gateway_inspect` | same narrative, 13 signals | 0.2238 | 0.2401 | 0.2609 | 4,425 |
+| `claim_classify` | same narrative | 0.2569 | 0.2734 | 0.2927 | 3,850 |
+| `evidence_reconcile` | ledger facts + claim | 0.0365 | 0.0402 | 0.0485 | 26,604 |
+| `fact_verify` | Ed25519 fact envelope: canonical JSON, digest, signature, times | 0.1807 | 0.192 | 0.2126 | 5,462 |
+| `risk_score_transaction` | 40-txn baseline, 33 rules | 0.0235 | 0.0254 | 0.0312 | 41,804 |
+| `graph_linked_accounts` | 8,403-node graph | 0.004 | 0.0042 | 0.0051 | 243,140 |
+| `graph_neighborhood_d2` | depth-2 neighbourhood | 0.0541 | 0.0576 | 0.0612 | 18,112 |
+| `policy_evaluate` | 17 rules, 27-field context (the composer's real context) | 0.0187 | 0.0194 | 0.0241 | 52,648 |
+| `decision_compose` | full DecisionInputs | 0.0493 | 0.055 | 0.069 | 19,867 |
+| `audit_append` | in-memory chain | 0.0088 | 0.0104 | 0.0159 | 108,423 |
+| `e2e_dispute_pipeline` | fact verification → gateway → agent → evidence → policy → authorization | 0.317 | 0.3412 | 0.4072 | 3,111 |
 
-Context: a real back-office LLM call is 300–2,000 ms. The full protected
-pipeline adds ≈0.2396 ms at p95 -- about three orders of magnitude
-below the decision it protects. The per-decision SQLite writes (risk
+Context: the full protected pipeline adds ≈0.3412 ms at p95 on this
+machine. A live model call's latency is not measured here (the live rows are
+NOT RUN), so no comparison with it is claimed. The per-decision SQLite writes (risk
 assessment, evidence, decision + snapshot, audit event) are not in this
 figure; the API's in-process metrics (`GET /v1/system`) report them live.
 "ops/s" is 1000 / mean over a sequential loop, not a concurrency figure.

@@ -1,0 +1,35 @@
+# Render blueprint: https://render.com/docs/blueprint-spec
+#
+# One web service built from the Dockerfile. Secure mode: Render generates
+# SENTINEL_API_KEY as a secret, so every data route needs `Authorization: Bearer <key>`
+# (the console asks for it once); /health, /version and the console's code stay public.
+# The store is in memory, filled with the synthetic demo world at start: the free plan
+# has no persistent disk, and the service restarts after 15 idle minutes. Nothing here
+# is real data. docs/DEPLOYMENT.md, "Public deployment (Render)".
+services:
+  - type: web
+    name: sentinel
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: SENTINEL_API_KEY
+        generateValue: true          # the bearer key; read it from the service's Environment tab
+      - key: SENTINEL_DB
+        value: ":memory:"            # ephemeral: the free plan has no disk; a paid plan can mount /data
+      - key: SENTINEL_DEMO_DATA
+        value: "1"                   # fill the ephemeral store with the synthetic world (seed 42)
+      - key: SENTINEL_FORCE_OFFLINE
+        value: "1"                   # the deterministic offline agent; no model key on the host
+      - key: SENTINEL_LOG
+        value: INFO                  # structured JSON logs in the Render log stream
+      - key: SENTINEL_RATE_LIMIT
+        value: "600"                 # requests / minute; behind Render's proxy every client shares it
+      # Demo mode instead (no key; the console shows a red banner and every response is
+      # marked X-Sentinel-Insecure-Demo): delete SENTINEL_API_KEY and set
+      #   - key: SENTINEL_INSECURE_DEMO
+      #     value: "1"

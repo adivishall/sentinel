@@ -158,7 +158,7 @@
     "all": "synthetic (hand-authored phrasings; the benchmark and the classifier share an author)"
   },
   "category_notes": {
-    "uncommon_legitimate": "held-out: written and labelled in the 2.2.0 review before the classifier was run on it. First run, with the classifier as of commit 9693433: 7/21 recognised, 14 abstained, 0 misread. The patterns were then extended against the separate development set, by an author who had seen those 14 misses, so the current number is optimistic; the remaining misses were deliberately not fitted",
+    "uncommon_legitimate": "held-out: written and labelled in the 2.2.0 review before the classifier was run on it. First run, with the classifier as of commit 59c56fa: 7/21 recognised, 14 abstained, 0 misread. The patterns were then extended against the separate development set, by an author who had seen those 14 misses, so the current number is optimistic; the remaining misses were deliberately not fitted",
     "development": "written after the held-out run and used to extend the patterns: a fit, not an estimate"
   },
   "frozen": {
@@ -300,7 +300,20 @@
         "got": "abstain",
         "reason": "no recognisable claim"
       }
-    ]
+    ],
+    "fixture_sha256": "9d26674fc3a50d3a24b7ef0dbb7cb526049ff48a32c5b316b99e653172bc025e",
+    "first_run": {
+      "date": "2026-10-01",
+      "fixture_commit": "1ac0171",
+      "result_commit": "7990033",
+      "correct": 24,
+      "n": 40,
+      "false_negatives": 14,
+      "false_negative_n": 28,
+      "misread_as_another_type": 0,
+      "false_positives": 0,
+      "false_positive_n": 12
+    }
   },
   "seconds": 0.01,
   "methodology": {

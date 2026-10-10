@@ -68,7 +68,7 @@ AUTHORITATIVE_DECISION ≠ f(MODEL_OUTPUT)
                             ▼
                     ┌───────────────┐
                     │ Audit / Case  │  tamper-evident audit chain + signed
-                    │ / Replay      │  checkpoints; replay from input snapshots
+                    │ / Replay      │  checkpoints; replay and backtest from input snapshots
                     └───────────────┘
 ```
 
@@ -86,7 +86,7 @@ Everything composes nine typed, immutable primitives (`sentinel/domain` and the 
 | Policy | `policy/models.py` | versioned rules over a declared field catalog |
 | Decision | `domain/decisions.py` | the canonical record; carries the AI recommendation but is not computed from it |
 | Case | `domain/cases.py` | investigation with a guarded lifecycle and human-only resolution |
-| AuditEvent | `audit/chain.py` | tamper-evident chain (each event hashes its body plus the previous hash); stores hashes of untrusted content, never prose; exportable HMAC-signed checkpoints |
+| AuditEvent | `audit/chain.py` | tamper-evident chain (each event hashes its body plus the previous hash); stores hashes of untrusted content, never prose; Ed25519 checkpoints in an append-only anchor (`audit/anchor.py`) |
 
 ## Trust classes
 
@@ -236,6 +236,18 @@ input snapshot), `policy_decisions`, `ai_recommendations`, `cases`,
 `audit_events`, `replays`, `policy_versions`. All SQL lives in this module;
 repository adapters (`SqliteAuditBackend`, `SqliteCaseRepository`) keep the
 audit chain and case service storage-agnostic.
+
+## Systems of record (`data/providers.py`)
+
+The decision logic never reads storage; `SentinelApp` reads through three
+interfaces, so a deployment can answer them from a payment processor, a
+ledger, an acquirer or a KYC/KYB provider without touching a decision rule:
+`RecordProvider` (the records a decision is about, by id), `FactProvider`
+(issuers' signed statements about them) and `RiskContextProvider` (history
+around a record, as of a moment -- point-in-time reads only). The shipped
+`SentinelStore` over a generated, synthetic dataset is the only
+implementation; a test asserts that no decision, risk, evidence, policy or
+security module imports the store. No real bank system is integrated.
 
 ## Application layer and surfaces
 

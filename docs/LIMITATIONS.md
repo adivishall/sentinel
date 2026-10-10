@@ -56,7 +56,7 @@ block.
    117-phrasing benchmark that shares its author it reads 100.0% of ordinary legitimate
    paraphrases and never reads attack prose as a claim it does not assert
    (0.0%); ambiguous and contradictory messages abstain. On a **held-out**
-   set of 21 uncommon legitimate phrasings it recognised 7 on the first, blind run
+   set of 21 uncommon legitimate phrasings it recognised 7 on its first run
    and 17 after the patterns were extended against a separate development set --
    partially informed (the author had seen the misses), so 17/21 is not a clean
    independent benchmark; every miss abstains, i.e. goes to a human -- a cost,
@@ -173,7 +173,7 @@ block.
     upload on bad records is never approved. The empirical content of the
     security suite is the false-positive rates, the detection recall, the KYB
     any-input cost and the claim classifier's held-out coverage (partially
-    informed: 7/21 on the first, blind run, 17/21 after changes).
+    informed: 7/21 on its first run, 17/21 after changes).
 20. **The financial figures are development figures with an honest range.**
     <!-- gen:financial-caveats -->
     The point values were tuned on seed 42; the suite also runs seeds
@@ -206,8 +206,8 @@ block.
 22. **The temporal-leakage suite is a deterministic check, not a proof.** Its
     result is "0 observed temporal leaks across the tested synthetic
     benchmark": a tested invariant, not a fully event-sourced history. It
-    samples 192 transactions over two generator worlds and nine kinds of
-    future record at four offsets; the per-feature tests
+    samples transactions over several seeded generator worlds and nine kinds
+    of future record at four offsets (sizes in EVALUATION §I); the per-feature tests
     (`test_temporal_leakage.py`, `test_entity_pointintime.py`,
     `test_graph_temporal.py`) cover the mechanisms, but the suite does not
     re-score every record under every possible future. Its 2.2.0 extension
@@ -240,7 +240,7 @@ block.
     authority limit come from an operator-configured reviewer registry, and
     four eyes is enforced where the capability registry asks. But:
     - the credential is a static bearer token with no expiry, sent in a
-      header, so production needs TLS and SSO / OIDC (issue #20);
+      header, so production needs a TLS proxy (DEPLOYMENT) and SSO / OIDC;
     - anyone who can write the registry file can mint a reviewer, so keep it
       outside the data directory;
     - Sentinel does not know which subjects a reviewer is conflicted on (for

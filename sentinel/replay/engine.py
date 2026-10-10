@@ -109,6 +109,37 @@ class ReplayResult:
     anchoring: dict[str, Any] = field(default_factory=dict)
 
     @property
+    def drift(self) -> list[str]:
+        """Every way the replay differs from the decision as recorded, named: the empty
+        list means the recorded decision reproduces under the same versions."""
+        out = []
+        if self.policy_drift:
+            out.append("policy_content")
+        if (self.versions.get("risk_model") or {}).get("configuration_changed"):
+            out.append("risk_model_configuration")
+        if self.original_drift:
+            out.append("engine")
+        if not self.record_verified:
+            out.append("record_vs_audit")
+        if self.policy_release.get("artifact_matches_recorded") is False:
+            out.append("policy_release_artifact")
+        if self.anchoring.get("decision_event") == "anchor_mismatch":
+            out.append("audit_anchor")
+        sig = (self.facts or {}).get("signature_now")  # a status checked now, or None
+        if sig is not None and sig != "VERIFIED_EXTERNAL":
+            out.append("fact_signature")
+        return out
+
+    @property
+    def drift_class(self) -> str:
+        """none | override (the outcome changed only because of the replay's own
+        overrides) | one named drift | multiple."""
+        d = self.drift
+        if not d:
+            return "override" if self.changed else "none"
+        return d[0] if len(d) == 1 else "multiple"
+
+    @property
     def engine_drift(self) -> bool:
         """Alias: the recorded outcome no longer reproduces from its own snapshot."""
         return self.original_drift
@@ -138,6 +169,8 @@ class ReplayResult:
             "facts": self.facts,
             "policy_release": self.policy_release,
             "anchoring": self.anchoring,
+            "drift": self.drift,
+            "drift_class": self.drift_class,
         }
 
 
@@ -301,6 +334,7 @@ class ReplayEngine:
         policy_drift = bool(
             overrides.policy_version is None and pinned and pinned != inputs.policy.content_hash
         )
+        risk_drift = _risk_model_drift(inputs.risk) if not overrides.risk_model else None
         if overrides.rule_values:
             inputs = replace(inputs, policy=_with_rule_values(inputs.policy, overrides.rule_values))
         # the artifact replay actually runs (an override is not a released document)
@@ -368,6 +402,12 @@ class ReplayEngine:
             and before.get("final_action") is not None
             and any(before[k] != rederived[k] for k in DRIFT_FIELDS)
         )
+        if risk_drift:
+            expl += (
+                f" WARNING: risk model {risk_drift['version']} no longer has the configuration "
+                f"recorded at decision time (digest {risk_drift['recorded'][:12]} -> "
+                f"{risk_drift['current'][:12]}); the recorded score is kept, not recomputed."
+            )
         if policy_drift:
             expl += (
                 f" WARNING: {inputs.policy.key} no longer has the content recorded at decision "
@@ -420,7 +460,11 @@ class ReplayEngine:
             original_drift,
             {
                 "policy": {"recorded": before["policy"], "replay": after["policy"]},
-                "risk_model": {"recorded": before["risk_model"], "replay": after["risk_model"]},
+                "risk_model": {
+                    "recorded": before["risk_model"],
+                    "replay": after["risk_model"],
+                    **({"configuration_changed": risk_drift} if risk_drift else {}),
+                },
                 "engine": {
                     "recorded": snapshot.get("engine_version", "unrecorded (pre-2.2.0 snapshot)"),
                     "replay": __version__,
@@ -463,3 +507,18 @@ def _policy_release(recorded: dict[str, Any], policy: Any) -> dict[str, Any]:
             None if rec is None or art["digest"] is None else rec["digest"] == art["digest"]
         ),
     }
+
+
+def _risk_model_drift(risk: Any) -> dict[str, str] | None:
+    """The risk model version a decision was scored with, re-read now: did its
+    configuration change under the same label? (None when it did not, or when the
+    assessment predates configuration digests.)"""
+    if risk is None or not getattr(risk, "model_digest", ""):
+        return None
+    try:
+        current = scoring.get_model(risk.model_version).digest
+    except (KeyError, ValueError):
+        return {"version": risk.model_version, "recorded": risk.model_digest, "current": "unknown"}
+    if current == risk.model_digest:
+        return None
+    return {"version": risk.model_version, "recorded": risk.model_digest, "current": current}

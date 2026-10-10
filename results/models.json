@@ -1,9 +1,9 @@
 {
   "corpus_size": 171,
   "provenance": {
-    "sentinel_version": "2.2.0",
-    "commit": "3e0a7d2b01a7269acaf5822522950ccd29a8c343",
-    "agent_specs_digest": "71e01d2103138b45b46e758ddf8de537c80373fa79036351b56e1a01b25f75e4",
+    "sentinel_version": "2.3.0",
+    "commit": "e92bd16c220100cf023b175a4d81880369a11602",
+    "agent_specs_digest": "790eae9b999fd3dc7c276b8a610c1b061a85adf746c012eab3ea41599bc4cb86",
     "rendered_prompt_digest": "7a305c65a7cff5b8becc5cb807467eaa0d1244a47412d3ced3c99ceecc49d1e9",
     "prompt_digest": "ec57a771a45cf0c4c0e210d17404110502145f0814674cea06a787827e669968",
     "corpus_digest": "21dbc9907046bdd7c4a3a7cacb456d82d72bd78a39d603b2f87ef0cd88066a8c",
@@ -45,8 +45,8 @@
         "effort": null,
         "max_tokens": null
       },
-      "timestamp": "2026-10-01T12:01:45+00:00",
-      "date": "2026-10-01",
+      "timestamp": "2026-10-08T22:06:24+00:00",
+      "date": "2026-10-08",
       "status": "ok",
       "seconds": 0.3,
       "n_attacks": 150,
@@ -58,7 +58,7 @@
       "fp_rate": 0.0,
       "mean_agent_latency_ms": 0.08,
       "agent_latency_p50_ms": 0.068,
-      "agent_latency_p95_ms": 0.139,
+      "agent_latency_p95_ms": 0.141,
       "stop_reasons": {},
       "refusals": 0,
       "truncated": 0,
@@ -157,8 +157,8 @@
         "effort": "low",
         "max_tokens": 4096
       },
-      "timestamp": "2026-10-01T12:01:45+00:00",
-      "date": "2026-10-01",
+      "timestamp": "2026-10-08T22:06:24+00:00",
+      "date": "2026-10-08",
       "status": "not_run",
       "reason": "no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1"
     },
@@ -171,8 +171,8 @@
         "effort": "low",
         "max_tokens": 4096
       },
-      "timestamp": "2026-10-01T12:01:45+00:00",
-      "date": "2026-10-01",
+      "timestamp": "2026-10-08T22:06:24+00:00",
+      "date": "2026-10-08",
       "status": "not_run",
       "reason": "no ANTHROPIC_API_KEY or SENTINEL_FORCE_OFFLINE=1"
     }

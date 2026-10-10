@@ -76,6 +76,21 @@ model for another surface (e.g. `acct-1.0` on a transaction scenario) is a 400,
 not a silent misapplication. `sentinel.decision.authority` enforces the same
 rule inside the engine, whatever the surface.
 
+## Decision lineage
+
+`GET /v1/decisions/{id}/lineage` answers, for one recorded decision: **what**
+(workflow, subject, amount), **when** (time, engine version), **facts** (source,
+provenance, payload digest), **evidence**, **risk** (score, model version and
+configuration digest), **ai** (provider, model, recommendation -- recorded,
+never authoritative), **policy** (version, outcome, rules, release digest,
+signer, activation), **capability** (requested, authorization, actor), **who
+authorised it** (the system's grant, or the reviewers -- id, role, credential
+id -- who acted on its case), the **outcome**, and its place in the **audit**
+chain with anchoring status. It is assembled from the stored record and its
+audit event; nothing is recomputed. Replay does that, and every replay names
+its `drift` (policy content, risk-model configuration, engine, record vs audit,
+policy-release artifact, audit anchor, fact signature) and a `drift_class`.
+
 ## Response — the canonical Decision
 
 ```jsonc
@@ -116,7 +131,7 @@ event records both, together with the payload digest.
 |---|---|---|
 | `{dispute_id}`, `{application_id}`, `{transaction_id}`, `{session_id}` | `system_of_record` | `VERIFIED_EXTERNAL` when the store holds the issuer's signed statement for the record (verified again now, and checked against the stored row; a mismatch is `INVALID`), otherwise `TRUSTED_LOCAL`. With `require_signed_facts`, a record whose statement is missing is `INVALID`. |
 | `{facts_envelope}`: an issuer's signed statement carried by the caller | `caller_supplied` | `VERIFIED_EXTERNAL` only if it verifies against the operator's trust store, and only for the record it names. Otherwise `INVALID`, `EXPIRED`, `REVOKED` or `SUPERSEDED`. |
-| `{ledger}`, `{records}`, `{transaction}`, `{session}` objects in the body | `caller_supplied` | `UNTRUSTED`: a claim about the records. It can make an outcome stricter (a refunded ledger still denies) but never support one: what it would support is held for human review, and nothing executes. |
+| `{ledger}`, `{records}`, `{transaction}`, `{session}` objects in the body | `caller_supplied` | `UNTRUSTED`: a claim about the records. It can make an outcome stricter (a refunded ledger still denies) but never support one: what it would support is held for human review: the system executes nothing on it, and only an authenticated reviewer's approval can. |
 | `/v1/attacks/simulate` presets | `demo_fixture` | the demo issuer signs the preset's ledger, so `VERIFIED_EXTERNAL` (labelled as the ephemeral demo issuer) |
 
 `facts_envelope` is accepted on the dispute, merchant, transaction and account

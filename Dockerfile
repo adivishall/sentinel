@@ -1,6 +1,11 @@
 # Sentinel -- API + console. One runtime dependency (cryptography); offline by default.
 FROM python:3.11-slim
 
+LABEL org.opencontainers.image.title="Sentinel" \
+      org.opencontainers.image.description="Financial decision security for AI-assisted finance: AI may recommend; trusted evidence, deterministic policy and authorization decide." \
+      org.opencontainers.image.source="https://github.com/adivishall/sentinel" \
+      org.opencontainers.image.licenses="MIT"
+
 ARG LIVE=0
 WORKDIR /app
 

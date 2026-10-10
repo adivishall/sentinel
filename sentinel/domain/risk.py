@@ -32,6 +32,8 @@ class RiskAssessment:
     # Uncapped points per component (anomaly / velocity / device_geo / entity / security);
     # the score is their sum capped to 0-100, so the breakdown is auditable.
     components: dict[str, int] = field(default_factory=dict)
+    # SHA-256 of the risk model's configuration (version, weights, thresholds) that scored it
+    model_digest: str = ""
 
     def explain(self) -> str:
         lines = [f"Risk Score: {self.score} ({self.level})  model {self.model_version}"]

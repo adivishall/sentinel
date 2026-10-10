@@ -24,4 +24,4 @@ docs/ARCHITECTURE.md):
     api / cli / app   the application layer (one engine, three surfaces)
 """
 
-__version__ = "2.2.0"
+__version__ = "2.3.0"

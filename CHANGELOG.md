@@ -4,7 +4,7 @@ All notable changes to Sentinel. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — 2.3.0
+## [2.3.0] — 2026-10-09
 
 A trust audit asked why Sentinel should trust the facts it decides on. The answer was
 that nothing proved any of them: trust labels came from code paths, and request-body
@@ -120,7 +120,7 @@ can be trusted (roadmap issues #11–#20).
   execution ledger under concurrency and what-if isolation held). Found and fixed, each
   with a regression test:
   - the conversation route re-pointed a stored dispute, and the attack simulator
-    recorded executed refunds on fabricated disputes (fixed on #11, 12325a5);
+    recorded executed refunds on fabricated disputes (fixed on the fact-provenance branch, PR #21, e207a93);
   - `closed` accounts and `unknown` merchant categories were in the vocabularies but
     named by no rule, so they were allowed: `block-closed-account` and
     `review-unknown-mcc`, and a test that every vocabulary value an active policy reads
@@ -280,7 +280,7 @@ can be trusted (roadmap issues #11–#20).
   stored-record check never ran there (a new, `UNTRUSTED` dispute was evaluated; no
   bypass). It is now checked like every other route.
 - **Adversarial review of this branch.** It found no bypass by the search, and one real
-  bypass by hand, fixed at its origin on #12 (feat/policy-provenance) and pinned by tests:
+  bypass by hand, fixed at its origin on the policy-provenance branch (PR #22) and pinned by tests:
   - **a trailing newline passed the record-id grammar.** `^...$` with `match()` accepts
     `"DSP-000002\n"` (`$` also matches before a final newline), so a dispute the system
     had already refunded could be named again with a body ledger; a human approval of
@@ -372,12 +372,124 @@ can be trusted (roadmap issues #11–#20).
 - `sentinel audit checkpoint --sign-key --signer --anchor`, `audit verify --anchor
   [--require-anchored]`, `trust keygen --purpose audit-checkpoint`, `SENTINEL_AUDIT_ANCHOR`.
 
+### Policy backtest (#29)
+- **`sentinel replay backtest`** (`SentinelApp.backtest`, `sentinel/replay/backtest.py`)
+  replays a candidate policy version, risk model or rule threshold over the recorded
+  history (newest `--limit` decisions, one `--workflow` or all) and reports, by decision
+  id: **loosening** -- decisions that executed nothing as recorded but would newly execute
+  a consequential capability under the candidate -- and tightening, every other change
+  with its direction, a transition table (recorded → candidate final action), the rules
+  newly matched or no longer matched, the named drift between record and replay, and
+  every decision that could not be replayed with its reason (a record that disagrees
+  with its audit event, a chain that disagrees with its anchor, a policy without that
+  version or rule). `--fail-on-loosening` exits 3 when the loosening list is not empty:
+  a gate on policy changes in CI. `--json` prints the whole report.
+- Every row goes through the same code path as a single replay (`SentinelApp.replay`
+  is now the recorded wrapper around `_replay`), so a row equals `replay run` for that
+  decision; a backtest records nothing but one audit event of kind `backtest` whose
+  detail is the summary (counts and ids). INV-BACKTEST-1 in `docs/INVARIANTS.md`;
+  `tests/test_backtest.py`. No HTTP route yet.
+
+### Deployment (final sprint, 2026-10-09)
+- **A public deployment configuration**: `render.yaml`, a Render blueprint for the
+  same Docker image -- HTTPS at Render's edge, a health check on `/health`, redeploy
+  on push, the free plan, and secure mode: `SENTINEL_API_KEY` is generated as a secret,
+  so the image starts, every data route needs the key and the console asks for it
+  once; `/health`, `/version` and the console's code stay public. The store is in
+  memory and synthetic (the free plan has no disk); demo mode is one documented
+  env-var change. `docs/DEPLOYMENT.md`, "Public deployment (Render)".
+- **Demo reviewers behind a key.** The two demo reviewer credentials (alice, sam) are
+  issued for an ephemeral (`:memory:`) store on a loopback bind, under
+  `--insecure-demo`, *or* behind an API key -- a public demo needs them for the
+  console's case form, and the credentials go to the operator's log. A persistent
+  store never gets them (`tests/test_ops_hardening.py`).
+- OCI labels on the image (title, description, source, licence).
+- `docs/INTERVIEW.md`: twenty one-paragraph answers, each pointing at the longer one
+  or at the code, including the two most serious defects found and how.
+
+### Release audit (2026-10-02)
+A five-perspective audit of the release candidate (security, compliance, README,
+operations, evaluation) found these; each is fixed with a regression test on the
+branch that introduced the code and merged forward (`docs/FAILURE_ANALYSIS.md`).
+- **Security (HIGH):** unsigned body records naming a stored merchant, or a case
+  variant of its id, opened an onboarding case one reviewer could approve --
+  once per spelling of the id. They are refused; `application_id` with `records`
+  is a 400; the execution ledgers compare keys case-insensitively.
+- **Security:** a repeat on a subject whose capability already executed opened a
+  case that could never be approved; it is DENY "already executed". A KYB
+  statement that names no application is `INVALID`. A different `submission` on
+  the stored-dispute route is refused like a different `narrative`.
+- **Critical (operations):** the policy trust root was missing from the wheel, so
+  the Docker image could not start; CI now runs the image, not only builds it.
+  The console was a 404 from an installed package. Read-only commands no longer
+  create or seed a store; a named store gets synthetic data only with
+  `--demo-data`. A key overrides `--insecure-demo` in the start record; an
+  unreadable key file refuses. `SENTINEL_POLICY_DIR` makes the policy-release
+  runbook work under an operator's own root (`tests/test_policy_runbook.py`
+  executes it). `audit list` takes `--action` and `--json`.
+- **Evaluation honesty:** the temporal suite is labelled empirical (it had been
+  "structural" in one place and "empirical" in another); the financial held-out
+  seeds and the classifier's held-out set are described as partially informed
+  (the seeds' results were published before txn-2.0 was designed; the classifier
+  set's author knew the classifier); four security held-out cases were added
+  with detector signals for their classes, which is now stated; the frozen claims
+  fixture is pinned by its SHA-256 and its first run recorded in code; an
+  unsourced live-latency comparison was removed.
+- **Docs:** `docs/FAILURE_ANALYSIS.md` (every defect with its fix commit and
+  test), `SECURITY.md` (private vulnerability reporting), issue and PR
+  templates, a reviewer's path and external-validation plan in the README, a
+  complete `.env.example` and `docs/TESTING.md`, the real flagship-demo output,
+  and commit ids in the docs updated to the current history.
+
+### Decision lineage, risk-model provenance, the system-of-record boundary
+- **`GET /v1/decisions/{id}/lineage`** (`SentinelApp.decision_lineage`): one view of a
+  recorded decision -- what and when, fact provenance and payload digest, evidence,
+  risk (model version and digest), the AI recommendation (recorded, never
+  authoritative), the policy release (digest, signer, key, activation), the capability
+  authorization, the humans who acted on its case, the outcome, and the audit event
+  with its anchoring status.
+- **A risk assessment pins its model's configuration digest** (`RiskModel.digest`,
+  `RiskAssessment.model_digest`), recorded in the snapshot and the audit event. Replay
+  reports a model whose name and version are unchanged but whose weights or thresholds
+  are not (`risk_model_drift`).
+- **Replay names its drift**: `drift` lists every way the replay differs from the
+  decision as recorded (`policy_content`, `risk_model_configuration`, `engine`,
+  `record_vs_audit`, `policy_release_artifact`, `audit_anchor`, `fact_signature`), and
+  `drift_class` is `none`, `override` (only the replay's own overrides changed the
+  outcome), the one named drift, or `multiple`.
+- **`sentinel/data/providers.py`**: `RecordProvider`, `FactProvider` and
+  `RiskContextProvider`, the three interfaces between the decision logic and a system of
+  record. The shipped SQLite store over synthetic data is the only implementation;
+  `tests/test_providers_boundary.py` checks that the store satisfies all three and that
+  the decision, risk, evidence, policy and security packages never import it.
+
+### Console
+- The decision view shows the policy release (version, signer, key, activation) and the
+  fact provenance; replay shows ORIGINAL vs RECOMPUTED with the drift and the anchoring
+  status; the audit view reports anchoring; the system view lists the trust roots
+  (policy releases, fact trust store, audit anchor) -- public keys only; the
+  evaluation view adds the model benchmark, the red team and the frozen
+  claims set. The console still renders only what the engine returns.
+
+### CI
+- CI verifies the shipped policy releases (`sentinel policy verify`), runs the red-team
+  suite, and signs and verifies an anchored audit checkpoint with a throwaway key.
+
 ### Evaluation
 - The corpora's ledgers and acquirer records are signed by an ephemeral evaluation
   issuer and verified in every case, so the suites measure text and model influence on
   verified facts. The integrity suite adds F: the same claim-supporting ledgers sent
   unsigned (expected 0 executions). The benchmark adds `fact_verify`, and the e2e
   pipeline now includes verification.
+- **Temporal benchmark**: four seeds (42, 7, 11, 23), 497 stratified transactions, nine
+  kinds, 9,443 decisions compared at four future offsets -- 0 leaks (95% upper bound
+  0.03% per decision). A tested property over synthetic worlds, not a proof.
+- **A frozen claims set** (`evaluation/attacks/claims_frozen.json`, 40 phrasings),
+  written and committed before the classifier first ran on it, and never to be tuned
+  against. Labelled *partially informed*: its author maintains the classifier. First
+  run: 24/40; 14 of 28 claims missed, every one abstained to a human, 0 misread as
+  another claim type, 0 of 12 controls read as a claim (2 of the 6 non-claims abstained
+  rather than being recognised as non-claims: held for a human).
 
 ### Docs
 - Corrected: the audit chain does **not** detect a consistent rewrite of the events
@@ -510,7 +622,7 @@ because the data or the evaluation became more honest.
   regenerated world ("text changed a protected outcome" 38.2% → 58.2%,
   tightening only; surfaces "tightened vs baseline" 43.3% → 30.0%); the
   structural rows and every guarded attack-success rate stay 0.0%.
-- `make eval` failed after the ablation suite since `0b08279` (the
+- `make eval` failed after the ablation suite since `2923890` (the
   methodology record was read as a configuration); fixed.
 - Dead code and write-only state removed: the unused `EventBus`, write-only
   `Runtime.decisions` / `security_events` (unbounded in a long-running

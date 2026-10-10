@@ -19,7 +19,7 @@ The in-memory demo prints two demo reviewer credentials (alice, sam) for the
 console's case form. It does that only on a loopback bind or under
 `--insecure-demo`; anything else needs a real reviewer registry.
 
-## 2. Docker
+## 2. Docker (and the CI smoke test)
 
 ```bash
 make docker-build                 # docker build -t sentinel .
@@ -65,6 +65,64 @@ reply, a refusal, an empty reply or any other stop becomes the agent's
 fallback recommendation (escalate / manual_review / review) with a label saying which --
 never a denial and never an approval. The benchmark's configurations are in
 `sentinel/evaluation/models.py` (`CONFIGS`); `SENTINEL_MODEL` adds one.
+
+## 4. Public deployment (Render)
+
+`render.yaml` at the repository root is a [Render blueprint](https://render.com/docs/blueprint-spec):
+one web service built from the `Dockerfile`, on the free plan, with HTTPS from
+Render's edge, a health check on `/health`, redeploy on every push to `main`,
+and **secure mode** -- Render generates `SENTINEL_API_KEY` as a secret, so the
+image starts (it refuses to serve a network address without a key), every data
+route needs `Authorization: Bearer <key>` and the console asks for the key once
+per tab. `/health`, `/version` and the console's code are the only public
+paths; `GET /v1/system` without the key is a 401.
+
+```bash
+# the external action: a Render account (sign in with GitHub) -- nothing on the
+# Sentinel host holds a Render credential
+# Render dashboard -> New -> Blueprint -> adivishall/sentinel -> Apply
+# then read the key: the service -> Environment -> SENTINEL_API_KEY
+HOST=https://<service>.onrender.com
+curl -sf $HOST/health                              # {"status":"ok","mode":"offline"}
+curl -sf $HOST/version                             # name and version only
+curl -s -o /dev/null -w '%{http_code}\n' $HOST/v1/system        # 401: the key is the control
+curl -sf -H "Authorization: Bearer $KEY" $HOST/v1/system | head -c 300
+open $HOST                                         # the console; paste the key once
+```
+
+What this deployment is, and is not:
+
+- **Synthetic and ephemeral.** `SENTINEL_DB=:memory:` with `SENTINEL_DEMO_DATA=1`:
+  the free plan has no persistent disk, and a free service is suspended after 15
+  idle minutes (the next request waits about a minute while it starts). Every
+  start generates the same synthetic world (seed 42), analyses a slice of it and
+  starts a fresh audit chain. Nothing in it is real data, and nothing survives a
+  restart; a paid instance can mount a disk at `/data` and set `SENTINEL_DB` to a
+  file there.
+- **Demo reviewers.** With an ephemeral store the server issues the two demo
+  reviewer credentials (alice, sam) at start and prints them once to the log
+  (the service's Logs tab): the console's case-review form needs one. A
+  persistent store never gets them; it needs a reviewer registry
+  (`SENTINEL_REVIEWERS`).
+- **Offline agent.** `SENTINEL_FORCE_OFFLINE=1`: the deterministic simulator, no
+  model key on the host. A live model needs the `LIVE=1` image and the Anthropic
+  key as a Render secret.
+- **One client, from the server's point of view.** Render's proxy fronts the
+  container, so the per-client rate limit (`SENTINEL_RATE_LIMIT`, 600/min) is
+  shared by every visitor; the key is the access control, not the limit.
+- **Demo mode instead:** delete `SENTINEL_API_KEY` and set `SENTINEL_INSECURE_DEMO=1`.
+  The API is then open to anyone with the URL (synthetic data only), the console
+  shows a red banner, every response carries `X-Sentinel-Insecure-Demo: 1` and
+  the `SERVER_START` audit event records it. Do not do this with a persistent
+  store.
+- **Logs:** JSON on stderr (`SENTINEL_LOG=INFO`) in Render's log stream: the bind,
+  the configuration fingerprint, every request's id, status and latency; never a
+  key, credential or prose. A failed start says why (`refusing to serve ...`).
+- `PORT` is Render's (10000); the image's command binds `0.0.0.0:${PORT}` and the
+  health check uses the same variable.
+
+The static console on GitHub Pages (below) stays the public, read-only,
+no-key demo: a snapshot of what the engine computed, with no API behind it.
 
 ## What the server enforces
 
@@ -246,6 +304,18 @@ activation, picked up at restart.
 - **The API key:** replace the mounted `SENTINEL_API_KEY_FILE` in place; the
   server reads it again when it changes (an environment variable needs a
   restart).
+
+### Dependencies
+
+The runtime has one third-party dependency: `cryptography` (pyca), for Ed25519,
+because a vetted implementation is the only acceptable source of signatures;
+it brings `cffi`. Everything else is the standard library. The live provider
+(`anthropic`, optional extra `live`) and the dev tools are pinned exactly in
+`pyproject.toml` / `requirements-dev.txt`; the runtime floor (`cryptography>=42`)
+is a floor, not a lock, so security releases are not blocked. A production
+build should install from a hash-pinned lock file (`pip-compile
+--generate-hashes`) and run `pip-audit` on it; CI here pins the GitHub
+Actions by tag, not by commit SHA.
 
 ### Logs and retention
 

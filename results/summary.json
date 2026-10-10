@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-29T12:46:34",
-  "seconds": 91.7,
+  "generated_at": "2026-10-09T03:36:37",
+  "seconds": 325.0,
   "security": {
     "n_attacks": 150,
     "n_controls": 21,
@@ -114,27 +114,27 @@
     "attack_text_approved_on_supporting_ledger": 0.082
   },
   "temporal": {
-    "decisions_tested": 3648,
+    "decisions_tested": 9443,
     "leakage_count": 0,
     "leakage_rate": 0.0,
-    "leakage_upper_95": 0.0008208614486580057,
+    "leakage_upper_95": 0.000317193385068526,
     "truncation_mismatch_rate": 0.0,
     "perturbation_transaction_change_rate": 0.0,
     "perturbation_monitoring_change_rate": 0.0
   },
   "performance": {
     "normalize": 0.0183,
-    "gateway_inspect": 0.2377,
-    "claim_classify": 0.2703,
-    "evidence_reconcile": 0.0375,
-    "fact_verify": 0.1789,
-    "risk_score_transaction": 0.0156,
+    "gateway_inspect": 0.2409,
+    "claim_classify": 0.2882,
+    "evidence_reconcile": 0.0384,
+    "fact_verify": 0.1941,
+    "risk_score_transaction": 0.0263,
     "graph_linked_accounts": 0.0041,
-    "graph_neighborhood_d2": 0.0561,
-    "policy_evaluate": 0.0178,
-    "decision_compose": 0.0442,
-    "audit_append": 0.0106,
-    "e2e_dispute_pipeline": 0.2333
+    "graph_neighborhood_d2": 0.059,
+    "policy_evaluate": 0.0198,
+    "decision_compose": 0.0558,
+    "audit_append": 0.0124,
+    "e2e_dispute_pipeline": 0.3596
   },
   "claims": {
     "n": 117,

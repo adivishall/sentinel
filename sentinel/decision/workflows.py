@@ -497,6 +497,7 @@ def _finish(
                 "controls": list(decision.controls),
                 "security_event_id": decision.security_event_id,
                 "risk_model": risk.model_version if risk is not None else None,
+                "risk_model_digest": risk.model_digest if risk is not None else None,
                 "facts_source": str(inputs.facts_source),
                 "facts": inputs.provenance.audit_detail() if inputs.provenance else None,
                 "policy_release": {

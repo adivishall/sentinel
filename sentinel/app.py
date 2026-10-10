@@ -66,6 +66,7 @@ from sentinel.domain.serialization import to_dict
 from sentinel.observability import METRICS, get_logger, log_decision
 from sentinel.policy.loader import DEFAULT_REGISTRY, PolicyIntegrityError
 from sentinel.presets import ATTACKS, SCENARIOS
+from sentinel.replay.backtest import BacktestReport
 from sentinel.replay.engine import ReplayEngine, ReplayOverrides, ReplayResult
 from sentinel.risk import account_security, monitoring, scoring
 from sentinel.risk import transaction as txn_risk
@@ -1740,6 +1741,98 @@ class SentinelApp:
     def verify_audit(self) -> ChainVerification:
         return self.runtime.audit.verify()
 
+    def decision_lineage(self, decision_id: str) -> dict[str, Any] | None:
+        """One recorded decision, answered question by question: what produced it, when,
+        under which versions, from which sources at which trust level, on what evidence,
+        under which policy and capability, who authorised it, what finally happened, and
+        where it sits in the audit chain. Assembled from the stored record and its audit
+        event; nothing is recomputed (replay does that)."""
+        d = self.store.decision(decision_id)
+        if d is None:
+            return None
+        snap = self.store.decision_snapshot(decision_id) or {}
+        ev = self.runtime.audit.get(decision_id)
+        detail: dict[str, Any] = dict(ev.detail) if ev else {}
+        pol = d.get("policy") or {}
+        auth = d.get("authorization") or {}
+        ai = d.get("ai_recommendation") or {}
+        risk = snap.get("risk") or {}
+        case = self.runtime.cases.get(d["case_id"]) if d.get("case_id") else None
+        humans = [
+            {
+                "reviewer": h.reviewer,
+                "role": h.role,
+                "credential_id": getattr(h, "credential_id", None),
+                "outcome": h.outcome,
+                "at": h.created_at,
+            }
+            for h in (case.human_decisions if case is not None else ())
+        ]
+        return {
+            "decision_id": decision_id,
+            "what": {
+                "workflow": d["workflow"],
+                "subject": f"{d['subject_type']}:{d['subject_id']}",
+                "amount": d["amount"],
+            },
+            "when": {"decided_at": d["created_at"], "engine_version": snap.get("engine_version")},
+            "facts": {
+                "source": d.get("facts_source"),
+                "provenance": d.get("provenance"),
+                "payload_digest": dict(detail.get("facts") or {}).get("payload_digest"),
+            },
+            "evidence": {
+                "verdict": d["evidence_verdict"],
+                "evidence_ids": d.get("evidence_ids", []),
+            },
+            "risk": {
+                "score": d["risk_score"],
+                "level": d["risk_level"],
+                "model_version": risk.get("model_version"),
+                "model_digest": risk.get("model_digest"),
+            },
+            "ai": {
+                "provider": d.get("provider"),
+                "model": d.get("model"),
+                "recommended": ai.get("recommended_action"),
+                "requested_capability": ai.get("requested_capability"),
+                "trust": "MODEL_GENERATED (recorded, never authoritative)",
+            },
+            "policy": {
+                "policy": f"{pol.get('policy_id')}@v{pol.get('version')}",
+                "outcome": pol.get("outcome"),
+                "matched_rules": pol.get("matched_rules", []),
+                "digest": pol.get("policy_digest"),
+                "release": pol.get("release_status"),
+                "signer": pol.get("release_signer"),
+                "key_id": pol.get("release_key_id"),
+                "activation": pol.get("activation_sequence"),
+            },
+            "capability": {
+                "requested": d.get("requested_capability"),
+                "authorization": auth.get("status"),
+                "actor": auth.get("actor"),
+                "reason": auth.get("reason"),
+            },
+            "authorised_by": {
+                "system": auth.get("status") == "GRANTED",
+                "humans": humans,
+                "case_id": d.get("case_id"),
+            },
+            "outcome": {
+                "final_action": d["final_action"],
+                "executed": d.get("executed_capability"),
+                "authoritative": d.get("authoritative"),
+                "blocked_by": d.get("blocked_by", []),
+            },
+            "audit": {
+                "event_id": d.get("audit_event_id"),
+                "sequence": ev.sequence if ev else None,
+                "event_hash": ev.event_hash if ev else None,
+                "anchoring": self.audit_anchoring().for_event(ev.sequence if ev else None),
+            },
+        }
+
     def audit_anchoring(self) -> Anchoring:
         """The chain checked against every signed checkpoint the anchor holds
         (``sentinel.audit.anchor``): anchored | not_anchored | anchor_mismatch."""
@@ -1793,6 +1886,60 @@ class SentinelApp:
         return stmt
 
     def replay(self, decision_id: str, overrides: ReplayOverrides) -> ReplayResult:
+        """One what-if replay, recorded: a replay record and an audit event of kind
+        ``replay``, never a change to the decision it replays (INV-REPLAY-1)."""
+        r = self._replay(decision_id, overrides)
+        if self.runtime.persist:
+            payload = r.to_dict()
+            self.store.save_replay(r.replay_id, decision_id, r.changed, r.created_at, payload)
+            self.runtime.audit.append(
+                actor="sentinel",
+                workflow=r.replayed_decision.workflow.value,
+                action=f"REPLAY:{r.replayed['final_action']}",
+                decision_id=decision_id,
+                subject_id=r.replay_id,
+                policy_id=r.replayed_decision.policy.policy_id,
+                policy_version=r.replayed_decision.policy.version,
+                kind="replay",
+                detail={
+                    "overrides": r.overrides,
+                    "changed": r.changed,
+                    "policy_drift": r.policy_drift,
+                    "original_drift": r.original_drift,
+                    "record_verified": r.record_verified,
+                    "facts_signature_now": r.facts.get("signature_now"),
+                },
+            )
+        return r
+
+    def backtest(
+        self, overrides: ReplayOverrides, *, workflow: str | None = None, limit: int = 500
+    ) -> BacktestReport:
+        """A candidate policy replayed over the recorded history
+        (``sentinel.replay.backtest``): every row is what ``replay`` returns for that
+        decision. A what-if: no decision, snapshot, replay record or audit event changes;
+        exactly one audit event of kind ``backtest`` is appended (INV-BACKTEST-1)."""
+        from sentinel.replay.backtest import backtest as run_backtest
+
+        report = run_backtest(self, overrides, workflow=workflow, limit=limit)
+        if self.runtime.persist:
+            self.runtime.audit.append(
+                actor="sentinel",
+                workflow=report.workflow or "system",
+                action="BACKTEST",
+                subject_id=report.backtest_id,
+                kind="backtest",
+                detail=report.summary(),
+            )
+        return report
+
+    def _replay(
+        self, decision_id: str, overrides: ReplayOverrides, *, anchored: Anchoring | None = None
+    ) -> ReplayResult:
+        """The replay itself, with nothing written: the recorded side anchored to the
+        decision's audit event, the facts re-verified, the event's anchoring status.
+        ``anchored`` lets a backtest check the chain against its anchor once for every
+        decision instead of once per decision."""
         original = self.store.decision(decision_id)
         snap = self.store.decision_snapshot(decision_id)
         if original is None or snap is None:
@@ -1815,7 +1962,7 @@ class SentinelApp:
         r = replace(
             r, facts=self._reverify_facts(snap, ev.to_dict() if ev else None, r.record_verified)
         )
-        anchored = self.audit_anchoring()
+        anchored = anchored if anchored is not None else self.audit_anchoring()
         status = anchored.for_event(ev.sequence if ev else None)
         r = replace(r, anchoring={**anchored.to_dict(), "decision_event": status})
         if status == "anchor_mismatch":
@@ -1824,27 +1971,6 @@ class SentinelApp:
                 record_verified=False,
                 record_issues=r.record_issues
                 + ("the audit chain disagrees with its anchored checkpoints",),
-            )
-        if self.runtime.persist:
-            payload = r.to_dict()
-            self.store.save_replay(r.replay_id, decision_id, r.changed, r.created_at, payload)
-            self.runtime.audit.append(
-                actor="sentinel",
-                workflow=r.replayed_decision.workflow.value,
-                action=f"REPLAY:{r.replayed['final_action']}",
-                decision_id=decision_id,
-                subject_id=r.replay_id,
-                policy_id=r.replayed_decision.policy.policy_id,
-                policy_version=r.replayed_decision.policy.version,
-                kind="replay",
-                detail={
-                    "overrides": r.overrides,
-                    "changed": r.changed,
-                    "policy_drift": r.policy_drift,
-                    "original_drift": r.original_drift,
-                    "record_verified": r.record_verified,
-                    "facts_signature_now": r.facts.get("signature_now"),
-                },
             )
         return r
 

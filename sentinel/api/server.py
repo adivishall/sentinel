@@ -608,6 +608,11 @@ def build_routes(app: SentinelApp) -> Router:
         },
     )
     r.add("GET", "/v1/decisions/(?P<id>[^/]+)", lambda q, b, p: _decision_view(app, p["id"]))
+    r.add(
+        "GET",
+        "/v1/decisions/(?P<id>[^/]+)/lineage",
+        lambda q, b, p: _or404(app.decision_lineage(p["id"]), "decision"),
+    )
 
     # ---- cases --------------------------------------------------------------------------------
     def _reviewer(d: dict[str, Any], fields: frozenset[str]) -> Any:

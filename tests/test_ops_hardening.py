@@ -79,3 +79,49 @@ def test_audit_list_can_show_the_server_start_record(tmp_path, capsys):
     events = json.loads(capsys.readouterr().out)
     assert [e["action"] for e in events] == ["SERVER_START"]
     assert events[0]["detail"]["auth"] == "api_key" and events[0]["event_id"]
+
+
+def test_demo_reviewers_exist_behind_a_key_on_an_ephemeral_store_only(
+    tmp_path, monkeypatch, capsys
+):
+    """A public demo (a network bind behind an API key, an in-memory store) needs the two
+    demo reviewers for the console's case form; a persistent store never gets them."""
+    served: list[SentinelApp] = []
+    monkeypatch.setattr(srv, "serve", lambda app, *a, **k: served.append(app))
+    monkeypatch.setenv("SENTINEL_API_KEY", "k" * 24)
+    monkeypatch.delenv("SENTINEL_DEMO_DATA", raising=False)
+    assert main(["--db", ":memory:", "serve", "--host", "0.0.0.0", "--port", "0"]) == 0
+    err = capsys.readouterr().err
+    assert "demo reviewer credentials" in err and "alice" in err and "sam" in err
+    assert {r.reviewer_id for r in served[-1].reviewers.reviewers()} == {"alice", "sam"}
+    # a persistent store behind the same key: no demo reviewers, with or without data
+    db = str(tmp_path / "s.db")
+    assert main(["--db", db, "serve", "--host", "0.0.0.0", "--port", "0"]) == 0
+    err = capsys.readouterr().err
+    assert "demo reviewer" not in err and served[-1].reviewers.reviewers() == []
+    assert (
+        main(
+            [
+                "--db",
+                db,
+                "data",
+                "generate",
+                "--seed",
+                "1",
+                "--customers",
+                "5",
+                "--merchants",
+                "2",
+                "--transactions",
+                "20",
+            ]
+        )
+        == 0
+    )
+    assert main(["--db", db, "serve", "--host", "0.0.0.0", "--port", "0"]) == 0
+    assert "demo reviewer" not in capsys.readouterr().err
+    assert served[-1].reviewers.reviewers() == []
+    # and still, with no key and no --insecure-demo, a network bind never serves at all
+    monkeypatch.delenv("SENTINEL_API_KEY")
+    assert main(["--db", ":memory:", "serve", "--host", "0.0.0.0", "--port", "0"]) == 2
+    assert len(served) == 3

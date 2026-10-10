@@ -45,12 +45,13 @@ shot() {  # <file> <view> [height]
   echo "$OUT/$1"
 }
 
-# 1. the flagship attack, WITHOUT vs WITH Sentinel (running it records one decision + case)
+# 1. the flagship attack, WITHOUT vs WITH Sentinel (a simulation: it records nothing)
 shot ai-security.png "#aisecurity/document_injection"
-# 2. that case's review packet
-CASE=$(curl -s "$BASE/v1/cases?limit=100" | python3 -c '
+# 2. a recorded dispute case's review packet (the highest-priority one)
+CASE=$(curl -s "$BASE/v1/cases?limit=500" | python3 -c '
 import json, sys
-print(next(c["case_id"] for c in json.load(sys.stdin)["cases"] if c["title"].startswith("AI-security")))')
+cs = [c for c in json.load(sys.stdin)["cases"] if c["title"].startswith("Human review: dispute")]
+print(min(cs, key=lambda c: (c["priority"], c["case_id"]))["case_id"])')
 shot case-review.png "#investigations/$CASE"
 # 3. replay: a recorded denial re-run under an older policy version
 shot replay.png "#replay/example"

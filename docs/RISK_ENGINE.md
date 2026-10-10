@@ -16,7 +16,8 @@ source system. The score is a *recommendation to policy*, never an action.
 It is **not** a trained model and the point values are **not industry
 standards**. They are Sentinel heuristics chosen while looking at the
 development seed of the synthetic generator; `docs/EVALUATION.md` §G reports
-how they behave on that seed and on two seeds they never saw. Nothing here is
+how they behave on that seed and on two held-out seeds (not used to set the values,
+though their results were visible before txn-2.0 was designed). Nothing here is
 calibrated on real payment data.
 
 | Band | Score | Recommended action (risk engine's own suggestion; policy decides) |
