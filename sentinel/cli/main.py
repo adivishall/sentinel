@@ -37,12 +37,28 @@ from sentinel import __version__
 from sentinel.domain.serialization import to_dict
 
 DEFAULT_DB = os.environ.get("SENTINEL_DB", "data/sentinel.db")
+# commands that only read a store: they never create or seed one
+READ_ONLY_COMMANDS = ("audit", "replay")
 
 
 def _app(args: argparse.Namespace) -> Any:
     from sentinel.app import SentinelApp
 
-    path = getattr(args, "db", None) or DEFAULT_DB
+    # a store the operator names (--db or SENTINEL_DB) is never filled with synthetic data
+    # unless asked (--demo-data / SENTINEL_DEMO_DATA=1), and a read-only command never
+    # creates one: `audit verify --db <typo>` used to seed 5,000 synthetic transactions and
+    # print "OK" (release audit)
+    explicit = getattr(args, "db", None) or os.environ.get("SENTINEL_DB")
+    path = explicit or DEFAULT_DB
+    command = getattr(args, "command", "")
+    if path != ":memory:" and command in READ_ONLY_COMMANDS and not Path(path).exists():
+        raise FileNotFoundError(
+            f"no store at {path}; a read-only command does not create one "
+            "(create it with `sentinel --db PATH data generate`, or use --db :memory:)"
+        )
+    demo_data = bool(getattr(args, "demo_data", False)) or os.environ.get(
+        "SENTINEL_DEMO_DATA", ""
+    ) in ("1", "true", "yes")
     reviewers = None
     if getattr(args, "reviewers_file", None):
         from sentinel.cases.identity import ReviewerRegistry
@@ -69,12 +85,24 @@ def _app(args: argparse.Namespace) -> Any:
     else:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         app = SentinelApp.open(path, trust=trust, reviewers=reviewers)
-    if app.store.count("transactions") == 0 and getattr(args, "command", "") not in ("data",):
-        print(
-            "[sentinel] empty store -> generating the default demo dataset (seed 42)",
-            file=sys.stderr,
-        )
-        app.generate_dataset(42, 200, 40, 5000)
+    # a reload (SIGHUP) re-reads the files this process was started with
+    if getattr(args, "trust_store", None):
+        app.trust_source = args.trust_store
+    if getattr(args, "reviewers_file", None):
+        app.reviewers_source = args.reviewers_file
+    if app.store.count("transactions") == 0 and command not in ("data", *READ_ONLY_COMMANDS):
+        if path == ":memory:" or not explicit or demo_data:
+            print(
+                "[sentinel] empty store -> generating the default demo dataset (seed 42)",
+                file=sys.stderr,
+            )
+            app.generate_dataset(42, 200, 40, 5000)
+        else:
+            print(
+                f"[sentinel] {path} holds no records; synthetic demo data is only generated "
+                "on request (--demo-data, or `sentinel data generate`)",
+                file=sys.stderr,
+            )
     return app
 
 
@@ -123,10 +151,10 @@ def _policy_release(args: argparse.Namespace) -> int:
     from datetime import timedelta
 
     from sentinel.policy.loader import (
-        POLICY_DIR,
         PolicyIntegrityError,
         PolicyRegistry,
         load_policy,
+        policy_dir,
         policy_trust,
     )
     from sentinel.policy.release import RELEASES_FILE, ReleaseBook, sign_activation, sign_release
@@ -134,7 +162,7 @@ def _policy_release(args: argparse.Namespace) -> int:
     from sentinel.trust.issuer import utc_now
     from sentinel.trust.keys import TrustStore, parse_ts
 
-    d = Path(args.dir) if args.dir else POLICY_DIR
+    d = Path(args.dir) if args.dir else policy_dir()
     if args.policy_command == "verify":
         trust = TrustStore.load(args.trust) if args.trust else policy_trust()
         reg = PolicyRegistry(signed=True, trust=trust)
@@ -680,9 +708,9 @@ def cmd_case(args: argparse.Namespace) -> int:
 
 def cmd_policy(args: argparse.Namespace) -> int:
     if args.policy_command == "pin":
-        from sentinel.policy.loader import POLICY_DIR, pin_manifest
+        from sentinel.policy.loader import pin_manifest, policy_dir
 
-        added = pin_manifest(args.dir or POLICY_DIR)
+        added = pin_manifest(args.dir or policy_dir())
         print("pinned: " + (", ".join(added) if added else "nothing new"))
         return 0
     if args.policy_command in ("sign", "activate", "verify"):
@@ -820,9 +848,16 @@ def cmd_audit(args: argparse.Namespace) -> int:
                 fh.write(json.dumps(e, sort_keys=True, separators=(",", ":"), default=str) + "\n")
         print(f"exported {len(events)} events -> {args.path}")
     elif args.audit_command == "list":
-        for e in app.runtime.audit.tail(args.limit):
+        # the runbook's start check needs an event's detail: filter by action, print as JSON
+        events = app.runtime.audit.events() if args.action else app.runtime.audit.tail(args.limit)
+        if args.action:
+            events = [e for e in events if e.action == args.action][-args.limit :]
+        if args.json:
+            print(json.dumps([e.to_dict() for e in events], indent=2, default=str))
+        for e in events if not args.json else ():
             print(
-                f"#{e.sequence:<5} {e.timestamp} {e.workflow:<20} {e.action:<22} {e.decision_id or '-':<20} {e.event_hash[:12]}"
+                f"#{e.sequence:<5} {e.timestamp} {e.event_id:<16} {e.workflow:<16} "
+                f"{e.action:<22} {e.decision_id or '-':<20} {e.event_hash[:12]}"
             )
     return 0
 
@@ -918,8 +953,22 @@ def cmd_bench(args: argparse.Namespace) -> int:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
+    from sentinel.api.server import InsecureBindError, api_key, check_bind, is_loopback, serve
+
+    insecure = bool(args.insecure_demo) or os.environ.get("SENTINEL_INSECURE_DEMO", "") in (
+        "1",
+        "true",
+        "yes",
+    )
+    try:  # before anything is loaded: an open network bind is refused up front
+        check_bind(args.host, insecure_demo=insecure)
+        api_key()  # a configured key file that cannot be read refuses on any bind
+    except InsecureBindError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     app = _app(args)
-    if not app.reviewers.reviewers() and app.store.path == ":memory:":
+    demo_ok = is_loopback(args.host) or insecure
+    if not app.reviewers.reviewers() and app.store.path == ":memory:" and demo_ok:
         # the in-memory demo gets two demo reviewers; their credentials exist only in this
         # process and are printed once, for the console's case-review form
         from sentinel.cases.identity import ReviewerRegistry
@@ -941,9 +990,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         app.analyze()
-    from sentinel.api.server import serve
-
-    serve(app, args.host, args.port)
+    serve(app, args.host, args.port, insecure_demo=insecure)
     return 0
 
 
@@ -1159,6 +1206,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=f"SQLite store path (default {DEFAULT_DB}; ':memory:' for ephemeral)",
     )
+    p.add_argument(
+        "--demo-data",
+        action="store_true",
+        help="fill an empty store named with --db / SENTINEL_DB with the synthetic demo "
+        "dataset (also SENTINEL_DEMO_DATA=1); ':memory:' and the default store always are",
+    )
     p.add_argument("--json", action="store_true", help="machine-readable output")
     p.add_argument(
         "--reviewers",
@@ -1330,7 +1383,9 @@ def build_parser() -> argparse.ArgumentParser:
     pp = po.add_parser(
         "pin", help="pin new policy versions in MANIFEST.json (a pinned version never changes)"
     )
-    pp.add_argument("--dir", help="policy directory (default: the shipped policies)")
+    pp.add_argument(
+        "--dir", help="policy directory (default: SENTINEL_POLICY_DIR, else the shipped policies)"
+    )
     for name, helptext in (
         ("sign", "sign a policy version's release (run where the policy-release key is)"),
         ("activate", "sign an activation: make a released version the active one"),
@@ -1340,7 +1395,10 @@ def build_parser() -> argparse.ArgumentParser:
         ps2.add_argument("--signer", required=True, help="the signer id the trust store names")
         ps2.add_argument("--policy", required=True)
         ps2.add_argument("--version", type=int, required=True)
-        ps2.add_argument("--dir", help="policy directory (default: the shipped policies)")
+        ps2.add_argument(
+            "--dir",
+            help="policy directory (default: SENTINEL_POLICY_DIR, else the shipped policies)",
+        )
         ps2.add_argument(
             "--trust", help="policy trust store (default: SENTINEL_POLICY_TRUST or shipped)"
         )
@@ -1348,7 +1406,9 @@ def build_parser() -> argparse.ArgumentParser:
             ps2.add_argument("--sequence", type=int, help="default: one more than the latest")
             ps2.add_argument("--effective-from", help="YYYY-MM-DDTHH:MM:SSZ (default: now)")
     pv = po.add_parser("verify", help="verify every release and the active versions")
-    pv.add_argument("--dir", help="policy directory (default: the shipped policies)")
+    pv.add_argument(
+        "--dir", help="policy directory (default: SENTINEL_POLICY_DIR, else the shipped policies)"
+    )
     pv.add_argument(
         "--trust", help="policy trust store (default: SENTINEL_POLICY_TRUST or shipped)"
     )
@@ -1365,7 +1425,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     au.add_parser("show").add_argument("id")
     au.add_parser("export").add_argument("path")
-    au.add_parser("list").add_argument("--limit", type=int, default=20)
+    al = au.add_parser("list", help="the latest audit events (newest last)")
+    al.add_argument("--limit", type=int, default=20)
+    al.add_argument("--action", help="only events with this action, e.g. SERVER_START")
+    al.add_argument("--json", action="store_true", help="whole events, including detail")
 
     rp = (
         sub.add_parser("replay")
@@ -1425,6 +1488,12 @@ def build_parser() -> argparse.ArgumentParser:
     sv.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
     sv.add_argument(
         "--analyze", action="store_true", help="run analyze first if the store has no decisions"
+    )
+    sv.add_argument(
+        "--insecure-demo",
+        action="store_true",
+        help="serve on a network address WITHOUT authentication (throwaway demos only; "
+        "logged and audited). Without it a non-loopback bind needs SENTINEL_API_KEY.",
     )
 
     ui = (

@@ -24,4 +24,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
     CMD python -c "import urllib.request,os; urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('PORT','8000')+'/health')" || exit 1
 
+# Binds all interfaces inside the container, so the server refuses to start unless it has
+# SENTINEL_API_KEY (better: SENTINEL_API_KEY_FILE, a mounted secret) or, for a throwaway
+# demo, SENTINEL_INSECURE_DEMO=1 (`make docker-run`). See docs/DEPLOYMENT.md.
 CMD ["sh", "-c", "sentinel serve --host 0.0.0.0 --port ${PORT} --analyze"]
