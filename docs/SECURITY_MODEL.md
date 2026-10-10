@@ -27,12 +27,13 @@ for the model's recommendation) and is measured as enforced in
 
 | Trust class | Source | May reach the authoritative decision |
 |---|---|---|
-| `TRUSTED_INTERNAL` | our own ledger, records and policies | **yes** |
-| `VERIFIED_EXTERNAL` | acquirer / network records the institution verified | **yes** |
+| `TRUSTED_INTERNAL` | a record read by id from Sentinel's own record store (fact provenance `TRUSTED_LOCAL`); our own policies | **yes** |
+| `VERIFIED_EXTERNAL` | a record whose issuer's signed statement verified against the operator's trust store (fact provenance `VERIFIED_EXTERNAL`) | **yes** |
 | `USER_CONTROLLED` | a cardholder narrative, chat turn or form field | never |
 | `MERCHANT_CONTROLLED` | merchant application copy, descriptors, site text | never |
 | `DOCUMENT_CONTROLLED` | an uploaded invoice, receipt or PDF (treated as text) | never |
 | `MODEL_GENERATED` | anything an LLM produced, including 'our' agent's recommendation | never |
+| `UNVERIFIED_RECORD` | record fields Sentinel could not establish: sent in a request body, or carried by a signature that failed, expired, was revoked or was superseded -- claims about the records, never facts | never |
 | `UNKNOWN` | unlabelled third-party content | never |
 
 `TrustClass.is_trusted` is the only predicate the platform uses. `Evidence`
@@ -40,6 +41,86 @@ refuses to be VERIFIED from an untrusted class; `UntrustedText`, `Claim` and
 `AIRecommendation` refuse a trusted class. Trust does not launder through a
 model call: the agent read the attacker's text, so its output is
 `MODEL_GENERATED`.
+
+A record's trust class is not a property of its Python type. It comes from the
+record's **fact provenance**, which the workflow computes from how the facts
+arrived.
+
+## Fact provenance (`sentinel/trust/`)
+
+Why may Sentinel trust the facts it decides on? Every decision carries one
+`FactProvenance` for its primary record (dispute ledger, acquirer record,
+transaction, login session): a status, the issuer and key, the digest of the
+exact signed statement, and the digest of the exact payload used. The workflow
+computes it (`workflows._resolve_facts`); no request field can set it.
+
+| Provenance | Meaning | Can support an outcome |
+|---|---|---|
+| `VERIFIED_EXTERNAL` | an issuer's signed fact envelope verified: known key, the issuer's own, scoped to the kind of fact, unrevoked, signed within the key's validity, about this record, unexpired, not older than a statement already acted on | **yes** |
+| `TRUSTED_LOCAL` | read by id from Sentinel's record store, unsigned: trusted for where it is kept, not because anything proves it (a DB-write attacker could change it) | **yes** |
+| `UNTRUSTED` | sent in the request body, unsigned: a claim about the records | no -- stricter outcomes only |
+| `EXPIRED` | a valid signature past its `expires_at` | no -- stricter outcomes only |
+| `SUPERSEDED` | a valid signature older than a statement about the same record that this deployment already acted on (a replayed statement) | no -- stricter outcomes only |
+| `REVOKED` | signed by a key the operator revoked; a compromised key can backdate, so its `issued_at` does not help | no -- stricter outcomes only |
+| `INVALID` | malformed, altered, unknown or wrong signer, out of scope, another record's statement, issued in the future, valid longer than the key allows, a stored row that differs from its signed statement, or a record-store read with no statement where the deployment requires one | no -- stricter outcomes only |
+
+- **Signed fact envelopes.** An issuer (the core ledger, the acquirer's KYB
+  registry, the authentication service) signs `sentinel.fact/1` envelopes with
+  Ed25519 (RFC 8032, via pyca/cryptography; Sentinel implements no
+  cryptographic primitive). The signature covers the domain prefix
+  `sentinel.fact/1\n` and the canonical JSON of the header. The header names
+  the issuer, key, kind, subject, sequence, issued / effective / expires times
+  and the payload's SHA-256.
+- **Canonical JSON.** Signing needs one byte string per value. Floats, NaN,
+  duplicate keys, out-of-range integers, lone surrogates and deep nesting are
+  refused, not normalised. The API rejects duplicate keys in every request
+  body.
+- **The trust store** is operator configuration (`SENTINEL_TRUST_STORE`,
+  `--trust-store`) and holds public keys only. Each key has one purpose, its
+  scopes, a validity window and a maximum statement lifetime. A key id is the
+  fingerprint of its public key, so an entry cannot claim another key's
+  identity. Rotation (`not_after`) keeps earlier statements valid until they
+  expire. Revocation invalidates everything the key ever signed.
+- **Complete statements.** A signed statement must state every field its kind
+  requires (`workflows.STATEMENT_FIELDS`). An omitted field is not the
+  issuer's word, and Sentinel does not fill it in with a default: an
+  incomplete statement is `INVALID`. A statement that does not verify is never
+  decided on. The decision falls back to the request's own record, which fails
+  safe.
+- **Anti-rollback.** The highest sequence acted on per issuer and subject is
+  the higher of an index table and the tamper-evident audit chain (every
+  decision event names the statement it used). A database writer who deletes
+  the table's rows must also rewrite the chain. An older statement is
+  `SUPERSEDED`, and a different statement with the same sequence is `INVALID`
+  (equivocation).
+- **Stored records are evaluated by id.** A caller cannot send body facts or a
+  statement for a dispute, application, transaction or session the store
+  holds, on any route (the multi-turn conversation route included); that is a
+  400. Its recorded submission, its account's context and its
+  stored statement decide. A KYB statement names its application, so a
+  statement about one of a merchant's applications cannot stand in for
+  another. `sentinel trust ingest` verifies issuers' statements and stores
+  them beside the records.
+- **Record-store tampering.** A record read by id is checked field by field
+  against its stored signed statement. With `require_signed_facts` (on
+  whenever the app signs its own records), a stored record whose statement is
+  missing is `INVALID`. Deleting a statement therefore cannot downgrade a
+  tampered row to `TRUSTED_LOCAL`.
+- **Asymmetry.** Unverified records can make an outcome stricter (a refunded
+  ledger still denies) but never support one. Reconciliation turns what they
+  would support into `INSUFFICIENT`, which goes to human review, so they never
+  execute a capability.
+
+**What `VERIFIED_EXTERNAL` proves.** The holder of a key the operator trusts
+for this issuer and this kind of fact signed exactly this payload about this
+record, within the key's validity. The statement has not expired and is not
+older than one already acted on.
+
+**What it does not prove.** That the issuer's record is *true*; that the
+issuer has not issued a newer statement Sentinel has not yet seen (expiry
+bounds that window); or anything about a key the operator should not have
+trusted. The demo's issuer is ephemeral and in-process: it shows the
+mechanism, not an external trust relationship.
 
 ## Capability security matrix
 
@@ -141,16 +222,16 @@ audit.
 
 | Capability | How a decision path can consider it | Model's request | Evidence | Policy | Authorization (registry) | Human review (who may approve a held case) | Audit |
 |---|---|---|---|---|---|---|---|
-| `APPROVE_REFUND` | dispute workflow -- fixed candidate | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | SYSTEM may execute up to ₹50,000 | HUMAN_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
-| `APPROVE_TRANSACTION` | transaction workflow -- fixed candidate | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | SYSTEM may execute up to ₹150,000 | HUMAN_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
-| `APPROVE_MERCHANT` | merchant-onboarding workflow -- fixed candidate | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | SYSTEM may execute | HUMAN_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
-| `FREEZE_ACCOUNT` | account-security workflow -- the caller's structured `requested_capability` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | SYSTEM may execute | HUMAN_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
-| `UNFREEZE_ACCOUNT` | account-security workflow -- the caller's structured `requested_capability` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | HUMAN_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
-| `CHANGE_PAYOUT` | account-security workflow -- the caller's structured `requested_capability`, or a `payout_change` event in the trusted session record | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | HUMAN_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
-| `RELEASE_FUNDS` | account-security workflow -- the caller's structured `requested_capability` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | SENIOR_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
-| `CLOSE_CASE` | account-security `requested_capability` only; the investigation workflow never has a candidate. Closing a *case* is `record_human_decision`, never a capability execution | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | HUMAN_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
-| `ALTER_RISK` | account-security workflow -- the caller's structured `requested_capability` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | SENIOR_REVIEWER to approve | decision event (action, capability, facts source, snapshot hash) |
-| `SKIP_REVIEW` | account-security workflow -- the caller's structured `requested_capability` (no actor may be granted it) | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | nobody | NOBODY | decision event (action, capability, facts source, snapshot hash) |
+| `APPROVE_REFUND` | dispute workflow -- fixed candidate | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | SYSTEM may execute up to ₹50,000 | HUMAN_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
+| `APPROVE_TRANSACTION` | transaction workflow -- fixed candidate | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | SYSTEM may execute up to ₹150,000 | HUMAN_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
+| `APPROVE_MERCHANT` | merchant-onboarding workflow -- fixed candidate | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | SYSTEM may execute | HUMAN_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
+| `FREEZE_ACCOUNT` | account-security workflow -- the caller's structured `requested_capability` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | SYSTEM may execute | HUMAN_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
+| `UNFREEZE_ACCOUNT` | account-security workflow -- the caller's structured `requested_capability` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | HUMAN_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
+| `CHANGE_PAYOUT` | account-security workflow -- the caller's structured `requested_capability`, or a `payout_change` event in the trusted session record | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | HUMAN_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
+| `RELEASE_FUNDS` | account-security workflow -- the caller's structured `requested_capability` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | SENIOR_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
+| `CLOSE_CASE` | account-security `requested_capability` only; the investigation workflow never has a candidate. Closing a *case* is `record_human_decision`, never a capability execution | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | HUMAN_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
+| `ALTER_RISK` | account-security workflow -- the caller's structured `requested_capability` | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | human only -- never the system | SENIOR_REVIEWER to approve | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
+| `SKIP_REVIEW` | account-security workflow -- the caller's structured `requested_capability` (no actor may be granted it) | recorded, never read | SUPPORTED required | must not BLOCK / hold / review | nobody | NOBODY | decision event (action, capability, facts provenance + payload digest, snapshot hash) |
 
 A capability executes only when the final action is ALLOW (or STEP_UP once
 satisfied): evidence SUPPORTED, policy not BLOCK / HOLD / REVIEW, and the

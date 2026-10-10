@@ -7,7 +7,7 @@ from sentinel.data.store import SentinelStore, SqliteAuditBackend, SqliteCaseRep
 from sentinel.decision.composer import compose
 from sentinel.decision.snapshot import restore, snapshot
 from sentinel.decision.workflows import DisputeRequest, Runtime, run_dispute
-from sentinel.domain.enums import Capability, CaseStatus, FinalAction, TrustClass
+from sentinel.domain.enums import Capability, CaseStatus, FactsSource, FinalAction, TrustClass
 from sentinel.policy import DEFAULT_REGISTRY
 from sentinel.replay.engine import ReplayEngine, ReplayOverrides
 from sentinel.security.provenance import UntrustedContent
@@ -155,7 +155,14 @@ def test_replay_policy_version_and_rule_override():
         "policy_auto_limit": 50000,
         "prior_disputes_90d": 0,
     }
-    b = run_dispute(rt, DisputeRequest(UntrustedContent("My order never arrived"), ledger))
+    b = run_dispute(
+        rt,
+        DisputeRequest(
+            UntrustedContent("My order never arrived"),
+            ledger,
+            facts_source=FactsSource.SYSTEM_OF_RECORD,
+        ),
+    )
     assert b.decision.executed
     eng = ReplayEngine(DEFAULT_REGISTRY)
     snap = snapshot(b.inputs)
@@ -290,6 +297,7 @@ def test_untrusted_content_trust_is_preserved_in_snapshot():
             UntrustedContent("never arrived"),
             {"amount": 18000, "delivery_status": "delivered"},
             documents=(doc,),
+            facts_source=FactsSource.SYSTEM_OF_RECORD,
         ),
     )
     snap = snapshot(b.inputs)

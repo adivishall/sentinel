@@ -34,9 +34,10 @@ from sentinel.cases.service import CaseService, InvalidTransition
 from sentinel.cli.main import main as cli_main
 from sentinel.data.store import SentinelStore, SqliteAuditBackend
 from sentinel.decision.workflows import RunOptions
-from sentinel.domain.enums import CaseStatus
+from sentinel.domain.enums import CaseStatus, FactKind
 from sentinel.replay.engine import ReplayOverrides
 from sentinel.risk import scoring
+from tests.records import ledger
 
 LEDGER_REFUNDED = {
     "amount": 18000,
@@ -86,10 +87,12 @@ def _get(url):
 # ---- 1. what-if switches are not authorizations ---------------------------------------------
 def test_policy_version_override_would_pay_a_second_refund_so_the_api_refuses_it(server, app):
     # The defect: dispute-refund@v1 has no block-already-refunded rule.
-    b = app.evaluate_dispute(CLAIM, LEDGER_REFUNDED, options=RunOptions(policy_version=1))
+    # the refunded ledger as its issuer signs it (verified facts: the point is the policy)
+    signed = app.issuer.sign(FactKind.DISPUTE_LEDGER, "DSP-REFUNDED", ledger(**LEDGER_REFUNDED))
+    b = app.evaluate_dispute(CLAIM, envelope=signed, options=RunOptions(policy_version=1))
     assert b.decision.executed_capability is not None  # what the override would do ...
     assert not b.decision.authoritative and app.store.decision(b.decision.decision_id) is None
-    latest = app.evaluate_dispute(CLAIM, LEDGER_REFUNDED)
+    latest = app.evaluate_dispute(CLAIM, envelope=signed)
     assert latest.decision.final_action.value == "DENY" and not latest.decision.executed
     code, body = _post(
         server + "/v1/disputes/evaluate",

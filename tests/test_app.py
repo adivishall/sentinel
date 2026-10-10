@@ -4,9 +4,10 @@ import pytest
 
 from sentinel.app import SentinelApp
 from sentinel.decision.workflows import RunOptions
-from sentinel.domain.enums import Capability, FinalAction
+from sentinel.domain.enums import Capability, FactKind, FinalAction
 from sentinel.presets import ATTACKS, SCENARIOS
 from sentinel.replay.engine import ReplayOverrides
+from tests.records import ledger
 
 
 @pytest.fixture(scope="module")
@@ -91,7 +92,9 @@ def test_flagship_attack_simulation(app):
         "ai_security_gateway",
         "ai_recommendation",
     ]
-    assert sb["case"] is not None and sb["audit_event"] is not None
+    # a simulation: its ledger is a fixture signed on request, so nothing is recorded
+    assert not sb["decision"]["authoritative"]
+    assert sb["case"] is None and sb["audit_event"] is None
 
 
 @pytest.mark.parametrize("kind", list(ATTACKS))
@@ -204,8 +207,16 @@ def test_transaction_baseline_is_point_in_time(app):
 def test_cases_audit_and_replay(app):
     cases = app.cases()
     assert cases and app.case(cases[0].case_id) is not None
-    dec = app.store.decisions(workflow="dispute", limit=50)
-    target = next(x for x in dec if x["final_action"] == "ALLOW" and "policy" in x["controls"])
+    allowed = app.evaluate_dispute(
+        "My order never arrived.",
+        envelope=app.issuer.sign(
+            FactKind.DISPUTE_LEDGER,
+            "DSP-REPLAY",
+            ledger(amount=9_000, delivery_status="not_delivered", policy_auto_limit=50_000),
+        ),
+    )
+    target = app.store.decision(allowed.decision.decision_id)
+    assert target["final_action"] == "ALLOW" and "policy" in target["controls"]
     ev = app.audit_event(target["decision_id"])
     assert ev and ev["decision_id"] == target["decision_id"]
     r = app.replay(

@@ -15,8 +15,10 @@
   "executed_without_ledger_support": 0.0,
   "attack_text_approved_on_supporting_ledger": 0.082,
   "text_selected_claim_on_supporting_ledger": 0.441,
+  "unsigned_supporting_facts_executed": 0.0,
+  "facts_provenance": "every case's ledger is signed by an ephemeral evaluation issuer and verified (VERIFIED_EXTERNAL); F sends the same ledgers unsigned (UNTRUSTED)",
   "note": "A, B, C and E's first two rates are expected to be 0 BY CONSTRUCTION -- the attack ledgers do not support the claims -- and are regression checks that the implementation honours the design, not empirical detection results. 'any change' counts outcomes that tightened (e.g. DENY -> BLOCK). E shows the true shape of the property: on a ledger that supports the claim, untrusted text selects the claim type (and a deserved refund is approved whatever the prose says) but never exceeds the ledger-supported ceiling.",
-  "seconds": 0.6,
+  "seconds": 1.1,
   "methodology": {
     "kind": "structural on unsupporting ledgers; by-design rows on supporting ledgers",
     "dataset": "development + held-out attack texts over fixed ledgers",

@@ -43,9 +43,26 @@ def _app(args: argparse.Namespace) -> Any:
     from sentinel.app import SentinelApp
 
     path = getattr(args, "db", None) or DEFAULT_DB
-    if path != ":memory:":
+    trust = None
+    if getattr(args, "trust_store", None):
+        from sentinel.trust.keys import TrustStore
+
+        trust = TrustStore.load(args.trust_store)
+    if path == ":memory:":
+        # an ephemeral store gets the ephemeral demo issuer: store and key live and die
+        # together, so the demo's records are signed and a tampered row is detected
+        from sentinel.app import DEMO_ISSUER, DEMO_ISSUER_LABEL
+        from sentinel.data.store import SentinelStore
+        from sentinel.trust.issuer import Issuer
+
+        app = SentinelApp(
+            SentinelStore(":memory:"),
+            trust=trust,
+            issuer=Issuer.ephemeral(DEMO_ISSUER, label=DEMO_ISSUER_LABEL),
+        )
+    else:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-    app = SentinelApp.open(path)
+        app = SentinelApp.open(path, trust=trust)
     if app.store.count("transactions") == 0 and getattr(args, "command", "") not in ("data",):
         print(
             "[sentinel] empty store -> generating the default demo dataset (seed 42)",
@@ -155,9 +172,14 @@ def cmd_transaction(args: argparse.Namespace) -> int:
         from sentinel.api import schemas as S
 
         data = _load_json(args.target)
-        t = S.transaction(data if "transaction" in data else {"transaction": data})
         untrusted = S.untrusted_list(data, "untrusted")
-        b = app.evaluate_transaction(t, untrusted=untrusted, options=_options(args))
+        if "facts_envelope" in data:
+            b = app.evaluate_transaction(
+                envelope=data["facts_envelope"], untrusted=untrusted, options=_options(args)
+            )
+        else:
+            t = S.transaction(data if "transaction" in data else {"transaction": data})
+            b = app.evaluate_transaction(t, untrusted=untrusted, options=_options(args))
     else:
         b = app.evaluate_transaction(args.target, options=_options(args))
     _out(
@@ -185,14 +207,20 @@ def cmd_dispute(args: argparse.Namespace) -> int:
         docs = tuple(data.get("documents", [])) + (
             (data["document"],) if data.get("document") else ()
         )
+        env = data.get("facts_envelope")
         if data.get("messages"):
             b = app.evaluate_dispute_conversation(
-                tuple(data["messages"]), data["ledger"], options=_options(args)
+                tuple(data["messages"]),
+                None if env is not None else data["ledger"],
+                envelope=env,
+                options=_options(args),
             )
         else:
             b = app.evaluate_dispute(
                 data.get("narrative", data.get("submission", "")),
-                data["ledger"],
+                None if env is not None else data["ledger"],
+                envelope=env,
+                dispute_id=data.get("dispute_id"),
                 documents=docs,
                 options=_options(args),
             )
@@ -213,9 +241,11 @@ def cmd_merchant(args: argparse.Namespace) -> int:
         docs = tuple(data.get("documents", [])) + (
             (data["document"],) if data.get("document") else ()
         )
+        env = data.get("facts_envelope")
         b = app.evaluate_merchant(
             data.get("application", ""),
-            data["records"],
+            None if env is not None else data["records"],
+            envelope=env,
             merchant_id=data.get("merchant_id", ""),
             documents=docs,
             options=_options(args),
@@ -235,9 +265,15 @@ def cmd_account(args: argparse.Namespace) -> int:
         from sentinel.domain.enums import Workflow
 
         data = _load_json(args.target)
-        s = S.login_session(data if "session" in data else {"session": data})
+        env = data.get("facts_envelope")
+        s = (
+            None
+            if env is not None
+            else S.login_session(data if "session" in data else {"session": data})
+        )
         b = app.evaluate_account(
             s,
+            envelope=env,
             message=data.get("message"),
             requested_capability=S.capability(
                 data, "requested_capability", workflow=Workflow.ACCOUNT_SECURITY
@@ -785,6 +821,142 @@ def cmd_ui(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_trust(args: argparse.Namespace) -> int:
+    """Operator tooling for fact provenance (``sentinel.trust``): generate an issuer key
+    and its trust-store entry, sign a record, verify an envelope, list or revoke keys.
+    Private keys are written 0600 and never read by the server; the trust store holds
+    public keys only and belongs outside any directory the data or policies live in."""
+    from datetime import timedelta
+
+    from sentinel.domain.enums import FactKind
+    from sentinel.trust import crypto
+    from sentinel.trust.facts import verify_fact
+    from sentinel.trust.issuer import Issuer, utc_now
+    from sentinel.trust.keys import TrustedKey, TrustStore
+
+    cmd = args.trust_command
+    if cmd == "keygen":
+        private = crypto.generate()
+        key_path = Path(args.key_out)
+        if key_path.exists():
+            raise ValueError(f"{key_path} exists; refusing to overwrite a private key")
+        key_path.write_bytes(crypto.private_pem(private))
+        key_path.chmod(0o600)
+        pub = crypto.public_raw(private)
+        key = TrustedKey(
+            key_id=crypto.key_id(pub),
+            issuer=args.issuer,
+            public_key=pub,
+            purpose=args.purpose,
+            scopes=frozenset(x.strip() for x in args.scopes.split(",") if x.strip()),
+            not_before=utc_now() - timedelta(minutes=5),
+            max_validity_days=args.max_validity_days,
+            label=args.label or "",
+        )
+        trust_path = Path(args.trust_out)
+        store = TrustStore.load(trust_path) if trust_path.exists() else TrustStore.empty()
+        # round-trip through the loader's validation before writing anything that trusts it
+        store = TrustStore.from_json(store.with_key(key).to_json(), origin=str(trust_path))
+        trust_path.write_text(store.dumps(), encoding="utf-8")
+        _out(
+            args,
+            key.to_json(),
+            f"{key.key_id}  issuer={key.issuer}  purpose={key.purpose}  scopes={sorted(key.scopes)}\n  private key -> {key_path} (0600; keep it off the Sentinel host)\n  trust store -> {trust_path}",
+        )
+        return 0
+    if cmd == "sign":
+        issuer = Issuer.from_private(
+            crypto.load_private_pem(args.key),
+            args.issuer,
+            validity=timedelta(hours=args.validity_hours),
+        )
+        payload = _load_json(args.payload)
+        env = issuer.sign(
+            FactKind(args.kind),
+            args.id,
+            payload,
+            sequence=args.sequence,
+            validity=timedelta(hours=args.validity_hours),
+        )
+        text = json.dumps(env, indent=2)
+        if args.out:
+            Path(args.out).write_text(text + "\n", encoding="utf-8")
+            print(f"signed {env['subject']} (sequence {env['sequence']}) -> {args.out}")
+        else:
+            print(text)
+        return 0
+    app_trust = TrustStore.load(args.trust_store) if getattr(args, "trust_store", None) else None
+    if app_trust is None:
+        from sentinel.app import configured_trust
+
+        app_trust = configured_trust()
+    if cmd == "verify":
+        env = _load_json(args.envelope)
+        v = verify_fact(
+            env,
+            trust=app_trust,
+            now=utc_now(),
+            kind=FactKind(args.kind),
+            subject=args.subject,
+        )
+        p = v.provenance
+        _out(args, p.audit_detail() | {"reason": p.reason}, f"{p.status.value}: {p.reason}")
+        return 0 if v.verified else 3
+    if cmd == "ingest":
+        # Load issuers' statements into the record store, so records read by id are
+        # verified against them (and a missing one is a tamper signal when
+        # SENTINEL_REQUIRE_SIGNED_FACTS is on). Each is verified first; nothing that does
+        # not verify is stored.
+        app = _app(args)
+        good: list[tuple[str, dict[str, Any]]] = []
+        for path in args.envelopes:
+            env = _load_json(path)
+            kind = FactKind(str(env.get("kind")))
+            v = verify_fact(env, trust=app.runtime.trust, now=utc_now(), kind=kind)
+            if not v.verified:
+                print(f"refused {path}: {v.provenance.status.value}: {v.provenance.reason}")
+                continue
+            record_key = str(env["subject"])
+            if kind is FactKind.KYB_RECORD:
+                app_id = (v.payload or {}).get("application_id")
+                if not isinstance(app_id, str):
+                    print(f"refused {path}: a KYB statement must name its application_id")
+                    continue
+                record_key = f"application:{app_id}"
+            good.append((record_key, env))
+            print(f"ingested {record_key} (sequence {env['sequence']}, {env['issuer']})")
+        app.store.save_fact_envelopes(good)
+        return 0 if len(good) == len(args.envelopes) else 3
+    if cmd == "list":
+        rows = app_trust.summary()
+        _out(
+            args,
+            {"origin": app_trust.origin, "keys": rows},
+            "\n".join(
+                f"{r['key_id']}  {r['status']:8} {r['issuer']:20} {r['purpose']:15} {','.join(r['scopes'])}"
+                for r in rows
+            )
+            or f"(no trusted keys; origin: {app_trust.origin})",
+        )
+        return 0
+    if cmd == "revoke":
+        from dataclasses import replace
+
+        if not args.trust_store:
+            raise ValueError("revoke edits a trust-store file: pass --trust-store PATH")
+        found = app_trust.get(args.key_id)
+        if found is None:
+            raise KeyError(f"{args.key_id} is not in {args.trust_store}")
+        keys = dict(app_trust.keys)
+        keys[found.key_id] = replace(found, revoked_at=utc_now(), revocation_reason=args.reason)
+        Path(args.trust_store).write_text(
+            TrustStore(keys, app_trust.origin).dumps(), encoding="utf-8"
+        )
+        print(f"revoked {found.key_id}: everything it signed now verifies as REVOKED")
+        return 0
+    raise ValueError(f"unknown trust command {cmd}")
+
+
 def cmd_version(args: argparse.Namespace) -> int:
     print(f"sentinel {__version__}")
     return 0
@@ -802,6 +974,12 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"SQLite store path (default {DEFAULT_DB}; ':memory:' for ephemeral)",
     )
     p.add_argument("--json", action="store_true", help="machine-readable output")
+    p.add_argument(
+        "--trust-store",
+        default=None,
+        help="trust store (public keys of trusted issuers and policy signers); "
+        "default $SENTINEL_TRUST_STORE",
+    )
     sub = p.add_subparsers(dest="command", required=True)
 
     def opts(sp: argparse.ArgumentParser, *, what_if: bool = False) -> None:
@@ -1033,6 +1211,49 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ui.add_argument("--out", default="ui/snapshot.json")
 
+    tr = sub.add_parser(
+        "trust", help="fact provenance: issuer keys, signed envelopes, the trust store"
+    ).add_subparsers(dest="trust_command", required=True)
+    kg = tr.add_parser("keygen", help="generate an Ed25519 key and add it to a trust store")
+    kg.add_argument("--issuer", required=True, help="issuer id, e.g. core-ledger")
+    kg.add_argument("--purpose", default="facts", choices=["facts", "policy-release"])
+    kg.add_argument(
+        "--scopes", default="*", help="comma-separated fact kinds or policy ids ('*' = all)"
+    )
+    kg.add_argument("--key-out", required=True, help="where to write the private key (PEM, 0600)")
+    kg.add_argument("--trust-out", required=True, help="trust store to create or add to")
+    kg.add_argument("--max-validity-days", type=int, default=30)
+    kg.add_argument("--label", default="")
+    sg = tr.add_parser("sign", help="sign a record as its issuer (a fact envelope)")
+    sg.add_argument("--key", required=True, help="the issuer's private key (PEM)")
+    sg.add_argument("--issuer", required=True)
+    sg.add_argument(
+        "--kind",
+        required=True,
+        choices=["dispute_ledger", "kyb_record", "transaction", "login_session"],
+    )
+    sg.add_argument("--id", required=True, help="the record id the statement is about")
+    sg.add_argument("--payload", required=True, help="JSON file with the record's fields")
+    sg.add_argument("--sequence", type=int, default=1)
+    sg.add_argument("--validity-hours", type=int, default=24)
+    sg.add_argument("--out")
+    vf = tr.add_parser("verify", help="verify an envelope against the trust store")
+    vf.add_argument("envelope")
+    vf.add_argument(
+        "--kind",
+        required=True,
+        choices=["dispute_ledger", "kyb_record", "transaction", "login_session"],
+    )
+    vf.add_argument("--subject", help="e.g. dispute:DSP-000123 (default: as the envelope names)")
+    tr.add_parser("list", help="the trusted keys")
+    ig = tr.add_parser(
+        "ingest", help="verify issuers' statements and store them beside the records"
+    )
+    ig.add_argument("envelopes", nargs="+")
+    rv = tr.add_parser("revoke", help="revoke a key in a trust-store file")
+    rv.add_argument("key_id")
+    rv.add_argument("--reason", default="compromised")
+
     sub.add_parser("version")
     return p
 
@@ -1057,6 +1278,7 @@ COMMANDS = {
     "bench": cmd_bench,
     "serve": cmd_serve,
     "ui": cmd_ui,
+    "trust": cmd_trust,
     "version": cmd_version,
 }
 

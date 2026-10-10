@@ -87,6 +87,20 @@ def opt_bool(d: dict[str, Any], key: str, default: bool = False) -> bool:
     return v
 
 
+def envelope(d: dict[str, Any], *, exclusive: tuple[str, ...]) -> dict[str, Any] | None:
+    """A signed fact envelope (``facts_envelope``), if sent. It stands instead of the
+    request's own facts, so sending both is refused rather than silently preferring one."""
+    if "facts_envelope" not in d:
+        return None
+    env = d["facts_envelope"]
+    if not isinstance(env, dict):
+        raise ValidationError("'facts_envelope' must be a JSON object (a signed fact envelope)")
+    both = [k for k in exclusive if k in d]
+    if both:
+        raise ValidationError(f"send 'facts_envelope' or {both}, not both")
+    return env
+
+
 def req_obj(d: dict[str, Any], key: str, *, alt: str | None = None) -> dict[str, Any]:
     v = d.get(key, d.get(alt) if alt else None)
     if not isinstance(v, dict):

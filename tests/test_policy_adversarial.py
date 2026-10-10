@@ -32,6 +32,7 @@ from sentinel.domain.enums import (
     ActorKind,
     AuthorizationStatus,
     Capability,
+    FactsSource,
     FinalAction,
     PolicyOutcome,
 )
@@ -56,7 +57,7 @@ LEDGER = {"amount": 12000, "delivery_status": "not_delivered", "policy_auto_limi
 def _dispute(ledger, opts=None):
     return run_dispute(
         Runtime(persist=False),
-        DisputeRequest(UntrustedContent(CLAIM), ledger),
+        DisputeRequest(UntrustedContent(CLAIM), ledger, facts_source=FactsSource.SYSTEM_OF_RECORD),
         opts or RunOptions(),
     )
 

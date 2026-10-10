@@ -6,15 +6,21 @@ decision."""
 
 from __future__ import annotations
 
+import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Any
 
 from sentinel.audit.chain import AuditChain, ChainVerification
 from sentinel.cases.service import CaseService
 from sentinel.data.generator import Dataset, generate
-from sentinel.data.store import SentinelStore, SqliteAuditBackend, SqliteCaseRepository
+from sentinel.data.store import (
+    SentinelStore,
+    SqliteAuditBackend,
+    SqliteCaseRepository,
+    SqliteSequences,
+)
 from sentinel.decision.session import DisputeSession
 from sentinel.decision.snapshot import snapshot
 from sentinel.decision.workflows import (
@@ -35,11 +41,13 @@ from sentinel.decision.workflows import (
     run_investigation,
     run_kyb,
     run_transaction,
+    session_record,
+    transaction_record,
 )
 from sentinel.domain.cases import Case
-from sentinel.domain.entities import LoginSession, Transaction
-from sentinel.domain.enums import CaseStatus, FactsSource, TrustClass
-from sentinel.domain.ids import content_hash
+from sentinel.domain.entities import Dispute, KYBApplication, LoginSession, Transaction
+from sentinel.domain.enums import CaseStatus, FactKind, FactsSource, TrustClass
+from sentinel.domain.ids import content_hash, new_id
 from sentinel.domain.risk import EntityRiskProfile
 from sentinel.domain.serialization import to_dict
 from sentinel.observability import METRICS, get_logger, log_decision
@@ -53,8 +61,77 @@ from sentinel.risk.entity import EntityRiskEngine
 from sentinel.risk.graph import EntityGraph, Node
 from sentinel.security.gateway import Conversation
 from sentinel.security.provenance import UntrustedContent
+from sentinel.trust.facts import verify_fact
+from sentinel.trust.issuer import Issuer
+from sentinel.trust.keys import TrustStore
 
 _log = get_logger("sentinel.app")
+
+DEMO_ISSUER = "synthetic-ledger"
+DEMO_ISSUER_LABEL = (
+    "ephemeral demo issuer: stands in for the institution's systems of record signing their "
+    "records; its key is generated in this process and never written anywhere"
+)
+
+
+def configured_trust() -> TrustStore:
+    """The operator's trust store (``SENTINEL_TRUST_STORE``), or an empty one."""
+    path = os.environ.get("SENTINEL_TRUST_STORE")
+    return TrustStore.load(path) if path else TrustStore.empty()
+
+
+def _named(envelope: dict[str, Any] | None, kind: FactKind) -> str | None:
+    """The record id a caller-carried statement names (for the stored-record check)."""
+    subject = envelope.get("subject") if isinstance(envelope, dict) else None
+    prefix = kind.subject_prefix + ":"
+    if isinstance(subject, str) and subject.startswith(prefix):
+        return subject[len(prefix) :] or None
+    return None
+
+
+def _transaction_from_record(rec: dict[str, Any]) -> Transaction:
+    """A transaction as its issuer stated it (an envelope payload)."""
+    need = ("transaction_id", "account_id", "merchant_id", "instrument_id", "device_id")
+    try:
+        t = Transaction(
+            **{k: str(rec[k]) for k in need},
+            amount=rec["amount"],  # validated by the workflow (a positive integer)
+            currency=str(rec.get("currency", "INR")),
+            timestamp=str(rec["timestamp"]),
+            country=str(rec["country"]),
+            channel=str(rec.get("channel", "ecommerce")),
+            auth_strength=str(rec.get("auth_strength", "none")),
+            delivery_status=str(rec.get("delivery_status", "unknown")),
+            counterparty_account_id=(
+                str(rec["counterparty_account_id"]) if rec.get("counterparty_account_id") else None
+            ),
+            label="unknown",
+            status=str(rec.get("status", "settled")),
+        )
+    except (KeyError, TypeError) as e:
+        raise ValueError(f"the envelope carries no usable transaction record: {e}") from None
+    return t
+
+
+def _session_from_record(rec: dict[str, Any]) -> LoginSession:
+    try:
+        events = rec.get("events", [])
+        if not isinstance(events, list) or not all(isinstance(e, str) for e in events):
+            raise TypeError("events must be a list of strings")
+        if not isinstance(rec.get("mfa_passed", True), bool):
+            raise TypeError("mfa_passed must be a boolean")
+        return LoginSession(
+            str(rec["session_id"]),
+            str(rec["account_id"]),
+            str(rec["device_id"]),
+            str(rec.get("ip", "")),
+            str(rec["country"]),
+            str(rec["started_at"]),
+            bool(rec.get("mfa_passed", True)),
+            tuple(events),
+        )
+    except (KeyError, TypeError) as e:
+        raise ValueError(f"the envelope carries no usable session record: {e}") from None
 
 
 @dataclass
@@ -67,15 +144,40 @@ class _World:
 
 class SentinelApp:
     def __init__(
-        self, store: SentinelStore | None = None, *, persist: bool = True, provider: Any = None
+        self,
+        store: SentinelStore | None = None,
+        *,
+        persist: bool = True,
+        provider: Any = None,
+        trust: TrustStore | None = None,
+        issuer: Issuer | None = None,
+        require_signed_facts: bool | None = None,
     ) -> None:
+        """``trust``: the operator's trust store (default: ``SENTINEL_TRUST_STORE``, else
+        empty -- nothing can be VERIFIED_EXTERNAL). ``issuer``: a signer for this app's own
+        dataset and fixtures (the demo's ephemeral issuer); its key is added to the trust
+        store, and nothing reachable from the API can use it. ``require_signed_facts``
+        (default: on when this app signs its own records, or ``SENTINEL_REQUIRE_SIGNED_FACTS``)
+        makes a record-store read without its signed statement INVALID."""
         self.store = store or SentinelStore(":memory:")
+        self.issuer = issuer
+        trust = trust if trust is not None else configured_trust()
+        if issuer is not None:
+            trust = trust.with_key(issuer.key)
+        sequences = SqliteSequences(self.store)
+        if require_signed_facts is None:
+            require_signed_facts = issuer is not None or os.environ.get(
+                "SENTINEL_REQUIRE_SIGNED_FACTS", ""
+            ) in ("1", "true", "yes")
         self.runtime = Runtime(
             policies=DEFAULT_REGISTRY,
             cases=CaseService(SqliteCaseRepository(self.store)),
             audit=AuditChain(SqliteAuditBackend(self.store)),
             provider=provider,
             persist=persist,
+            trust=trust,
+            sequences=sequences,
+            require_signed_facts=require_signed_facts,
         )
         # What-if runs (reduced controls, a historical policy or risk model) use the same
         # policies, gateway and provider but never persist: no audit event, no case, no
@@ -85,6 +187,9 @@ class SentinelApp:
             gateway=self.runtime.gateway,
             provider=provider,
             persist=False,
+            trust=trust,
+            sequences=sequences,  # read for rollback checks; a what-if never advances it
+            require_signed_facts=require_signed_facts,
         )
         self.replay_engine = ReplayEngine(self.runtime.policies)
         self._world: _World | None = None
@@ -115,8 +220,15 @@ class SentinelApp:
         customers: int = 200,
         merchants: int = 40,
         transactions: int = 5000,
+        *,
+        sign: bool = True,
         **kw: Any,
     ) -> SentinelApp:
+        """A synthetic dataset in memory. With ``sign`` (the default) an ephemeral demo
+        issuer signs every record, so decisions by record id are VERIFIED_EXTERNAL and
+        tampering with a stored row is detected."""
+        if sign and "issuer" not in kw:
+            kw["issuer"] = Issuer.ephemeral(DEMO_ISSUER, label=DEMO_ISSUER_LABEL)
         app = cls(**kw)
         app.load_dataset(generate(seed, customers, merchants, transactions))
         return app
@@ -124,7 +236,91 @@ class SentinelApp:
     def load_dataset(self, ds: Dataset) -> dict[str, object]:
         self.store.load_dataset(ds)
         self._world = None
+        if self.issuer is not None:
+            self._sign_records()
         return ds.summary()
+
+    # ---- the records as their issuers state them ---------------------------------------------
+    def _duplicate_on_record(self, t: Transaction) -> bool:
+        """Does the ledger hold a second identical charge: same account, merchant and
+        amount within 48 hours?"""
+        ts = parse_ts(t.timestamp)
+        return any(
+            x.transaction_id != t.transaction_id
+            and x.amount == t.amount
+            and abs(parse_ts(x.timestamp) - ts) <= timedelta(hours=48)
+            for x in self.store.transactions(
+                account_id=t.account_id, merchant_id=t.merchant_id, limit=1000
+            )
+        )
+
+    def _dispute_ledger(self, d: Dispute) -> dict[str, object]:
+        """The ledger facts for a stored dispute. A field the store does not hold is
+        ``None`` (unknown) -- never an assumed constant: a claim that depends on it is held
+        for a human, not decided on a guess."""
+        t = self.store.transaction(d.transaction_id)
+        submitted = parse_ts(d.submitted_at)
+        prior_90d = [
+            x
+            for x in self.store.disputes(account_id=d.account_id, limit=1000)
+            if x.dispute_id != d.dispute_id
+            and parse_ts(x.submitted_at) < submitted
+            and (submitted - parse_ts(x.submitted_at)).days <= 90
+        ]
+        acc = self.store.account(d.account_id)
+        cust = self.store.customer(acc.customer_id) if acc else None
+        tenure = max(0, (submitted - parse_ts(cust.created_at)).days) if cust else 0
+        return {
+            "amount": d.amount,
+            "merchant": t.merchant_id if t else "unknown",
+            "delivery_status": t.delivery_status if t else "unknown",
+            "prior_disputes_90d": len(prior_90d),
+            "duplicate_confirmed": self._duplicate_on_record(t) if t else None,
+            "cancellation_confirmed": None,  # the store keeps no cancellation record
+            "cardholder_present": None,  # nor a card-present record (auth strength is not proof)
+            "refund_state": d.refund_state,
+            "transaction_status": t.status if t else "unknown",
+            "merchant_response": d.merchant_response,
+            "auth_strength": t.auth_strength if t else "unknown",
+            "customer_tenure_days": tenure,
+        }
+
+    @staticmethod
+    def _kyb_record(k: KYBApplication) -> dict[str, object]:
+        """The acquirer's record for one application. It names the application, so a
+        statement about one of a merchant's applications cannot stand in for another."""
+        return {
+            "application_id": k.application_id,
+            "registration_status": k.registration_status,
+            "domain_age_days": k.domain_age_days,
+            "business_age_days": k.business_age_days,
+            "prior_flags": k.prior_flags,
+            "mcc_risk": k.mcc_risk,
+        }
+
+    def _sign_records(self) -> None:
+        """The demo issuer signs every stored record. A merchant's applications are
+        sequenced in submission order, so acting on a newer acquirer record makes an older
+        one SUPERSEDED."""
+        iss = self.issuer
+        assert iss is not None
+        env: list[tuple[str, dict[str, Any]]] = []
+        for d in self.store.all_disputes():
+            e = iss.sign(FactKind.DISPUTE_LEDGER, d.dispute_id, self._dispute_ledger(d))
+            env.append((e["subject"], e))
+        per_merchant: dict[str, int] = {}
+        apps = self.store.kyb_applications(limit=1_000_000)
+        for k in sorted(apps, key=lambda a: (a.submitted_at, a.application_id)):
+            seq = per_merchant[k.merchant_id] = per_merchant.get(k.merchant_id, 0) + 1
+            e = iss.sign(FactKind.KYB_RECORD, k.merchant_id, self._kyb_record(k), sequence=seq)
+            env.append((f"application:{k.application_id}", e))
+        for t in self.store.all_transactions():
+            e = iss.sign(FactKind.TRANSACTION, t.transaction_id, transaction_record(t))
+            env.append((e["subject"], e))
+        for ss in self.store.sessions(limit=1_000_000):
+            e = iss.sign(FactKind.LOGIN_SESSION, ss.session_id, session_record(ss))
+            env.append((e["subject"], e))
+        self.store.save_fact_envelopes(env)
 
     def generate_dataset(
         self,
@@ -307,22 +503,49 @@ class SentinelApp:
     # ---- workflow entry points --------------------------------------------------------------------
     def evaluate_transaction(
         self,
-        transaction: Transaction | str,
+        transaction: Transaction | str | None = None,
         *,
+        envelope: dict[str, Any] | None = None,
         untrusted: tuple[UntrustedContent, ...] = (),
         options: RunOptions = DEFAULT_OPTIONS,
     ) -> DecisionBundle:
+        """By id (or a record identical to the stored one): the record store, TRUSTED_LOCAL,
+        or VERIFIED_EXTERNAL when the store holds its issuer's signed statement. With
+        ``envelope``: the issuer's statement carried by the caller. Any other transaction
+        object is UNTRUSTED."""
         t0 = time.perf_counter()
-        t = self.store.transaction(transaction) if isinstance(transaction, str) else transaction
-        if t is None:
-            raise KeyError(f"unknown transaction {transaction}")
-        # A transaction read by id (or identical to the stored record) is system-of-record
-        # input; one built by the caller is demo / simulation input.
-        src = (
-            FactsSource.SYSTEM_OF_RECORD
-            if isinstance(transaction, str) or self.store.transaction(t.transaction_id) == t
-            else FactsSource.CALLER_SUPPLIED
-        )
+        if envelope is not None:
+            if transaction is not None:
+                raise ValueError("pass a transaction or a signed envelope, not both")
+            payload = envelope.get("payload") if isinstance(envelope, dict) else None
+            if not isinstance(payload, dict):
+                raise ValueError("the envelope carries no transaction record")
+            t = _transaction_from_record(payload)
+            for rid in (t.transaction_id, _named(envelope, FactKind.TRANSACTION)):
+                if rid and self.store.transaction(rid) is not None:
+                    raise ValueError(f"{rid} is held by the record store; evaluate it by id")
+            src = FactsSource.CALLER_SUPPLIED
+        else:
+            if transaction is None:
+                raise ValueError("a transaction, its id or a signed envelope is required")
+            found = (
+                self.store.transaction(transaction) if isinstance(transaction, str) else transaction
+            )
+            if found is None:
+                raise KeyError(f"unknown transaction {transaction}")
+            t = found
+            # A transaction read by id (or identical to the stored record) is system-of-record
+            # input, checked against its issuer's statement when the store holds one.
+            stored = self.store.transaction(t.transaction_id)
+            if isinstance(transaction, str) or stored == t:
+                src = FactsSource.SYSTEM_OF_RECORD
+                envelope = self.store.fact_envelope(FactKind.TRANSACTION.subject(t.transaction_id))
+            elif stored is not None:
+                raise ValueError(
+                    f"{t.transaction_id} is held by the record store; evaluate it by id"
+                )
+            else:
+                src = FactsSource.CALLER_SUPPLIED
         ctx = self.transaction_context(t)
         acc = self.store.account(t.account_id)
         mprof = self.world.engine.merchant_risk(t.merchant_id, as_of=t.timestamp)
@@ -335,6 +558,7 @@ class SentinelApp:
                 mprof.level.value,
                 untrusted,
                 src,
+                envelope,
             ),
             options,
         )
@@ -343,90 +567,150 @@ class SentinelApp:
 
     def evaluate_dispute(
         self,
-        narrative: str,
+        narrative: str = "",
         ledger: dict[str, object] | None = None,
         *,
         dispute_id: str | None = None,
+        envelope: dict[str, Any] | None = None,
         documents: tuple[str, ...] = (),
         source: str = "cardholder",
         options: RunOptions = DEFAULT_OPTIONS,
-        facts_source: FactsSource = FactsSource.CALLER_SUPPLIED,
     ) -> DecisionBundle:
-        """With ``dispute_id`` and no ``ledger`` the facts are read from the record store
-        (system of record); a ``ledger`` passed in is demo / simulation input and every
-        decision made on it says so (``facts_source``)."""
+        """How the facts arrive decides what they can establish (``sentinel.trust``):
+
+        - ``dispute_id`` alone: the record store -- TRUSTED_LOCAL, or VERIFIED_EXTERNAL when
+          the store holds the issuer's signed statement (verified again now, and checked
+          against the stored row). The stored narrative is the claim.
+        - ``envelope``: an issuer's signed statement carried by the caller, trusted only if
+          it verifies and only for the dispute it names.
+        - ``ledger``: facts in the request, unsigned -- UNTRUSTED. They can make an outcome
+          stricter, never looser."""
         t0 = time.perf_counter()
+        if ledger is not None and envelope is not None:
+            raise ValueError("pass a ledger or a signed envelope, not both")
+        named = dispute_id or _named(envelope, FactKind.DISPUTE_LEDGER)
+        if (ledger is not None or envelope is not None) and named and self.store.dispute(named):
+            # a stored dispute is evaluated as stored: its recorded submission, its account's
+            # context and its statement checked against the stored row -- never re-pointed
+            raise ValueError(f"{named} is held by the record store; evaluate it by id")
         account_id = None
         account_risk = 0
-        if dispute_id and ledger is None:
-            facts_source = FactsSource.SYSTEM_OF_RECORD
+        facts_source = FactsSource.CALLER_SUPPLIED
+        if dispute_id and ledger is None and envelope is None:
             found = self.store.dispute(dispute_id)
             if found is None:
                 raise KeyError(f"unknown dispute {dispute_id}")
             d, texts = found
-            t = self.store.transaction(d.transaction_id)
-            submitted = parse_ts(d.submitted_at)
-            prior_90d = [
-                x
-                for x in self.store.disputes(account_id=d.account_id, limit=1000)
-                if x.dispute_id != d.dispute_id
-                and parse_ts(x.submitted_at) < submitted
-                and (submitted - parse_ts(x.submitted_at)).days <= 90
-            ]
-            acc = self.store.account(d.account_id)
-            cust = self.store.customer(acc.customer_id) if acc else None
-            tenure = max(0, (submitted - parse_ts(cust.created_at)).days) if cust else 0
-            ledger = {
-                "amount": d.amount,
-                "merchant": t.merchant_id if t else "unknown",
-                "delivery_status": t.delivery_status if t else "unknown",
-                "prior_disputes_90d": len(prior_90d),
-                "policy_auto_limit": 50_000,
-                "cardholder_present": True,
-                "refund_state": d.refund_state,
-                "transaction_status": t.status if t else "settled",
-                "merchant_response": d.merchant_response,
-                "auth_strength": t.auth_strength if t else "unknown",
-                "customer_tenure_days": tenure,
-            }
-            narrative = narrative or texts.get("narrative", "")
-            if not documents and texts.get("document"):
-                documents = (texts["document"],)
+            stored = (
+                texts.get("narrative", ""),
+                (texts["document"],) if texts.get("document") else (),
+            )
+            if (narrative and narrative != stored[0]) or (documents and documents != stored[1]):
+                # The claim selector of a stored dispute is its stored text; new text is a
+                # new submission, not a way to re-point an existing one.
+                raise ValueError(
+                    f"{dispute_id} is evaluated on its recorded submission; new text is a new dispute"
+                )
+            narrative, documents = stored
+            ledger = self._dispute_ledger(d)
+            envelope = self.store.fact_envelope(FactKind.DISPUTE_LEDGER.subject(dispute_id))
+            facts_source = FactsSource.SYSTEM_OF_RECORD
             account_id = d.account_id
             account_risk = self.world.engine.account_risk(d.account_id, as_of=d.submitted_at).score
-        docs = tuple(
-            UntrustedContent(x, TrustClass.DOCUMENT_CONTROLLED, "uploaded_document", "document")
-            for x in documents
-        )
-        b = run_dispute(
-            self._rt(options),
-            DisputeRequest(
-                UntrustedContent(narrative, TrustClass.USER_CONTROLLED, source),
-                ledger or {},
-                dispute_id or "",
-                docs,
-                None,
-                account_id,
-                account_risk,
-                facts_source,
-            ),
+        b = self._dispute(
+            narrative,
+            ledger or {},
+            dispute_id or "",
+            envelope,
+            facts_source,
+            documents,
+            source,
+            account_id,
+            account_risk,
             options,
         )
         METRICS.observe("evaluate_dispute", (time.perf_counter() - t0) * 1000)
         return self._persist(b)
 
+    def _dispute(
+        self,
+        narrative: str,
+        ledger: dict[str, object],
+        dispute_id: str,
+        envelope: dict[str, Any] | None,
+        facts_source: FactsSource,
+        documents: tuple[str, ...],
+        source: str,
+        account_id: str | None,
+        account_risk: int,
+        options: RunOptions,
+    ) -> DecisionBundle:
+        docs = tuple(
+            UntrustedContent(x, TrustClass.DOCUMENT_CONTROLLED, "uploaded_document", "document")
+            for x in documents
+        )
+        return run_dispute(
+            self._rt(options),
+            DisputeRequest(
+                UntrustedContent(narrative, TrustClass.USER_CONTROLLED, source),
+                ledger,
+                dispute_id,
+                docs,
+                None,
+                account_id,
+                account_risk,
+                facts_source,
+                envelope,
+            ),
+            options,
+        )
+
     def evaluate_dispute_conversation(
         self,
         turns: tuple[str, ...],
-        ledger: dict[str, object],
+        ledger: dict[str, object] | None = None,
         *,
+        envelope: dict[str, Any] | None = None,
         options: RunOptions = DEFAULT_OPTIONS,
-        facts_source: FactsSource = FactsSource.CALLER_SUPPLIED,
     ) -> DecisionBundle:
-        s = DisputeSession(self._rt(options), ledger, options=options, facts_source=facts_source)
+        """A multi-turn dispute: one conversation, one decision. Facts as for
+        ``evaluate_dispute``: a signed ``envelope``, or an unsigned ``ledger`` (UNTRUSTED)."""
+        if (ledger is None) == (envelope is None):
+            raise ValueError("pass exactly one of a ledger or a signed envelope")
+        named = _named(envelope, FactKind.DISPUTE_LEDGER)
+        if named and self.store.dispute(named):
+            # as for evaluate_dispute: a stored dispute is evaluated as stored (its recorded
+            # submission, its account's risk), never re-pointed with new text and its own
+            # statement
+            raise ValueError(f"{named} is held by the record store; evaluate it by id")
+        return self._persist(
+            self._conversation(turns, ledger or {}, envelope, FactsSource.CALLER_SUPPLIED, options)
+        )
+
+    def _conversation(
+        self,
+        turns: tuple[str, ...],
+        ledger: dict[str, object],
+        envelope: dict[str, Any] | None,
+        facts_source: FactsSource,
+        options: RunOptions,
+        *,
+        dispute_id: str | None = None,
+    ) -> DecisionBundle:
+        subject = envelope.get("subject") if isinstance(envelope, dict) else None
+        if dispute_id is None and isinstance(subject, str) and subject.startswith("dispute:"):
+            dispute_id = subject.split(":", 1)[1]  # the dispute the statement is about
+        s = DisputeSession(
+            self._rt(options),
+            ledger,
+            dispute_id=dispute_id or new_id("DSP"),
+            options=options,
+            facts_source=facts_source,
+            envelope=envelope,
+        )
         for t in turns:
             s.append(t)
-        return self._persist(s.decide())  # one conversation, one decision
+        return s.decide()  # one conversation, one decision
 
     def evaluate_merchant(
         self,
@@ -435,27 +719,41 @@ class SentinelApp:
         *,
         application_id: str | None = None,
         merchant_id: str = "",
+        envelope: dict[str, Any] | None = None,
         documents: tuple[str, ...] = (),
         options: RunOptions = DEFAULT_OPTIONS,
     ) -> DecisionBundle:
+        """As for disputes: ``application_id`` reads the record store (and its issuer's
+        signed statement, when held); ``envelope`` is a signed acquirer record carried by
+        the caller; ``records`` are unsigned request facts (UNTRUSTED)."""
+        if records is not None and envelope is not None:
+            raise ValueError("pass records or a signed envelope, not both")
+        payload = envelope.get("payload") if isinstance(envelope, dict) else None
+        app_named = payload.get("application_id") if isinstance(payload, dict) else None
+        if isinstance(app_named, str) and self.store.kyb_application(app_named) is not None:
+            raise ValueError(f"{app_named} is held by the record store; evaluate it by id")
         facts_source = FactsSource.CALLER_SUPPLIED
-        if application_id and records is None:
+        if application_id and records is None and envelope is None:
             facts_source = FactsSource.SYSTEM_OF_RECORD
             found = self.store.kyb_application(application_id)
             if found is None:
                 raise KeyError(f"unknown application {application_id}")
             k, texts = found
-            records = {
-                "registration_status": k.registration_status,
-                "domain_age_days": k.domain_age_days,
-                "business_age_days": k.business_age_days,
-                "prior_flags": k.prior_flags,
-                "mcc_risk": k.mcc_risk,
-            }
-            application = application or texts.get("application", "")
-            if not documents and texts.get("document"):
-                documents = (texts["document"],)
-            merchant_id = merchant_id or k.merchant_id
+            stored = (
+                texts.get("application", ""),
+                (texts["document"],) if texts.get("document") else (),
+            )
+            if (application and application != stored[0]) or (documents and documents != stored[1]):
+                raise ValueError(
+                    f"{application_id} is evaluated on its recorded application; new text is a "
+                    "new application"
+                )
+            if merchant_id and merchant_id != k.merchant_id:
+                raise ValueError(f"{application_id} belongs to {k.merchant_id}, not {merchant_id}")
+            application, documents = stored
+            records = self._kyb_record(k)
+            merchant_id = k.merchant_id
+            envelope = self.store.fact_envelope(f"application:{application_id}")
         docs = tuple(
             UntrustedContent(x, TrustClass.DOCUMENT_CONTROLLED, "uploaded_document", "document")
             for x in documents
@@ -468,6 +766,7 @@ class SentinelApp:
                 merchant_id,
                 docs,
                 facts_source,
+                envelope,
             ),
             options,
         )
@@ -475,20 +774,41 @@ class SentinelApp:
 
     def evaluate_account(
         self,
-        session: LoginSession | str,
+        session: LoginSession | str | None = None,
         *,
+        envelope: dict[str, Any] | None = None,
         message: str | None = None,
         requested_capability: Any = None,
         options: RunOptions = DEFAULT_OPTIONS,
     ) -> DecisionBundle:
-        s = self.store.session(session) if isinstance(session, str) else session
-        if s is None:
-            raise KeyError(f"unknown session {session}")
-        src = (
-            FactsSource.SYSTEM_OF_RECORD
-            if isinstance(session, str) or self.store.session(s.session_id) == s
-            else FactsSource.CALLER_SUPPLIED
-        )
+        """Facts as for transactions: by id (store, with its signed statement when held), a
+        signed ``envelope`` carried by the caller, or an unsigned session object."""
+        if envelope is not None:
+            if session is not None:
+                raise ValueError("pass a session or a signed envelope, not both")
+            payload = envelope.get("payload") if isinstance(envelope, dict) else None
+            if not isinstance(payload, dict):
+                raise ValueError("the envelope carries no session record")
+            s = _session_from_record(payload)
+            for rid in (s.session_id, _named(envelope, FactKind.LOGIN_SESSION)):
+                if rid and self.store.session(rid) is not None:
+                    raise ValueError(f"{rid} is held by the record store; evaluate it by id")
+            src = FactsSource.CALLER_SUPPLIED
+        else:
+            if session is None:
+                raise ValueError("a session, its id or a signed envelope is required")
+            found = self.store.session(session) if isinstance(session, str) else session
+            if found is None:
+                raise KeyError(f"unknown session {session}")
+            s = found
+            stored_session = self.store.session(s.session_id)
+            if isinstance(session, str) or stored_session == s:
+                src = FactsSource.SYSTEM_OF_RECORD
+                envelope = self.store.fact_envelope(FactKind.LOGIN_SESSION.subject(s.session_id))
+            elif stored_session is not None:
+                raise ValueError(f"{s.session_id} is held by the record store; evaluate it by id")
+            else:
+                src = FactsSource.CALLER_SUPPLIED
         ctx = self.account_security_context(s)
         msg = (
             UntrustedContent(message, TrustClass.USER_CONTROLLED, "customer_message")
@@ -497,7 +817,7 @@ class SentinelApp:
         )
         b = run_account_security(
             self._rt(options),
-            AccountSecurityRequest(s, ctx, msg, requested_capability, src),
+            AccountSecurityRequest(s, ctx, msg, requested_capability, src, envelope),
             options,
         )
         return self._persist(b)
@@ -546,22 +866,49 @@ class SentinelApp:
     ) -> dict[str, Any]:
         """Run an attack preset through the real engine. With ``compare`` the same
         input is run twice -- against the *simulated naive agent with no controls*
-        and against full Sentinel -- and both storyboards are returned, labelled."""
+        and against full Sentinel -- and both storyboards are returned, labelled.
+
+        Every simulator run is a what-if: the preset's ledger is signed on request, so it
+        proves nothing about any real payment, and a decision built on it is never recorded
+        and never executes (an API caller cannot mint executed refunds through it)."""
         p = ATTACKS[kind]
 
         def _run(opts: RunOptions) -> tuple[DecisionBundle, str]:
+            opts = replace(opts, simulation=True)
+            # The preset's ledger stands for the institution's record of the disputed
+            # payment: the demo issuer signs it, exactly as it signs the dataset.
+            dispute_id = new_id("DSP")
+            env = (
+                self.issuer.sign(FactKind.DISPUTE_LEDGER, dispute_id, dict(p.ledger))
+                if self.issuer is not None
+                else None
+            )
             if p.turns and narrative is None:
-                b = self.evaluate_dispute_conversation(
-                    p.turns, p.ledger, options=opts, facts_source=FactsSource.DEMO_FIXTURE
+                b = self._persist(
+                    self._conversation(
+                        p.turns,
+                        {} if env is not None else dict(p.ledger),
+                        env,
+                        FactsSource.DEMO_FIXTURE,
+                        opts,
+                        dispute_id=dispute_id,
+                    )
                 )
                 return b, "\n".join(f"Turn {i + 1}: {t}" for i, t in enumerate(p.turns))
             docs = (document,) if document else ((p.document,) if p.document else ())
-            b = self.evaluate_dispute(
-                narrative if narrative is not None else p.narrative,
-                dict(p.ledger),
-                documents=docs,
-                options=opts,
-                facts_source=FactsSource.DEMO_FIXTURE,
+            b = self._persist(
+                self._dispute(
+                    narrative if narrative is not None else p.narrative,
+                    {} if env is not None else dict(p.ledger),
+                    dispute_id,
+                    env,
+                    FactsSource.DEMO_FIXTURE,
+                    docs,
+                    "cardholder",
+                    None,
+                    0,
+                    opts,
+                )
             )
             return b, narrative if narrative is not None else p.narrative
 
@@ -728,7 +1075,11 @@ class SentinelApp:
                 {
                     "stage": "case",
                     "title": "Case",
-                    "value": b.case.case_id if b.case else "no case",
+                    "value": (
+                        b.case.case_id
+                        if b.case
+                        else "no case" if d.authoritative else "none (a what-if run opens no case)"
+                    ),
                     "status": "info",
                 },
                 {
@@ -1108,6 +1459,7 @@ class SentinelApp:
                 "model_version": (risk or {}).get("model_version"),
             },
             "trusted_evidence": [e for e in evidence if e["status"] == "VERIFIED"],
+            "provenance": (latest or {}).get("provenance"),
             "facts_source": {
                 "source": (latest or {}).get("facts_source", FactsSource.CALLER_SUPPLIED.value),
                 "meaning": FactsSource(
@@ -1172,6 +1524,9 @@ class SentinelApp:
             audit=ev.to_dict() if ev else None,
             verify=True,
         )
+        r = replace(
+            r, facts=self._reverify_facts(snap, ev.to_dict() if ev else None, r.record_verified)
+        )
         if self.runtime.persist:
             payload = r.to_dict()
             self.store.save_replay(r.replay_id, decision_id, r.changed, r.created_at, payload)
@@ -1190,9 +1545,49 @@ class SentinelApp:
                     "policy_drift": r.policy_drift,
                     "original_drift": r.original_drift,
                     "record_verified": r.record_verified,
+                    "facts_signature_now": r.facts.get("signature_now"),
                 },
             )
         return r
+
+    def _reverify_facts(
+        self, snap: dict[str, Any], audit: dict[str, Any] | None, record_verified: bool
+    ) -> dict[str, Any]:
+        """The decision's fact provenance as its audit event recorded it, and whether the
+        statement's signature still holds today (key, revocation, expiry). This is a
+        signature check only: it does not repeat the stored-row comparison or the rollback
+        state the decision was made with. Withheld when the stored snapshot disagrees with
+        the audit event."""
+        recorded = ((audit or {}).get("detail") or {}).get("facts") or snap.get("provenance")
+        if not recorded:
+            return {}
+        out: dict[str, Any] = {
+            "recorded": recorded["status"],
+            "source": recorded["source"],
+            "payload_digest": recorded["payload_digest"],
+        }
+        if not record_verified:
+            return {
+                **out,
+                "signature_now": None,
+                "reason": "withheld: the stored snapshot disagrees with its audit event",
+            }
+        env = snap.get("fact_envelope")
+        if env is None:
+            return {**out, "signature_now": None, "reason": "unsigned facts: no signature to check"}
+        v = verify_fact(
+            env,
+            trust=self.runtime.trust,
+            now=self.runtime.clock(),
+            kind=FactKind(recorded["kind"]),
+            subject=recorded["subject"],
+        )
+        return {
+            **out,
+            "signature_now": v.provenance.status.value,
+            "reason": v.provenance.reason,
+            "same_payload": v.provenance.payload_digest == recorded["payload_digest"],
+        }
 
     def system_info(self) -> dict[str, Any]:
         from sentinel import __version__
@@ -1209,6 +1604,11 @@ class SentinelApp:
             "risk_models": sorted(scoring.MODELS),
             "default_transaction_model": scoring.TRANSACTION_DEFAULT.version,
             "facts_sources": {f.value: f.describe for f in FactsSource},
+            "trust": {
+                "origin": self.runtime.trust.origin,
+                "keys": self.runtime.trust.summary(),
+                "demo_issuer": self.issuer.key.key_id if self.issuer is not None else None,
+            },
             "audit": to_dict(self.verify_audit()),
             "metrics": METRICS.snapshot(),
             "store": self.store.path,

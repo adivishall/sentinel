@@ -28,6 +28,7 @@ from sentinel.decision.workflows import (
     Runtime,
     run_dispute,
 )
+from sentinel.domain.enums import FactsSource
 from sentinel.policy import DEFAULT_REGISTRY
 from sentinel.policy.models import Rule
 from sentinel.risk import scoring
@@ -75,7 +76,9 @@ def test_a_persisting_runtime_refuses_to_record_a_downgraded_run(opts):
 def test_the_same_run_is_fine_when_nothing_is_persisted():
     b = run_dispute(
         Runtime(persist=False),
-        DisputeRequest(UntrustedContent(CLAIM), REFUNDED),
+        DisputeRequest(
+            UntrustedContent(CLAIM), REFUNDED, facts_source=FactsSource.SYSTEM_OF_RECORD
+        ),
         RunOptions(policy_version=1),
     )
     assert b.decision.executed and not b.decision.authoritative  # v1: the defect, as a what-if
@@ -133,14 +136,19 @@ def test_app_routes_what_if_runs_to_a_runtime_that_never_persists(app):
     assert app.store.decision(real.decision.decision_id) is not None
 
 
-def test_simulator_and_scenarios_never_record_their_what_if_side(app):
-    n_dec, n_audit, _ = _counts(app)
+def test_the_simulator_never_records_and_scenarios_never_record_their_what_if_side(app):
+    """The simulator's facts are fixtures signed on request: both of its sides are
+    simulations. (The review found three legitimate-control presets had recorded three
+    authoritative, executed refunds on three fabricated disputes.)"""
+    before = _counts(app)
     r = app.simulate_attack("direct_injection", compare=True)
     assert r["without_sentinel"]["decision"]["authoritative"] is False
-    assert r["with_sentinel"]["decision"]["authoritative"] is True
-    # exactly one new decision (the WITH side) and one audit event
-    assert app.store.count("decisions") == n_dec + 1 and len(app.runtime.audit) == n_audit + 1
-    before = _counts(app)
+    assert r["with_sentinel"]["decision"]["authoritative"] is False
+    for _ in range(3):
+        sb = app.simulate_attack("legitimate_control", narrative="Parcel never arrived.")
+        assert sb["decision"]["executed_capability"] == "APPROVE_REFUND"  # what it would do
+        assert sb["decision"]["authoritative"] is False
+    assert _counts(app) == before
     app.run_scenario("transaction_burst", options=RunOptions(policy_version=1))
     app.simulate_attack("direct_injection", options=RunOptions(controls=NONE))
     assert _counts(app) == before

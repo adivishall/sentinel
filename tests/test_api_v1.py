@@ -9,6 +9,8 @@ import pytest
 
 from sentinel.api.server import make_server
 from sentinel.app import SentinelApp
+from sentinel.domain.enums import FactKind
+from tests.records import ledger
 
 
 @pytest.fixture(scope="module")
@@ -98,7 +100,21 @@ def test_dispute_legit_and_multiturn_and_by_id(server, app):
             },
         },
     )
+    # an unsigned ledger in the body is a claim about the records: held, never executed
+    assert d["final_action"] == "REQUIRE_HUMAN_REVIEW" and d["executed_capability"] is None
+    assert d["provenance"]["status"] == "UNTRUSTED" and d["authoritative"]
+    # the same ledger as its issuer's signed statement is VERIFIED_EXTERNAL and executes
+    env = app.issuer.sign(
+        FactKind.DISPUTE_LEDGER,
+        "DSP-API-SIGNED",
+        ledger(amount=18000, delivery_status="not_delivered"),
+    )
+    s, d = _post(
+        server + "/v1/disputes/evaluate",
+        {"submission": "My order never arrived after three weeks.", "facts_envelope": env},
+    )
     assert d["final_action"] == "ALLOW" and d["executed_capability"] == "APPROVE_REFUND"
+    assert d["provenance"]["status"] == "VERIFIED_EXTERNAL" and d["subject_id"] == "DSP-API-SIGNED"
     s, m = _post(
         server + "/v1/disputes/evaluate",
         {

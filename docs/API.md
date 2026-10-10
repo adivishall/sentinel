@@ -95,41 +95,60 @@ rule inside the engine, whatever the surface.
   "reason": "…", "trail": [{"stage": "provenance", …}, …],
   "input_hash": "…", "provider": "offline", "model": "offline-simulator",
   "case_id": "CASE-…", "audit_event_id": "AUD-…", "controls": [...], "ai_agreed": false,
-  "authoritative": true   // recorded by the authoritative path; false for any what-if
+  "authoritative": true,  // recorded by the authoritative path; false for any what-if
+  "facts_source": "system_of_record",
+  "provenance": {"status": "VERIFIED_EXTERNAL", "kind": "dispute_ledger", "subject": "dispute:DSP-…",
+                 "source": "synthetic-ledger", "key_id": "ed25519:…", "envelope_digest": "…",
+                 "payload_digest": "…", "sequence": 1, "reason": "signed by …", …}
 }
 ```
 
-## Input classes: system of record vs demo / simulation
+## Input classes and fact provenance
 
-Sentinel adjudicates claims against trusted facts; it does **not** verify
-those facts, and it has no real ledger integration. Every decision therefore
-carries `facts_source`, which the decision's audit event also records:
+How the facts reach a decision decides what they can establish. Each
+decision carries both the transport (`facts_source`) and what verified
+(`provenance.status`, see `docs/SECURITY_MODEL.md`). The decision's audit
+event records both, together with the payload digest.
 
-| `facts_source` | Request form | Meaning |
+| Request form | `facts_source` | `provenance.status` |
 |---|---|---|
-| `system_of_record` | `{dispute_id}`, `{application_id}`, `{transaction_id}`, `{session_id}`, investigations | the facts were read by reference from the record store -- here Sentinel's synthetic SQLite store, standing in for a bank's systems of record |
-| `caller_supplied` | `{ledger}`, `{records}`, `{transaction}`, `{session}` objects in the body | **demo / simulation input**: the caller supplied the facts; they are trusted by contract and Sentinel did not read them from anywhere |
-| `demo_fixture` | `/v1/attacks/simulate` presets | **demo / simulation input**: a shipped synthetic preset |
+| `{dispute_id}`, `{application_id}`, `{transaction_id}`, `{session_id}` | `system_of_record` | `VERIFIED_EXTERNAL` when the store holds the issuer's signed statement for the record (verified again now, and checked against the stored row; a mismatch is `INVALID`), otherwise `TRUSTED_LOCAL`. With `require_signed_facts`, a record whose statement is missing is `INVALID`. |
+| `{facts_envelope}`: an issuer's signed statement carried by the caller | `caller_supplied` | `VERIFIED_EXTERNAL` only if it verifies against the operator's trust store, and only for the record it names. Otherwise `INVALID`, `EXPIRED`, `REVOKED` or `SUPERSEDED`. |
+| `{ledger}`, `{records}`, `{transaction}`, `{session}` objects in the body | `caller_supplied` | `UNTRUSTED`: a claim about the records. It can make an outcome stricter (a refunded ledger still denies) but never support one: what it would support is held for human review, and nothing executes. |
+| `/v1/attacks/simulate` presets | `demo_fixture` | the demo issuer signs the preset's ledger, so `VERIFIED_EXTERNAL` (labelled as the ephemeral demo issuer) |
 
-The id forms are the production-shaped ones. The object forms exist so the
-console and the demos can try a scenario without a dataset; they are not a
-way to verify a ledger. `GET /v1/system` returns the three descriptions and
-the console shows the source on every decision.
+`facts_envelope` is accepted on the dispute, merchant, transaction and account
+evaluate routes. Sending it together with the body facts it replaces is a 400.
+A signed statement must state every field its kind requires, otherwise it is
+`INVALID`: Sentinel does not fill in an issuer's silence with defaults.
+
+A record the store holds is evaluated **by id** only. Body facts or a
+statement for a stored dispute, application, transaction or session are a 400
+on every route, `messages` (multi-turn) included
+("held by the record store; evaluate it by id"). Its recorded submission, its
+account's context and its stored statement decide.
+
+A stored dispute or application is evaluated on its **recorded** submission.
+A different `narrative` or `application` sent with a record id is a 400: new
+text is a new submission, not a way to re-point a stored one. Duplicate keys
+anywhere in a request body are a 400.
 
 ## Trust contract
 
 Everything in `narrative`, `documents`, `messages`, `untrusted`, `message`,
-`case_notes` and `text` is treated as **untrusted** with the trust class given
-(or `USER_CONTROLLED` / `DOCUMENT_CONTROLLED` by field). `ledger`, `records`,
-`transaction` and `session` are treated as **trusted records supplied by the
-caller**. That is a contract, not a proof: in an integration the caller must
-be the system of record, never a channel a customer can reach. Consequences:
+`case_notes` and `text` is treated as **untrusted**, with the trust class given
+(or `USER_CONTROLLED` / `DOCUMENT_CONTROLLED` by field). Record facts are
+trusted exactly as far as their provenance goes:
 
-- put the API behind the institution's boundary and set `SENTINEL_API_KEY`;
-  the server prints a warning when it starts open on a non-loopback address;
-- prefer the record-backed forms (`{dispute_id}`, `{application_id}`,
-  `{transaction_id}`, `{session_id}`), which read the facts from the store;
-- never build the `ledger` object from anything the disputing party sent.
+- A signed statement is trusted if it verifies. A caller can carry a verified
+  fact but cannot forge one.
+- The record store is trusted for where it is kept. Require signed facts
+  (`SENTINEL_REQUIRE_SIGNED_FACTS=1`, plus a trust store naming the issuers)
+  where the store itself is not a sufficient boundary.
+- Body facts are never trusted.
+
+Put the API behind the institution's boundary and set `SENTINEL_API_KEY`. The
+server prints a warning when it starts open on a non-loopback address.
 
 `POST /v1/replay` compares the recomputed decision with the decision **as
 recorded**, never merely "replay completed":
@@ -148,6 +167,9 @@ recorded**, never merely "replay completed":
   content the decision was made under; `engine_drift` (alias
   `original_drift`): re-deriving the decision from its own snapshot no longer
   reproduces it.
+- `facts`: the decision's recorded fact provenance, and its signed statement
+  verified again against the current trust store. If the key has been revoked
+  since the decision, this shows `REVOKED`.
 
 For identical input, trusted facts, risk configuration, policy version and
 engine version the result reproduces and the diff is empty
@@ -167,7 +189,7 @@ on an OPEN (untriaged) or already RESOLVED case is a 409.
 
 | Status | When |
 |---|---|
-| 400 | malformed JSON, missing/invalid field, unknown option, invalid policy document |
+| 400 | malformed JSON (including a duplicated key), missing/invalid field, unknown option, invalid policy document, `facts_envelope` together with the facts it replaces, new text on a stored dispute or application |
 | 401 | `SENTINEL_API_KEY` set and no valid `Authorization: Bearer` / `X-API-Key` (compared in constant time) |
 | 403 | a what-if switch (`unguarded`, `options.controls`, `options.policy_version`, `options.risk_model`, investigation `as_of`) on an evaluate route; a reviewer that is not a human actor or lacks the case's required level |
 | 404 | unknown route / id |
