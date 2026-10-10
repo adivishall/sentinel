@@ -2893,7 +2893,58 @@ stored prefix must still hash to the checkpointed head. Precisely:
   verification covers those.
 
 The HMAC key is a shared secret, not a public-key signature: anyone who holds
-it can also produce checkpoints.
+it can also produce checkpoints. The asymmetric, anchored checkpoint below
+replaces it for anything that matters.
+
+## Signed, anchored checkpoints (`sentinel.audit.anchor`)
+
+`sentinel audit checkpoint --sign-key KEY --signer ID --anchor DIR` signs the
+chain's head as a `sentinel.audit-checkpoint/1` statement -- the chain id
+(event #0's hash), the length, the head hash recomputed from genesis, a
+checkpoint sequence and the previous checkpoint's digest -- with an Ed25519
+key whose trust-store purpose is `audit-checkpoint` (a facts or policy-release
+key is refused; one key, one purpose). The verifier holds only the public key,
+so verifying cannot forge. The statement is published to an **anchor**, an
+append-only store out of the audit-store writer's reach: a directory with one
+file per checkpoint, created exclusively and never overwritten (export it, or
+commit it to a repository the operator controls), or an append-only JSONL
+file; `Anchor` is the interface a WORM bucket or a transparency log would
+implement. The publication is then recorded in the chain itself
+(`CHECKPOINT_PUBLISHED`), and the latest checkpoint's publication record must
+be there: deleting the newest anchored checkpoint, or its record, is visible --
+unless one party can delete from the anchor *and* rewrite the chain's
+unanchored tail, which only an anchor nobody can delete from (WORM, a
+transparency log) rules out. A checkpoint is never signed over a chain that
+does not verify, nor over one that disagrees with its anchor, and the anchor
+refuses a statement that is not well formed.
+
+The checkpoint job may run in its own process against the same store: the
+server adopts records another writer appended when they hash-link to its
+head, and refuses them otherwise.
+
+`sentinel audit verify --anchor DIR` (also with `--file`), `GET
+/v1/audit/verify` and every replay report one of (`/v1/system` names the
+anchor but does not re-verify it on every call):
+
+| Status | What it proves |
+|---|---|
+| `anchored` | a checkpoint signed by a trusted audit-checkpoint key, held by the anchor, covers the event, and the chain from genesis recomputes to its signed head: the event is what it was when the checkpoint was signed -- unless the checkpoint key or the anchor itself was compromised |
+| `not_anchored` | nothing covers the event yet (or no anchor is configured): the chain proves only its own consistency, and a consistent rewrite of the event cannot be excluded |
+| `anchor_mismatch` | the chain and the anchor disagree: history before a checkpoint was rewritten, a checkpoint is missing, broken, unlinked, issued in the future or for another chain, its key is unknown or of another purpose, or the latest checkpoint's publication record is gone. Replay then reports `record_verified: false` |
+
+A checkpoint signed by a key **revoked since** no longer counts, but it is not
+tampering: it is reported as a note, and the chain is `not_anchored` until a
+checkpoint signed with a current key re-anchors it (every checkpoint attests
+the whole prefix from genesis). Retire a key with `not_after` and keep it in
+the trust store; a key removed from it makes its checkpoints unverifiable
+(`anchor_mismatch`).
+
+Anchoring protects from the moment of anchoring, never retroactively:
+events after the latest anchored checkpoint are `not_anchored` until the next
+one, and a rewrite of them before then is anchored as rewritten. Checkpoint
+often; `--require-anchored` makes `audit verify` exit 3 while such events
+exist (the record of publishing the latest checkpoint is not counted). An
+integrity failure is exit 2 whatever the flags.
 
 ## Exit codes (`sentinel audit ...`)
 

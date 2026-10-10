@@ -104,6 +104,9 @@ class ReplayResult:
     # The policy release the decision recorded, and the release of the artifact replay ran
     # (verified again now against the policy trust root).
     policy_release: dict[str, Any] = field(default_factory=dict)
+    # Is the decision's audit event covered by a signed, anchored checkpoint?
+    # anchored | not_anchored | anchor_mismatch (sentinel.audit.anchor)
+    anchoring: dict[str, Any] = field(default_factory=dict)
 
     @property
     def engine_drift(self) -> bool:
@@ -134,6 +137,7 @@ class ReplayResult:
             "record_issues": list(self.record_issues),
             "facts": self.facts,
             "policy_release": self.policy_release,
+            "anchoring": self.anchoring,
         }
 
 
