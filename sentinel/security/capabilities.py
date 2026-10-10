@@ -23,6 +23,7 @@ from sentinel.domain.enums import (
     AuthorizationStatus,
     Capability,
     PolicyOutcome,
+    ProvenanceStatus,
     RiskLevel,
     Workflow,
 )
@@ -45,6 +46,15 @@ class CapabilitySpec:
     allowed_actors: frozenset[ActorKind]
     human_review_threshold: int | None  # amount (INR) above which a human must sign
     description: str
+    # The least-established facts on which the system may execute this capability. Below
+    # it a human must establish the facts (PENDING_HUMAN); a failed verification (INVALID,
+    # REVOKED) denies. Policy may demand more (e.g. VERIFIED_EXTERNAL above an amount);
+    # this floor holds under every policy version.
+    min_fact_provenance: ProvenanceStatus | None = None
+
+    def __post_init__(self) -> None:
+        if self.consequential and self.min_fact_provenance is None:
+            object.__setattr__(self, "min_fact_provenance", ProvenanceStatus.TRUSTED_LOCAL)
 
     @property
     def consequential(self) -> bool:
@@ -275,6 +285,11 @@ WORKFLOW_CAPABILITIES: dict[Workflow, frozenset[Capability]] = {
 }
 
 
+def execution_key(workflow: str, subject_id: str, capability: str) -> str:
+    """What runs once: one capability on one subject of one workflow."""
+    return f"{workflow}:{subject_id}:{capability}"
+
+
 def spec(capability: Capability) -> CapabilitySpec:
     return REGISTRY[capability]
 
@@ -308,6 +323,9 @@ def matrix() -> list[dict[str, Any]]:
                 "required_authorization": s.required_authorization.value,
                 "human_review_threshold": s.human_review_threshold,
                 "requires_verified_evidence": s.consequential,
+                "min_fact_provenance": (
+                    s.min_fact_provenance.value if s.min_fact_provenance is not None else None
+                ),
                 "policy_gates": sorted(gates.get(cap.value, ())),
                 "workflows": sorted(
                     w.value for w, own in WORKFLOW_CAPABILITIES.items() if cap in own
@@ -330,6 +348,8 @@ def authorize(
     policy_outcome: PolicyOutcome,
     evidence_supported: bool,
     workflow: Workflow | None = None,
+    facts_provenance: ProvenanceStatus | None = None,
+    already_executed: str | None = None,
 ) -> Authorization:
     """Deterministic authorization for one requested capability.
 
@@ -363,6 +383,35 @@ def authorize(
         )
     if policy_outcome is PolicyOutcome.BLOCK:
         return Authorization(AuthorizationStatus.DENIED, capability, actor, "policy outcome BLOCK")
+    if already_executed is not None and s.consequential:
+        # idempotency: re-evaluating a record that already paid must not pay again
+        return Authorization(
+            AuthorizationStatus.DENIED,
+            capability,
+            actor,
+            f"{capability.value} already executed on this subject ({already_executed})",
+        )
+    floor = s.min_fact_provenance
+    if floor is not None:
+        # Structural: whatever the policy says, facts below the floor never execute.
+        if facts_provenance is None or facts_provenance.failed:
+            return Authorization(
+                AuthorizationStatus.DENIED,
+                capability,
+                actor,
+                f"{capability.value} needs facts at least {floor.value}; the facts are "
+                + (facts_provenance.value if facts_provenance else "of unknown provenance"),
+            )
+        if actor is ActorKind.SYSTEM and not facts_provenance.meets(floor):
+            # a human reviewer is how unverified facts get established; the system is not
+            return Authorization(
+                AuthorizationStatus.PENDING_HUMAN,
+                capability,
+                actor,
+                f"{capability.value} needs facts at least {floor.value}; these are "
+                f"{facts_provenance.value}: a human must establish them",
+                requires_human=True,
+            )
     if s.consequential and not evidence_supported:
         return Authorization(
             AuthorizationStatus.DENIED,

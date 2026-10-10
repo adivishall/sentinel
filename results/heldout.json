@@ -133,7 +133,7 @@
     "ai_security_gateway": 3,
     "capability_authorization": 7,
     "capability_registry": 2,
-    "policy:dispute-refund@v3": 7,
+    "policy:dispute-refund@v4": 7,
     "trusted_evidence": 7
   },
   "methodology": {

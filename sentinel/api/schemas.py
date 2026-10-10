@@ -10,6 +10,7 @@ from sentinel.decision import composer
 from sentinel.decision.workflows import PROVENANCE, RunOptions
 from sentinel.domain.entities import LoginSession, Transaction
 from sentinel.domain.enums import Capability, TrustClass, Workflow
+from sentinel.domain.ids import RECORD_ID
 from sentinel.risk import scoring
 from sentinel.security.capabilities import WORKFLOW_CAPABILITIES
 from sentinel.security.provenance import UntrustedContent, label
@@ -47,6 +48,18 @@ def req_str(d: dict[str, Any], key: str, *, alt: str | None = None, max_len: int
     if len(v) > max_len:
         raise ValidationError(f"{key!r} too long (> {max_len} chars)", 413)
     return v
+
+
+def req_id(d: dict[str, Any], key: str, *, alt: str | None = None) -> str:
+    """A caller-named record id, in the one grammar (``sentinel.domain.ids.RECORD_ID``)."""
+    v = req_str(d, key, alt=alt, max_len=64)
+    if not RECORD_ID.fullmatch(v):
+        raise ValidationError(f"{key!r} is not a record id (letters, digits, . _ -; 1-64 chars)")
+    return v
+
+
+def opt_id(d: dict[str, Any], key: str) -> str | None:
+    return req_id(d, key) if d.get(key) not in (None, "") else None
 
 
 def opt_str(
@@ -225,7 +238,7 @@ def transaction(d: dict[str, Any]) -> Transaction:
     t = req_obj(d, "transaction")
     try:
         return Transaction(
-            transaction_id=req_str(t, "transaction_id", max_len=64),
+            transaction_id=req_id(t, "transaction_id"),
             account_id=req_str(t, "account_id", max_len=64),
             merchant_id=req_str(t, "merchant_id", max_len=64),
             instrument_id=str(t.get("instrument_id", "unknown"))[:64],
@@ -249,7 +262,7 @@ def login_session(d: dict[str, Any]) -> LoginSession:
     s = req_obj(d, "session")
     try:
         return LoginSession(
-            session_id=req_str(s, "session_id", max_len=64),
+            session_id=req_id(s, "session_id"),
             account_id=req_str(s, "account_id", max_len=64),
             device_id=str(s.get("device_id", "unknown"))[:64],
             ip=str(s.get("ip", "0.0.0.0"))[:45],

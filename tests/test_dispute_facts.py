@@ -114,8 +114,8 @@ def test_v3_rules_fire_exactly_at_their_boundaries(over, outcome, rule):
         assert not d.matched_rules
 
 
-def test_v3_is_the_registered_latest_and_is_fail_closed():
-    assert DEFAULT_REGISTRY.get("dispute-refund").version == 3
+def test_the_registered_latest_is_fail_closed():
+    assert DEFAULT_REGISTRY.get("dispute-refund").version == 4
     from sentinel.policy.engine import PolicyEvaluationError
 
     with pytest.raises(PolicyEvaluationError):

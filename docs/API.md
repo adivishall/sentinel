@@ -125,8 +125,32 @@ A signed statement must state every field its kind requires, otherwise it is
 A record the store holds is evaluated **by id** only. Body facts or a
 statement for a stored dispute, application, transaction or session are a 400
 on every route, `messages` (multi-turn) included
-("held by the record store; evaluate it by id"). Its recorded submission, its
-account's context and its stored statement decide.
+("held by the record store; evaluate it by id"); so is an ASCII-case variant
+of a stored id. Every caller-named record id (`transaction_id`, `dispute_id`,
+`application_id`, `session_id`, `merchant_id`, and the ids inside a
+`transaction` or `session` object) must match `[A-Za-z0-9][A-Za-z0-9._-]{0,63}`
+or it is a 400. Its recorded submission, its account's context and its stored
+statement decide.
+
+A consequential capability executes **once** per workflow, subject and
+capability. A second evaluation of a subject whose capability already executed
+(by the system, or by a human approval) is `DENY` with the reason "already
+executed" and the earlier decision id; the snapshot records it as
+`prior_execution` and replay restores it.
+
+Account security: a `requested_capability` is a claim about what the session
+asked for, and the session record is the evidence. A request the record does
+not show is `INSUFFICIENT` and goes to human review, never execution.
+
+| Capability | Evidenced by |
+|---|---|
+| `CHANGE_PAYOUT` | `payout_change` |
+| `FREEZE_ACCOUNT` | `freeze_request` |
+| `UNFREEZE_ACCOUNT` | `unfreeze_request` |
+| `RELEASE_FUNDS` | `release_request` |
+
+An unsigned `transaction` or `session` body is assessed as of the system's
+time, not its own timestamp.
 
 A stored dispute or application is evaluated on its **recorded** submission.
 A different `narrative` or `application` sent with a record id is a 400: new

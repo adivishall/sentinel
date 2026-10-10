@@ -7,6 +7,7 @@ need indexing, which keeps the schema honest without an ORM."""
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 from typing import Any
@@ -27,7 +28,7 @@ from sentinel.domain.entities import (
     PaymentInstrument,
     Transaction,
 )
-from sentinel.domain.enums import CasePriority, CaseStatus, Workflow
+from sentinel.domain.enums import CasePriority, CaseStatus, FactKind, Workflow
 from sentinel.domain.risk import RiskAssessment
 from sentinel.domain.security import SecurityEvent
 from sentinel.domain.serialization import to_dict
@@ -66,12 +67,24 @@ CREATE INDEX IF NOT EXISTS ix_audit_decision ON audit_events(decision_id, sequen
 CREATE TABLE IF NOT EXISTS replays (replay_id TEXT PRIMARY KEY, decision_id TEXT, changed INTEGER, created_at TEXT, payload TEXT);
 CREATE TABLE IF NOT EXISTS policy_versions (policy_id TEXT, version INTEGER, workflow TEXT, payload TEXT, PRIMARY KEY (policy_id, version));
 CREATE TABLE IF NOT EXISTS fact_envelopes (record_key TEXT PRIMARY KEY, subject TEXT, kind TEXT, issuer TEXT, sequence INTEGER, envelope TEXT);
+CREATE TABLE IF NOT EXISTS executions (key TEXT PRIMARY KEY, holder TEXT);
 CREATE TABLE IF NOT EXISTS fact_sequences (issuer TEXT, subject TEXT, sequence INTEGER, envelope_digest TEXT, PRIMARY KEY (issuer, subject));
 """
+
+_log = logging.getLogger(__name__)
 
 
 def _j(obj: object) -> str:
     return json.dumps(to_dict(obj), sort_keys=True, default=str)
+
+
+# where each kind of record is kept (code constants, never caller input)
+_RECORD_TABLES: dict[FactKind, tuple[str, str]] = {
+    FactKind.DISPUTE_LEDGER: ("disputes", "dispute_id"),
+    FactKind.KYB_RECORD: ("kyb_applications", "application_id"),
+    FactKind.TRANSACTION: ("transactions", "transaction_id"),
+    FactKind.LOGIN_SESSION: ("login_sessions", "session_id"),
+}
 
 
 class SentinelStore:
@@ -85,6 +98,13 @@ class SentinelStore:
             cols = {r[1] for r in self._conn.execute("PRAGMA table_info(accounts)")}
             if "status_since" not in cols:  # a store created before 2.2.0
                 self._conn.execute("ALTER TABLE accounts ADD COLUMN status_since TEXT")
+            try:  # one subject is one execution, whatever the ASCII case of its id
+                self._conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS executions_key_nocase "
+                    "ON executions(key COLLATE NOCASE)"
+                )
+            except sqlite3.IntegrityError:  # a store that already holds case-variant claims
+                _log.warning("executions: case-variant keys already present; exact-match claims")
             self._conn.commit()
 
     # ---- generic ------------------------------------------------------------------
@@ -408,6 +428,18 @@ class SentinelStore:
             r["label"],
             r["status"] or "settled",
         )
+
+    def held_merchant(self, mid: str) -> str | None:
+        """The stored merchant id equal to ``mid`` ignoring ASCII case, if any."""
+        r = self._one("SELECT merchant_id FROM merchants WHERE merchant_id = ? COLLATE NOCASE", (mid,))
+        return str(r[0]) if r else None
+
+    def held_id(self, kind: FactKind, rid: str) -> str | None:
+        """The stored record id equal to ``rid`` ignoring ASCII case, if the store holds
+        one: ``tx-000123`` names ``TX-000123`` and is refused as a new subject."""
+        table, column = _RECORD_TABLES[kind]
+        r = self._one(f"SELECT {column} FROM {table} WHERE {column} = ? COLLATE NOCASE", (rid,))
+        return str(r[0]) if r else None
 
     def transaction(self, tid: str) -> Transaction | None:
         r = self._one("SELECT * FROM transactions WHERE transaction_id = ?", (tid,))
@@ -1122,6 +1154,8 @@ class SqliteCaseRepository:
             p.get("capability"),
             p.get("policy_outcome"),
             p.get("evidence_verdict"),
+            p.get("facts_provenance"),
+            p.get("subject_id"),
         )
 
     def get(self, case_id: str) -> Case | None:
@@ -1163,3 +1197,28 @@ class SqliteSequences:
 
     def advance(self, issuer: str, subject: str, sequence: int, envelope_digest: str) -> None:
         self._store.advance_fact_sequence(issuer, subject, sequence, envelope_digest)
+
+
+class SqliteExecutions:
+    """One execution per subject and capability (``workflows.ExecutionLedger``), in the
+    store so a restart does not forget what already paid. Claiming is a single
+    INSERT OR IGNORE under the store's lock: of two concurrent requests, one wins."""
+
+    def __init__(self, store: SentinelStore) -> None:
+        self._store = store
+
+    def holder(self, key: str) -> str | None:
+        r = self._store._one(
+            "SELECT holder FROM executions WHERE key = ? COLLATE NOCASE", (key,)
+        )
+        return str(r["holder"]) if r else None
+
+    def claim(self, key: str, by: str) -> str | None:
+        with self._store._lock:
+            cur = self._store._conn.execute(
+                "INSERT OR IGNORE INTO executions VALUES (?, ?)", (key, by)
+            )
+            self._store._conn.commit()
+            if cur.rowcount == 1:
+                return None
+        return self.holder(key)

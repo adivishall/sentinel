@@ -162,7 +162,7 @@
   },
   "perturbation_examples": [],
   "expected": "all counts 0: a decision at T1 reads only records at or before T1",
-  "seconds": 82.2,
+  "seconds": 82.4,
   "methodology": {
     "kind": "structural (synthetic data)",
     "dataset": "two seeded synthetic worlds (seeds 42 and 7), a stratified transaction sample (half fraud-labelled)",

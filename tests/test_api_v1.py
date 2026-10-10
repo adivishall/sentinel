@@ -321,7 +321,7 @@ def test_capability_matrix_policy_lint_and_review_packet(server, app):
     s, byid = _post(server + "/v1/policies/lint", {"policy_id": "dispute-refund", "version": 3})
     assert s == 200 and byid["clean"] and byid["policy"] == "dispute-refund@v3"
     s, latest = _post(server + "/v1/policies/lint", {"policy_id": "dispute-refund"})
-    assert s == 200 and latest["policy"] == "dispute-refund@v3"
+    assert s == 200 and latest["policy"] == "dispute-refund@v4"
     code, missing = _err(_post, server + "/v1/policies/lint", {"policy_id": "no-such-policy"})
     assert code == 404 and missing["code"] == "not_found"
     doc = {"policy_id": "x", "version": 1, "workflow": "dispute", "default_outcome": "ALLOW"}

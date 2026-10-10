@@ -32,9 +32,11 @@ from sentinel.domain.enums import (
     ActorKind,
     AuthorizationStatus,
     Capability,
+    FactKind,
     FactsSource,
     FinalAction,
     PolicyOutcome,
+    ProvenanceStatus,
 )
 from sentinel.policy import DEFAULT_REGISTRY, evaluate
 from sentinel.policy.engine import PolicyEvaluationError, PolicyValidationError
@@ -49,15 +51,39 @@ from sentinel.policy.loader import (
 from sentinel.security import capabilities
 from sentinel.security.capabilities import CONSEQUENTIAL, REGISTRY, authorize
 from sentinel.security.provenance import UntrustedContent
+from sentinel.trust.issuer import Issuer
+from sentinel.trust.keys import TrustStore
+from tests.records import ledger as complete
 
 CLAIM = "My order never arrived, please refund."
-LEDGER = {"amount": 12000, "delivery_status": "not_delivered", "policy_auto_limit": 50000}
+LEDGER = complete(
+    **{"amount": 12000, "delivery_status": "not_delivered", "policy_auto_limit": 50000}
+)
+
+# the facts these calls authorize on are the institution's own records
+LOCAL = ProvenanceStatus.TRUSTED_LOCAL
+
+
+_ISSUER = Issuer.ephemeral("test-ledger")
+_TRUST = TrustStore.empty().with_key(_ISSUER.key)
 
 
 def _dispute(ledger, opts=None):
+    """A decision on the ledger as its issuer signs it (VERIFIED_EXTERNAL): these tests
+    are about the policy, so the facts are the strongest kind."""
+    try:
+        env = _ISSUER.sign(FactKind.DISPUTE_LEDGER, "D-1", dict(ledger))
+    except ValueError:  # values canonical JSON refuses (floats): the record as stored
+        return run_dispute(
+            Runtime(persist=False),
+            DisputeRequest(
+                UntrustedContent(CLAIM), ledger, facts_source=FactsSource.SYSTEM_OF_RECORD
+            ),
+            opts or RunOptions(),
+        )
     return run_dispute(
-        Runtime(persist=False),
-        DisputeRequest(UntrustedContent(CLAIM), ledger, facts_source=FactsSource.SYSTEM_OF_RECORD),
+        Runtime(persist=False, trust=_TRUST),
+        DisputeRequest(UntrustedContent(CLAIM), {}, "D-1", envelope=env),
         opts or RunOptions(),
     )
 
@@ -221,6 +247,7 @@ def test_the_auto_limit_boundary_is_exact_and_both_layers_agree(amount, action):
         actor=ActorKind.SYSTEM,
         amount=amount,
         policy_outcome=PolicyOutcome.ALLOW,
+        facts_provenance=LOCAL,
         evidence_supported=True,
     )
     assert (auth.status is AuthorizationStatus.GRANTED) == (action is FinalAction.ALLOW)
@@ -251,7 +278,12 @@ def test_every_consequential_capability_is_closed_to_ai_and_external_actors(cap)
     for actor in (ActorKind.AI_AGENT, ActorKind.EXTERNAL):
         for outcome in PolicyOutcome:
             a = authorize(
-                cap, actor=actor, amount=1, policy_outcome=outcome, evidence_supported=True
+                cap,
+                actor=actor,
+                amount=1,
+                policy_outcome=outcome,
+                facts_provenance=LOCAL,
+                evidence_supported=True,
             )
             assert a.status is AuthorizationStatus.DENIED, (cap, actor, outcome)
     # the automated path needs verified evidence, and a human-reserved one needs a human
@@ -260,6 +292,7 @@ def test_every_consequential_capability_is_closed_to_ai_and_external_actors(cap)
         actor=ActorKind.SYSTEM,
         amount=1,
         policy_outcome=PolicyOutcome.ALLOW,
+        facts_provenance=LOCAL,
         evidence_supported=False,
     )
     assert a.status is AuthorizationStatus.DENIED
@@ -268,6 +301,7 @@ def test_every_consequential_capability_is_closed_to_ai_and_external_actors(cap)
         actor=ActorKind.SYSTEM,
         amount=1,
         policy_outcome=PolicyOutcome.ALLOW,
+        facts_provenance=LOCAL,
         evidence_supported=True,
     )
     human_only = s.required_authorization.value in ("HUMAN_REVIEWER", "SENIOR_REVIEWER")
@@ -278,7 +312,12 @@ def test_every_consequential_capability_is_closed_to_ai_and_external_actors(cap)
     # a BLOCK is a DENY for everyone
     for actor in ActorKind:
         b = authorize(
-            cap, actor=actor, amount=1, policy_outcome=PolicyOutcome.BLOCK, evidence_supported=True
+            cap,
+            actor=actor,
+            amount=1,
+            policy_outcome=PolicyOutcome.BLOCK,
+            facts_provenance=LOCAL,
+            evidence_supported=True,
         )
         assert b.status is AuthorizationStatus.DENIED
 
@@ -302,6 +341,7 @@ def test_unknown_capability_and_actor_are_denied_not_crashed():
         actor=ActorKind.SYSTEM,
         amount=1,
         policy_outcome=PolicyOutcome.ALLOW,
+        facts_provenance=LOCAL,
         evidence_supported=True,
     )
     assert a.status is AuthorizationStatus.DENIED and "unregistered" in a.reason
@@ -310,6 +350,7 @@ def test_unknown_capability_and_actor_are_denied_not_crashed():
         actor="ROOT",  # type: ignore[arg-type]
         amount=1,
         policy_outcome=PolicyOutcome.ALLOW,
+        facts_provenance=LOCAL,
         evidence_supported=True,
     )
     assert a.status is AuthorizationStatus.DENIED
@@ -358,13 +399,13 @@ def test_a_deleted_or_unpinned_version_fails_closed(policy_dir):
     with pytest.raises(PolicyIntegrityError, match="dispute-refund@v1 is pinned but its file"):
         PolicyRegistry().load_dir(policy_dir)
     shutil.copy(POLICY_DIR / "dispute-refund.v1.json", policy_dir / "dispute-refund.v1.json")
-    doc = json.loads((policy_dir / "dispute-refund.v3.json").read_text())
-    doc["version"] = 4
-    (policy_dir / "dispute-refund.v4.json").write_text(json.dumps(doc))
-    with pytest.raises(PolicyIntegrityError, match="dispute-refund@v4 is not pinned"):
+    doc = json.loads((policy_dir / "dispute-refund.v4.json").read_text())
+    doc["version"] = 5
+    (policy_dir / "dispute-refund.v5.json").write_text(json.dumps(doc))
+    with pytest.raises(PolicyIntegrityError, match="dispute-refund@v5 is not pinned"):
         PolicyRegistry().load_dir(policy_dir)
-    assert pin_manifest(policy_dir) == ["dispute-refund@v4"]  # a NEW version can be pinned
-    assert PolicyRegistry().load_dir(policy_dir) == 9
+    assert pin_manifest(policy_dir) == ["dispute-refund@v5"]  # a NEW version can be pinned
+    assert PolicyRegistry().load_dir(policy_dir) == len(DEFAULT_REGISTRY.all()) + 1
 
 
 def test_a_corrupt_or_missing_manifest_fails_closed(policy_dir):
@@ -383,7 +424,7 @@ def test_a_store_that_recorded_other_content_for_a_version_refuses_to_open(tmp_p
     doc = DEFAULT_REGISTRY.active("dispute-refund").to_dict()
     doc["rules"] = doc["rules"][1:]
     store.save_policy_version("dispute-refund", doc["version"], "dispute", doc)
-    with pytest.raises(PolicyIntegrityError, match="dispute-refund@v3: the store holds"):
+    with pytest.raises(PolicyIntegrityError, match="dispute-refund@v4: the store holds"):
         SentinelApp(SentinelStore(db))
 
 
@@ -401,9 +442,18 @@ def test_a_malformed_ledger_amount_goes_to_a_human_never_under_the_limit(amount)
     )
 
 
-def test_a_missing_ledger_amount_goes_to_a_human():
+def test_a_missing_ledger_amount_is_never_decided_on():
+    """Signed but incomplete, the statement is INVALID: the policy's failed-provenance
+    BLOCK is decisive even though the policy context lacks the amount (DENY, no case).
+    Unsigned, the ledger is a malformed claim: fail-safe human review."""
     ledger = {k: v for k, v in LEDGER.items() if k != "amount"}
-    assert _dispute(ledger).decision.final_action is FinalAction.REQUIRE_HUMAN_REVIEW
+    signed = _dispute(ledger).decision
+    assert signed.final_action is FinalAction.DENY and not signed.executed
+    assert "block-failed-fact-provenance" in signed.policy.matched_rules
+    unsigned = run_dispute(
+        Runtime(persist=False), DisputeRequest(UntrustedContent(CLAIM), ledger)
+    ).decision
+    assert unsigned.final_action is FinalAction.REQUIRE_HUMAN_REVIEW and not unsigned.executed
 
 
 def test_malformed_acquirer_records_go_to_a_human():

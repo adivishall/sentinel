@@ -36,6 +36,7 @@ from sentinel.domain.enums import (
     FactsSource,
     FinalAction,
     PolicyOutcome,
+    ProvenanceStatus,
     RiskLevel,
     Severity,
     TrustClass,
@@ -85,6 +86,9 @@ class DecisionInputs:
     # there was one, so replay can verify it again.
     provenance: FactProvenance | None = None
     fact_envelope: dict[str, object] | None = None
+    # the decision (or human approval) that already executed this capability on this
+    # subject, if any: a capability runs once per subject (Runtime.executions)
+    prior_execution: str | None = None
 
 
 @dataclass(frozen=True)
@@ -105,6 +109,9 @@ class _TrustedView:
     actor: ActorKind
     controls: frozenset[str]
     claim_type: str | None
+    # what establishes the primary record (sentinel.trust); None = no primary record
+    provenance: ProvenanceStatus | None = None
+    prior_execution: str | None = None
 
 
 _NO_SECURITY = SecurityAssessment(
@@ -129,6 +136,7 @@ def build_policy_context(v: _TrustedView) -> dict[str, object]:
         "risk_factors": [f.code for f in v.risk.factors] if (v.risk and RISK in v.controls) else [],
         "evidence_verdict": v.verdict.value,
         "evidence_supports_claim": v.verdict.supports,
+        "facts_provenance": v.provenance.value if v.provenance is not None else "NONE",
         "contradiction_count": v.contradiction_count,
         "claim_type": v.claim_type or "none",
         "security_severity": sec.severity.value,
@@ -148,6 +156,7 @@ def _final_action(
     auth: Authorization,
     security: SecurityAssessment,
     controls: frozenset[str],
+    prior_execution: str | None = None,
 ) -> tuple[FinalAction, str]:
     security_caused = DETECTION in controls and (
         security.severity.rank >= Severity.HIGH.rank or security.capability_escalation
@@ -156,6 +165,10 @@ def _final_action(
         if security_caused:
             return FinalAction.BLOCK, "blocked: AI-security finding and policy"
         return FinalAction.DENY, "denied: policy outcome BLOCK on trusted inputs"
+    # the capability already executed on this subject: a review case could never approve
+    # it again, so the repeat is a denial, not a case (release audit)
+    if prior_execution is not None and auth.status is AuthorizationStatus.DENIED:
+        return FinalAction.DENY, f"denied: {auth.reason}"
     if verdict is EvidenceVerdict.INSUFFICIENT:
         return FinalAction.REQUIRE_HUMAN_REVIEW, "held: evidence insufficient to decide (fail-safe)"
     if not verdict.supports:
@@ -218,6 +231,8 @@ def _decide(
             policy_outcome=pol.outcome,
             evidence_supported=supported,
             workflow=v.workflow,
+            facts_provenance=v.provenance,
+            already_executed=v.prior_execution,
         )
     else:
         auth = Authorization(
@@ -226,7 +241,7 @@ def _decide(
             v.actor,
             "authorization control disabled",
         )
-    action, reason = _final_action(v.verdict, pol, auth, v.security, v.controls)
+    action, reason = _final_action(v.verdict, pol, auth, v.security, v.controls, v.prior_execution)
     return pol, auth, action, reason, context
 
 
@@ -256,6 +271,8 @@ def _trusted_view(inputs: DecisionInputs) -> _TrustedView:
         actor=inputs.actor,
         controls=inputs.controls,
         claim_type=inputs.claim_type,
+        provenance=inputs.provenance.status if inputs.provenance is not None else None,
+        prior_execution=inputs.prior_execution,
     )
     return view
 

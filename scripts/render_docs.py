@@ -1286,6 +1286,7 @@ def render_security_model() -> str:
             "Allowed actors",
             "Required authorization",
             "Human-review threshold (₹)",
+            "Least fact provenance",
             "Executable from",
             "Policy gates",
         ],
@@ -1304,6 +1305,7 @@ def render_security_model() -> str:
                     if r["human_review_threshold"] is not None
                     else "—"
                 ),
+                f"`{r['min_fact_provenance']}`" if r["min_fact_provenance"] else "—",
                 ", ".join(r["workflows"])
                 or ("no workflow (a human, via the case service)" if r["consequential"] else "—"),
                 ", ".join(f"`{g}`" for g in r["policy_gates"]) or "—",
@@ -1384,10 +1386,10 @@ def render_security_model() -> str:
         "APPROVE_REFUND": "dispute workflow -- fixed candidate",
         "APPROVE_TRANSACTION": "transaction workflow -- fixed candidate",
         "APPROVE_MERCHANT": "merchant-onboarding workflow -- fixed candidate",
-        "CHANGE_PAYOUT": "account-security workflow -- the caller's structured `requested_capability`, or a `payout_change` event in the trusted session record",
-        "FREEZE_ACCOUNT": "account-security workflow -- the caller's structured `requested_capability`",
-        "UNFREEZE_ACCOUNT": "account-security workflow -- the caller's structured `requested_capability`",
-        "RELEASE_FUNDS": "account-security workflow -- the caller's structured `requested_capability`",
+        "CHANGE_PAYOUT": "account-security workflow -- a `payout_change` event in the session record (a caller's `requested_capability` the record does not show is held for a human)",
+        "FREEZE_ACCOUNT": "account-security workflow -- the caller's `requested_capability`, supported only when the session record shows a `freeze_request`; otherwise INSUFFICIENT (human review)",
+        "UNFREEZE_ACCOUNT": "account-security workflow -- the caller's `requested_capability`, supported only when the session record shows an `unfreeze_request`",
+        "RELEASE_FUNDS": "account-security workflow -- the caller's `requested_capability`, supported only when the session record shows a `release_request`",
         "CLOSE_CASE": "account-security `requested_capability` only; the investigation workflow never has a candidate. Closing a *case* is `record_human_decision`, never a capability execution",
         "ALTER_RISK": "account-security workflow -- the caller's structured `requested_capability`",
         "SKIP_REVIEW": "account-security workflow -- the caller's structured `requested_capability` (no actor may be granted it)",
@@ -1523,9 +1525,11 @@ computes it (`workflows._resolve_facts`); no request field can set it.
   (equivocation).
 - **Stored records are evaluated by id.** A caller cannot send body facts or a
   statement for a dispute, application, transaction or session the store
-  holds, on any route (the multi-turn conversation route included); that is a
-  400. Its recorded submission, its account's context and its
-  stored statement decide. A KYB statement names its application, so a
+  holds -- under its exact id or an ASCII-case variant of it -- on any route
+  (the multi-turn conversation route included); that is a 400. A caller-named
+  id must be in the one record-id grammar (ASCII letters, digits, `. _ -`), so
+  a Unicode look-alike cannot be a second subject. Its recorded submission,
+  its account's context and its stored statement decide. A KYB statement names its application, so a
   statement about one of a merchant's applications cannot stand in for
   another. `sentinel trust ingest` verifies issuers' statements and stores
   them beside the records.
@@ -1536,8 +1540,18 @@ computes it (`workflows._resolve_facts`); no request field can set it.
   tampered row to `TRUSTED_LOCAL`.
 - **Asymmetry.** Unverified records can make an outcome stricter (a refunded
   ledger still denies) but never support one. Reconciliation turns what they
-  would support into `INSUFFICIENT`, which goes to human review, so they never
-  execute a capability.
+  would support into `INSUFFICIENT`, which goes to human review, so the system
+  never executes a capability on them; only an authenticated reviewer's
+  recorded decision can act on what they claim.
+- **A failed statement is decisive.** A statement whose signature, key or
+  binding failed (`INVALID`, `REVOKED`) is a tamper signal: the policy's BLOCK
+  on it outranks the fact that the facts it carried cannot be evaluated
+  (DENY, no case), rather than a fail-safe review nobody may ever approve.
+- **Execution is idempotent.** A consequential capability executes once per
+  (workflow, subject, capability): the system claims the key when it executes,
+  a human approval claims it when it resolves a case, and a repeat evaluation
+  of an executed subject is `DENY` ("already executed"). The claim is recorded
+  in the decision's input snapshot (`prior_execution`) and restored by replay.
 
 **What `VERIFIED_EXTERNAL` proves.** The holder of a key the operator trusts
 for this issuer and this kind of fact signed exactly this payload about this
@@ -1579,17 +1593,37 @@ model asked for, and with the workflow itself. In order:
    the API and a DENY from the engine;
 4. the actor is not in the capability's allowed actors → DENIED;
 5. policy outcome BLOCK → DENIED;
-6. a consequential capability whose verified evidence does not support the
+6. **the fact-provenance floor** (`min_fact_provenance`, `TRUSTED_LOCAL` for
+   every consequential capability). Facts whose verification failed
+   (`INVALID`, `REVOKED`), or with no recorded provenance at all → DENIED for
+   every actor. For SYSTEM, facts below the floor (`UNTRUSTED`, `EXPIRED`,
+   `SUPERSEDED`) → PENDING_HUMAN. This holds under every policy version: a
+   policy may demand more, never less;
+7. a consequential capability whose verified evidence does not support the
    request → DENIED;
-7. policy outcome REQUIRE_HUMAN_REVIEW or TEMPORARY_HOLD → PENDING_HUMAN;
-8. the automated path (SYSTEM) on a capability that requires a human or
+8. policy outcome REQUIRE_HUMAN_REVIEW or TEMPORARY_HOLD → PENDING_HUMAN;
+9. the automated path (SYSTEM) on a capability that requires a human or
    senior reviewer → PENDING_HUMAN;
-9. SYSTEM above the capability's human-review amount threshold → PENDING_HUMAN;
-10. otherwise GRANTED.
+10. SYSTEM above the capability's human-review amount threshold → PENDING_HUMAN;
+11. otherwise GRANTED.
 
 A human approval of a case gets the same answer for the reviewer's actor kind
-(`CaseService.approval`): a policy BLOCK is final for every actor and records
-that contradict the claim cannot be approved.
+(`CaseService.approval`):
+
+- a policy BLOCK is final for every actor;
+- records that contradict the claim cannot be approved;
+- nobody approves facts whose verification failed.
+
+A human may approve on unverified facts, because establishing them is what the
+human review is for.
+
+The policy states finer requirements declaratively on the `facts_provenance`
+context field (`docs/POLICY_ENGINE.md`):
+
+- a failed or revoked signature → BLOCK;
+- unverified facts → human review;
+- a refund above ₹25,000, a payment above ₹100,000, or any merchant onboarding
+  on an unsigned stored record → human review.
 
 ### Final action (`composer._final_action`)
 
@@ -2396,6 +2430,18 @@ string where a number is expected raises, it is not "false".
   turns that into a fail-safe `REQUIRE_HUMAN_REVIEW`. A missing input can
   therefore never silently switch a BLOCK rule off (v2.0.0 had that fail-open
   behaviour; the review found it).
+- **A decisive BLOCK outranks a context error.** When the context is missing,
+  mistyped or outside a vocabulary, a BLOCK rule whose own fields are all
+  present and valid, and which matches, still decides: the policy said BLOCK,
+  and nothing the context lacks could have said anything stronger. The
+  decision carries a `[fail-closed]` explanation naming the problem. (A
+  statement that failed verification is blocked even though the facts it
+  carried cannot be evaluated.)
+- **Every vocabulary value a policy reads is named.** A test
+  (`tests/test_policy_provenance.py`) fails when an active policy reads a
+  closed-vocabulary field and some value of it is named by no rule and not
+  explicitly accepted with a reason: `closed` accounts and `unknown` merchant
+  categories were such values.
 - **Content hash.** Every policy carries a SHA-256 over its full document,
   computed at construction. Decisions and input snapshots pin it; replay
   reports `policy_drift` when the served version no longer has the content the
