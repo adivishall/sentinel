@@ -16,6 +16,7 @@ policy a validated schema rather than displayed YAML."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from sentinel.domain.enums import PolicyOutcome, Workflow
 from sentinel.domain.ids import content_hash
@@ -144,9 +145,28 @@ class Policy:
     # is a label that a file edit can silently reuse; this is what a decision and a
     # replay pin.
     content_hash: str = field(default="", compare=False, repr=False)
+    # What establishes this version (sentinel.policy.release.PolicyRelease), attached by
+    # the registry; not part of the document or its hash.
+    release: Any = field(default=None, compare=False, repr=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "content_hash", content_hash(self.to_dict()))
+        rel = self.release
+        if rel is not None and getattr(rel, "digest", None) != content_hash(self.to_dict(), 64):
+            # a release names one document: a copy whose content changed (a replay override,
+            # an in-process edit) no longer carries it
+            from dataclasses import replace as _replace
+
+            object.__setattr__(
+                self,
+                "release",
+                _replace(
+                    rel,
+                    status=type(rel.status)("INVALID"),
+                    activation_sequence=None,
+                    reason="the document differs from the one released (modified after release)",
+                ),
+            )
 
     @property
     def key(self) -> str:

@@ -46,6 +46,7 @@ from sentinel.observability import METRICS, get_logger, new_trace, request_id
 from sentinel.policy import PolicyValidationError
 from sentinel.policy import evaluate as policy_evaluate
 from sentinel.policy.engine import PolicyEvaluationError
+from sentinel.policy.loader import PolicyIntegrityError
 from sentinel.policy.models import FIELD_CATALOG
 from sentinel.presets import ATTACKS, SCENARIOS
 from sentinel.replay.engine import ReplayOverrides
@@ -941,6 +942,11 @@ class SentinelHandler(BaseHTTPRequestHandler):
             result, status = _error(e.status, e.message, rid), e.status
         except ControlDowngrade as e:  # the engine refused to record a downgraded run
             result, status = _error(403, str(e), rid), 403
+        except PolicyIntegrityError:  # no trustworthy active policy: the service cannot decide
+            result, status = (
+                _error(503, "no trustworthy active policy; see the server log", rid),
+                503,
+            )
         except ValueError as e:  # e.g. a risk model applied to another surface
             result, status = _error(400, str(e), rid), 400
         except Exception as e:  # noqa: BLE001 - never leak a stack trace

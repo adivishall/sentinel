@@ -206,6 +206,9 @@ class SentinelApp:
         )
         self.replay_engine = ReplayEngine(self.runtime.policies)
         self._world: _World | None = None
+        policies = self.runtime.policies
+        if policies.signed:
+            self._check_activations(policies)
         for p in self.runtime.policies.all():
             stored = self.store.policy_payload(p.policy_id, p.version)
             if stored is None:
@@ -225,6 +228,34 @@ class SentinelApp:
     @classmethod
     def open(cls, path: str, **kw: Any) -> SentinelApp:
         return cls(SentinelStore(path), **kw)
+
+    def _check_activations(self, policies: Any) -> None:
+        """Refuse to start on an activation older than one this store already ran under
+        (someone removed the newer activation from RELEASES.json), then record the
+        activations in effect in the audit chain whenever they change -- so a rollback is
+        caught even for a policy no decision has used yet. Checked per app: the shared
+        registry is never mutated by one store's history."""
+        floor = self.store.policy_activation_floor()
+        active: dict[str, int] = {}
+        for pid in sorted({p.policy_id for p in policies.all()}):
+            rel = policies.active(pid).release  # raises PolicyIntegrityError: refuse to start
+            seq = rel.activation_sequence if rel is not None else None
+            if seq is None:
+                raise PolicyIntegrityError(f"{pid}: the active version has no activation")
+            if seq < floor.get(pid, 0):
+                raise PolicyIntegrityError(
+                    f"{pid}: activation {seq} is older than activation {floor[pid]}, already "
+                    "in effect for this store (rollback)"
+                )
+            active[pid] = seq
+        if any(floor.get(pid) != seq for pid, seq in active.items()):
+            self.runtime.audit.append(
+                actor="sentinel",
+                workflow="system",
+                action="POLICY_ACTIVATIONS",
+                kind="system",
+                detail={"activations": active},
+            )
 
     def _reviewer_active(self, reviewer_id: str) -> bool:
         """Whether ``reviewer_id`` still holds an active credential in the current registry."""
@@ -1656,6 +1687,7 @@ class SentinelApp:
             "provider": p.name,
             "model": p.model,
             "policies": [pp.key for pp in self.runtime.policies.all()],
+            "policy_releases": self.runtime.policies.release_report(),
             "risk_models": sorted(scoring.MODELS),
             "default_transaction_model": scoring.TRANSACTION_DEFAULT.version,
             "facts_sources": {f.value: f.describe for f in FactsSource},

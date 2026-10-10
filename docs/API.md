@@ -87,7 +87,9 @@ rule inside the engine, whatever the surface.
                         "requested_capability": "APPROVE_REFUND", "trust": "MODEL_GENERATED", …},
   "evidence_verdict": "CONTRADICTED", "evidence_ids": ["EV-LEDGER-001", …], "contradiction_count": 1,
   "security_severity": "CRITICAL", "security_event_id": "SEC-…",
-  "policy": {"policy_id": "dispute-refund", "version": 3, "outcome": "BLOCK", "matched_rules": [...], "explanations": [...]},
+  "policy": {"policy_id": "dispute-refund", "version": 4, "outcome": "BLOCK", "matched_rules": [...], "explanations": [...],
+             "policy_digest": "5c28…", "release_status": "VERIFIED", "release_signer": "sentinel-policy",
+             "release_key_id": "ed25519:…", "activation_sequence": 4},
   "authorization": {"status": "DENIED", "capability": "APPROVE_REFUND", "actor": "SYSTEM", "reason": "…"},
   "human_review": {"required": true, "reason": "…", "case_id": "CASE-…"},
   "final_action": "BLOCK", "executed_capability": null,
@@ -229,6 +231,7 @@ case open ("approvals 1 of 2").
 | 413 | body over 256 KB (the body is drained first, so the client sees the 413) or a text over 20,000 chars |
 | 429 | per-client rate limit (`SENTINEL_RATE_LIMIT` requests/minute, default 600, 0 = off) |
 | 500 | internal error; never a stack trace |
+| 503 | no trustworthy active policy (a signed activation is missing or was rolled back): the service cannot decide |
 
 Errors are `{"error", "code", "request_id"}`. Every response carries `X-Request-ID`; structured logs (`SENTINEL_LOG=INFO`)
 carry `trace_id`, `request_id`, `decision_id`, workflow, entity, risk, policy
