@@ -3005,7 +3005,10 @@ and it is not an immutable ledger: there is no consensus, no distribution and
 no guarantee that a record cannot be changed. The guarantee is narrower and
 precise -- **any modification, deletion, insertion or reordering of a
 recorded event is detected by verification, and the first bad record is
-named** -- and the trust root is a checkpoint stored outside the store.
+named**, unless the attacker can recompute the chain: a consistent rewrite of
+the events after the last checkpoint passes verification
+([THREAT_MODEL.md](THREAT_MODEL.md)). The trust root is a checkpoint stored
+outside the store.
 
 ## The record
 
@@ -3257,7 +3260,9 @@ author, §L) -- and the security case depends on none of them."""
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | {pct(a['no_controls']['asr'])} | {pct(a['prompt_hardening']['asr'])} | {pct(a['detection_only']['asr'])} | {pct(a['risk_only']['asr'])} | {pct(a['policy_only']['asr'])} | {pct(a['adjudication_only']['asr'])} | {pct(a['adjudication_policy']['asr'])} | **{pct(a['full']['asr'])}** |
 
-Prompt hardening fails 100% on the false-claim classes. Detection alone holds
+The simulator's hardened mode ignores injected instructions but still believes a
+stated reason, so by construction prompt hardening fails on every false-claim
+case. Detection alone holds
 exactly what it flags and leaks exactly the classes with nothing to detect
 ({undetected}). Policy without evidence catches only over-limit amounts.
 **Checking the claim against the institution's own records is what carries
@@ -3545,7 +3550,7 @@ claimed."""
             "registry decides who may execute it, and a tamper-evident audit chain records why. |",
             "| **Why different** | The authoritative decision is computed from a view that has *no "
             "field* for the attacker's prose or the model's output. Detection can miss; nothing "
-            "executes that the records do not support. |",
+            "auto-executes that the records do not support. |",
             f"| **Result** | On synthetic corpora against an offline *simulated* naive agent: "
             f"unauthorised execution {pct(s['asr_unguarded'])} → **{pct(s['asr_guarded'])}** on the "
             f"{s['n_attacks']}-attack main corpus (structural), with {pct(s['fp_rate'])} false positives "
