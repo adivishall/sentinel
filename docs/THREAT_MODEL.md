@@ -145,8 +145,10 @@ closes them.
   plus a trust store).
 - The demo's issuer is an ephemeral in-process key. It demonstrates the
   mechanism, not an external trust relationship.
-- Auth is optional, and the server only warns when it starts open on a
-  non-loopback bind. What-if switches are refused on the evaluate routes.
+- Auth is optional on loopback. On a network-reachable bind the server refuses
+  to start without an API key unless the operator passes an explicit, audited
+  `--insecure-demo` (INV-DEPLOY-1). What-if switches are refused on the evaluate
+  routes.
 - Policy versions are signed releases, explicitly activated (D34): a writer
   of the policy directory cannot make an edited or unsigned policy decide. The
   shipped trust root lives in the package, so someone who can rewrite the

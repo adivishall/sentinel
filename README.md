@@ -13,7 +13,7 @@
 ![Tests](https://img.shields.io/badge/tests-1041_passing-2e8b57)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
-[Console (static snapshot)](https://adivishall.github.io/sentinel/) · [Screenshots](#screenshots) · [Evaluation](docs/EVALUATION.md) · [Security model](docs/SECURITY_MODEL.md) · [Limitations](docs/LIMITATIONS.md) · [Interview guide](docs/INTERVIEW.md)
+[Console (static snapshot)](https://adivishall.github.io/sentinel/) · [Screenshots](#screenshots) · [Evaluation](docs/EVALUATION.md) · [Security model](docs/SECURITY_MODEL.md) · [Limitations](docs/LIMITATIONS.md)
 
 </div>
 
@@ -25,7 +25,7 @@
 | **What** | A Python engine (standard library plus one cryptography dependency), versioned HTTP API, CLI and web console that sits between AI agents and the financial actions they might trigger: refunds, payment authorisation, merchant onboarding, account security, investigations. |
 | **Why** | Those decisions read attacker-controlled information through legitimate channels -- a dispute narrative, an uploaded invoice, a merchant application -- and an AI agent in the loop can be persuaded, by an injected instruction or by a customer who simply lies about a fact. |
 | **How** | The model may recommend. The institution's own records decide whether the claim is supported, versioned fail-closed policy decides the outcome, a capability registry decides who may execute it, and a tamper-evident audit chain records why. |
-| **Why different** | The authoritative decision is computed from a view that has *no field* for the attacker's prose or the model's output. Detection can miss; nothing executes that the records do not support. |
+| **Why different** | The authoritative decision is computed from a view that has *no field* for the attacker's prose or the model's output. Detection can miss; nothing auto-executes that the records do not support. |
 | **Result** | On synthetic corpora against an offline *simulated* naive agent: unauthorised execution 90.0% → **0.0%** on the 150-attack main corpus (structural), with 0.0% false positives on deserved refunds; 0 observed temporal leaks in 9,443 checks; synthetic transaction risk precision 86.7% / recall 67.2%. Live-model evaluation: **not run**. |
 <!-- /gen:hero -->
 
@@ -222,7 +222,9 @@ author, §L) -- and the security case depends on none of them.
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | 90.0% | 23.3% | 20.0% | 90.0% | 36.0% | 0.0% | 0.0% | **0.0%** |
 
-Prompt hardening fails 100% on the false-claim classes. Detection alone holds
+The simulator's hardened mode ignores injected instructions but still believes a
+stated reason, so by construction prompt hardening fails on every false-claim
+case. Detection alone holds
 exactly what it flags and leaks exactly the classes with nothing to detect
 (adjudication_gaming, financial_social_engineering, false_evidence). Policy without evidence catches only over-limit amounts.
 **Checking the claim against the institution's own records is what carries
@@ -260,8 +262,12 @@ engine output over the synthetic demo dataset, nothing drawn by hand.
 
 ## Quickstart
 
+Python 3.11+. Use a virtual environment: `make install` runs `pip install`, which
+system Pythons that follow PEP 668 (Homebrew, Debian) refuse outside one.
+
 ```bash
 git clone https://github.com/adivishall/sentinel.git && cd sentinel
+python3 -m venv .venv && . .venv/bin/activate
 make install          # dev tooling + the `sentinel` command; the one runtime dependency is pyca/cryptography
 make test             # the whole suite, offline (count in the badge above)
 make attack-compare   # the flagship demo, no key needed
@@ -285,10 +291,12 @@ Three ways, one engine ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)):
 |---|---|---|
 | **Local** | `make api`: loopback, in-memory demo world, no key | your machine only |
 | **Docker** | `make docker-build && make docker-run`: `python:3.11-slim`, non-root, `HEALTHCHECK`, a `/data` volume; CI builds the image and checks `/health`, the console and `/v1/system` on every push | the image **refuses to start** on a network address without `SENTINEL_API_KEY` (or an explicit, audited `SENTINEL_INSECURE_DEMO=1`) |
-| **Public** | `render.yaml`: a Render blueprint for the same image, HTTPS, health check, redeploy on push, the API key generated as a secret; synthetic, ephemeral data | `/health`, `/version` and the console's code are public; every data route needs the key |
+| **Render (blueprint, not hosted)** | `render.yaml`: a Render blueprint for the same image, HTTPS, health check, redeploy on push, the API key generated as a secret; synthetic, ephemeral data. No instance is currently running | if deployed: `/health`, `/version` and the console's code public; every data route needs the key |
 
 The static console at [adivishall.github.io/sentinel](https://adivishall.github.io/sentinel/)
-is a read-only snapshot of what the engine computed, with no API behind it.
+is a read-only snapshot of what the engine computed, with no API behind it: you can
+browse the precomputed views and run the preset attacks; custom attacks, replay and
+case review need the local API (`make api`).
 
 ## API
 
@@ -325,8 +333,10 @@ are `{error, code, request_id}`; no stack trace ever leaves the server.
   CI builds the Docker image and checks that it starts and serves `/health`,
   the console and the API; Docker has not been run on the author's machine.
 - **Generated documentation:** every measured result in this README and in
-  `docs/` is rendered from `results/` and the code by `make docs`, so the text
-  cannot drift from the numbers.
+  `docs/` is rendered from `results/` and the code by `make docs`, so the
+  generated blocks are re-rendered, never hand-edited. Hand-written prose around
+  them can still go stale, and CI does not yet check that the committed docs
+  match a fresh render.
 - **Decision records:** why a modular monolith, why trusted evidence instead of
   detection, why evaluation authority lives in the engine rather than the API,
   why replay is anchored to the audit chain -- in [docs/DECISIONS.md](docs/DECISIONS.md).
@@ -342,7 +352,7 @@ sequential single-thread; policy evaluation 0.0194 ms p95 over the composer's re
 ## Limitations
 
 - Everything is synthetic or offline: the dataset, the scenarios, the KYB
-  records and the agents. No production deployment (the public instance is a synthetic demo), bank integration, real transaction,
+  records and the agents. No production deployment (and no hosted instance: the Render blueprint is not deployed), bank integration, real transaction,
   fraud saving or regulatory compliance is claimed.
 - The "no controls" victim is a simulator that shares an author with the
   attack corpus; the live-model row is **not run**.
@@ -363,7 +373,7 @@ sequential single-thread; policy evaluation 0.0194 ms p95 over the composer's re
 - Temporal correctness is a tested invariant, not a proof; some source fields
   are static attributes with no history.
 
-[All limitations](docs/LIMITATIONS.md) · [threat model](docs/THREAT_MODEL.md) · [interview guide](docs/INTERVIEW.md) (every hard question answered as implemented / simulated / not implemented)
+[All limitations](docs/LIMITATIONS.md) · [threat model](docs/THREAT_MODEL.md) · [hard questions](docs/INTERVIEW.md) (each answered as implemented / simulated / not implemented)
 
 ## Reviewing Sentinel
 

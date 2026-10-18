@@ -9,7 +9,10 @@ and it is not an immutable ledger: there is no consensus, no distribution and
 no guarantee that a record cannot be changed. The guarantee is narrower and
 precise -- **any modification, deletion, insertion or reordering of a
 recorded event is detected by verification, and the first bad record is
-named** -- and the trust root is a checkpoint stored outside the store.
+named**, unless the attacker can recompute the chain: a consistent rewrite of
+the events after the last checkpoint passes verification
+([THREAT_MODEL.md](THREAT_MODEL.md)). The trust root is a checkpoint stored
+outside the store.
 
 ## The record
 
