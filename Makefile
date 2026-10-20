@@ -1,4 +1,4 @@
-.PHONY: help install test cov lint data analyze demo attack attack-compare api ui screenshots snapshot eval eval-quick bench docs audit-verify audit-checkpoint live-check docker-build docker-run clean
+.PHONY: help install test cov lint data analyze demo attack attack-compare api ui screenshots snapshot console eval eval-quick bench docs audit-verify audit-checkpoint live-check docker-build docker-run clean
 
 PY ?= python3
 DB ?= data/sentinel.db
@@ -46,6 +46,9 @@ screenshots:      ## capture docs/img/*.png from a running console (make api) wi
 
 snapshot:         ## static console snapshot (GitHub Pages) computed by the real engine
 	$(PY) -m sentinel --db :memory: ui snapshot --out ui/snapshot.json
+
+console:          ## the static console as Vercel builds it: fresh validated snapshot + ui/ in public/
+	sh scripts/vercel-build.sh public
 
 eval:             ## full evaluation: security · held-out · surfaces · KYB · baselines · ablation · financial · integrity · temporal · claims · performance · models · charts
 	$(PY) -m sentinel eval run --suite full

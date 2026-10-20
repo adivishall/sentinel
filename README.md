@@ -10,7 +10,7 @@
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 ![Runs offline](https://img.shields.io/badge/runs_offline-no_API_key-2e8b57)
 ![Runtime deps](https://img.shields.io/badge/runtime_deps-1_(cryptography)-2e6da4)
-![Tests](https://img.shields.io/badge/tests-1041_passing-2e8b57)
+![Tests](https://img.shields.io/badge/tests-1054_passing-2e8b57)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
 [Console (static snapshot)](https://adivishall.github.io/sentinel/) · [Screenshots](#screenshots) · [Evaluation](docs/EVALUATION.md) · [Security model](docs/SECURITY_MODEL.md) · [Limitations](docs/LIMITATIONS.md) · [Interview guide](docs/INTERVIEW.md)
