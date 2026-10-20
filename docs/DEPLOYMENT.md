@@ -120,9 +120,16 @@ What this deployment is, and is not:
   key, credential or prose. A failed start says why (`refusing to serve ...`).
 - `PORT` is Render's (10000); the image's command binds `0.0.0.0:${PORT}` and the
   health check uses the same variable.
+- **Cost: none, as long as the account has no payment method.** The free
+  instance type is free; Render's documentation says a workspace without a
+  payment method that exceeds the free allowance (750 instance hours a month,
+  bandwidth, build minutes) has its free services suspended or its builds
+  disabled for the rest of the month -- it is not billed. Do not add a payment
+  method, a disk, a database or a paid instance type for this demo.
 
-The static console on GitHub Pages (below) stays the public, read-only,
-no-key demo: a snapshot of what the engine computed, with no API behind it.
+The static console (GitHub Pages and Vercel, below) stays the public, read-only,
+no-key demo: a snapshot of what the engine computed, with no API behind it. It
+is the deployment to use whenever the API cannot be hosted at zero cost.
 
 ## What the server enforces
 
@@ -323,13 +330,50 @@ Logs are JSON on stderr (`SENTINEL_LOG`); ship them. They carry ids, hashes
 and outcomes, never prose, keys or credentials. Retention and PII policy are
 the operator's.
 
-## Static console (GitHub Pages)
+## Static console (GitHub Pages, Vercel)
 
 `make snapshot` writes `ui/snapshot.json` -- a read-only copy of what the
 engine computed (overview, transactions, cases, attack results, scenarios,
 evaluations). `ui/index.html` uses it automatically when no API is reachable
-and says so in the sidebar. Custom attacks and case actions need the live
-console.
+and says so in the sidebar ("static snapshot"). Custom attacks, replay and
+case actions need the live console (`make api`). Two hosts serve it:
+
+- **GitHub Pages** (https://adivishall.github.io/sentinel/) serves the committed
+  snapshot straight from `main` (the Pages source is the branch root). It
+  changes only when `ui/snapshot.json` is regenerated and committed;
+  `tests/test_static_console.py` fails when the committed snapshot is not the
+  installed engine's version.
+- **Vercel** (`vercel.json`, Hobby plan) rebuilds the console on every push:
+  `scripts/vercel-build.sh` installs the package on the build image's Python
+  (3.12 by default), then `scripts/static_console.py build` regenerates the
+  snapshot on an in-memory synthetic world with the offline simulator forced,
+  **validates** it (engine version, offline mode, in-memory store, verified
+  audit chain, non-empty data, no attack executes with Sentinel while the
+  deserved control does, no credential-shaped value) and assembles only
+  `index.html` + `ui/` into `public/` -- nothing else from the repository is
+  published. A snapshot that fails the check fails the build; a stale or empty
+  one is never served. The response headers in `vercel.json` are the API's own
+  console headers (CSP, `nosniff`, `DENY`, `no-referrer`). `make console` runs
+  the same build locally; CI runs it on every push.
+
+What the static console is, and is not: a copy of real engine output over the
+synthetic demo world, computed at build time -- not a live API. Nothing in it
+updates or persists, no request reaches a backend (the console's first call,
+`/v1/system`, is a 404 on a static host, and it falls back to the snapshot),
+the agent shown is the offline simulator, and no key or credential exists in
+the published files.
+
+Vercel, the one external action: at https://vercel.com/new import
+`adivishall/sentinel` on a **Hobby** account (free, for personal and
+non-commercial use; no payment method is added and none is required -- Vercel
+pauses a Hobby project that exceeds a limit, it does not bill), keep the
+Framework Preset at "Other" (`vercel.json` sets the build and the output
+directory), add no environment variables, and deploy. Vercel's Git integration
+then builds production from `main` and a preview for each pull request. Record
+the issued URL here and in the README only after the live checks pass: the
+site is HTTPS; `/`, `/ui/app.js`, `/ui/styles.css` and `/ui/snapshot.json`
+load; the sidebar says "static snapshot"; the response headers above are
+present.
 
 ## Honest scope
 

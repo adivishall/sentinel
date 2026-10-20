@@ -15,3 +15,5 @@ build/
 dist/
 audit-checkpoint.json
 .venv/
+/public/
+.vercel/

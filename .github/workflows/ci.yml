@@ -55,6 +55,10 @@ jobs:
           python -m sentinel trust keygen --issuer audit-notary --purpose audit-checkpoint --key-out /tmp/cp.pem --trust-out /tmp/trust.json
           python -m sentinel --trust-store /tmp/trust.json audit checkpoint --sign-key /tmp/cp.pem --signer audit-notary --anchor /tmp/anchor
           python -m sentinel --trust-store /tmp/trust.json audit verify --anchor /tmp/anchor --require-anchored
+      - name: Static console build (what Vercel runs; a stale or empty snapshot fails here)
+        run: |
+          sh scripts/vercel-build.sh /tmp/public
+          test -s /tmp/public/ui/snapshot.json && test -s /tmp/public/ui/app.js && test -s /tmp/public/index.html
       - name: Docker build
         run: docker build -t sentinel .
       - name: Docker run smoke (the image starts and serves the API and the console)
