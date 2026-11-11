@@ -67,3 +67,23 @@ jobs:
           curl -sf http://127.0.0.1:8000/v1/system > /dev/null
           docker logs sentinel-smoke 2>&1 | tail -20
           docker rm -f sentinel-smoke
+
+  console-browser:
+    name: Console browser smoke (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Install Playwright (browser smoke only)
+        run: |
+          pip install "playwright==1.65.0"
+          python -m playwright install --with-deps chromium
+      - name: Console browser smoke
+        env:
+          SENTINEL_FORCE_OFFLINE: "1"
+        run: python -m pytest tests/test_console_playwright.py -q
